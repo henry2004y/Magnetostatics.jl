@@ -4,7 +4,7 @@ using Magnetostatics
 makedocs(;
     sitename = "Magnetostatics.jl",
     modules = [Magnetostatics],
-    remotes = nothing,
+    repo = Remotes.GitHub("henry2004y", "Magnetostatics.jl"),
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", nothing) == "true",
     ),

@@ -17,7 +17,7 @@ To install Magnetostatics.jl, run the following command in the Julia REPL:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/hyzhou/Magnetostatics.jl")
+Pkg.add(url="https://github.com/henry2004y/Magnetostatics.jl")
 ```
 
 ## Quick Start
