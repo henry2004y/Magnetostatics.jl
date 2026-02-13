@@ -66,4 +66,54 @@ using LinearAlgebra
         @test isapprox(B_pos[1], -B_neg[1], rtol = 1.0e-10) # B_rho component reverses in x
         @test isapprox(B_pos[3], B_neg[3], rtol = 1.0e-10)  # B_z component symmetric
     end
+    @testset "Configurations" begin
+        @testset "getB_tokamak_coil" begin
+            # User provided test
+            # x, y, z, a, b, ICoils, IPlasma
+            val = getB_tokamak_coil(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)[1]
+            @test val ≈ -1.2473997957952395e-6
+        end
+
+        @testset "getB_tokamak_profile" begin
+            q_profile(nr) = nr^2 + 2 * nr + 0.5
+            val = getB_tokamak_profile(1.0, 1.0, 1.0, q_profile, 2.0, 1.0, 1.0)[1]
+            @test val ≈ -0.7666260799054282
+        end
+
+        @testset "getB_mirror" begin
+            # x, y, z, distance, a, I1
+            B = getB_mirror(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+            @test B[3] ≈ 8.99176285573213e-7
+        end
+
+        @testset "getB_bottle" begin
+            # x, y, z, distance, a, b, I1, I2
+            B = getB_bottle(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+            @test B[3] ≈ 1.5274948162911718e-6
+        end
+
+        @testset "getB_zpinch" begin
+            # Check B field at distance r from wire with current I
+            # B = mu0 * I / (2 * pi * r)
+            x = 1.0
+            y = 0.0
+            z = 0.0
+            I = 1.0
+            a = 0.1 # radius
+
+            # Outside wire
+            B = getB_zpinch(x, y, z, I, a)
+            μ0 = 4π * 1.0e-7
+            expected_mag = μ0 * I / (2 * π * x)
+            # Direction should be tangent to circle, here B_y
+            @test isapprox(B[2], expected_mag, rtol = 1.0e-5)
+
+            # Inside wire
+            x_in = 0.05
+            B_in = getB_zpinch(x_in, y, z, I, a)
+            # B = mu0 * I * r / (2 * pi * a^2)
+            expected_in_mag = μ0 * I * x_in / (2 * π * a^2)
+            @test isapprox(B_in[2], expected_in_mag, rtol = 1.0e-5)
+        end
+    end
 end
