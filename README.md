@@ -24,17 +24,16 @@ Pkg.add(url="https://github.com/henry2004y/Magnetostatics.jl")
 
 ```julia
 using Magnetostatics
-using StaticArrays
 
 # Create a circular current loop and discretize it into wire segments
-loop = CurrentLoop(1.0, 1.0, [0, 0, 0], [0, 0, 1])
+loop = CurrentLoop(1.0, 1.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
 wire = discretize_loop(1.0, 100, 1.0)
 
 # Compute B at a point using the Biot-Savart solver
-B = solve(BiotSavart(), wire, SVector(0.0, 0.0, 0.5))
+B = solve(BiotSavart(), wire, [0.0, 0.0, 0.5])
 
 # Compare with the analytical solution
-B_exact = getB_loop(SVector(0.0, 0.0, 0.5), loop)
+B_exact = getB_loop([0.0, 0.0, 0.5], loop)
 ```
 
 ## Documentation
