@@ -134,7 +134,7 @@ function (solver::BiotSavart)(source::AbstractCurrentSource, r)
 end
 
 """
-     getB_mirror(x, y, z, distance, a, I1) :: SVector{3}
+    getB_mirror(x, y, z, distance, a, I1) :: SVector{3}
 
 Get magnetic field at `[x, y, z]` from a magnetic mirror generated from two coils.
 
@@ -156,7 +156,7 @@ function getB_mirror(x, y, z, distance, a, I1)
 end
 
 """
-     getB_bottle(x, y, z, distance, a, b, I1, I2) :: SVector{3}
+    getB_bottle(x, y, z, distance, a, b, I1, I2) :: SVector{3}
 
 Get magnetic field from a magnetic bottle.
 Reference: [wiki](https://en.wikipedia.org/wiki/Magnetic_mirror#Magnetic_bottles)
@@ -182,7 +182,7 @@ function getB_bottle(x, y, z, distance, a, b, I1, I2)
 end
 
 """
-     getB_tokamak_coil(x, y, z, a, b, ICoils, IPlasma) -> SVector{3}
+    getB_tokamak_coil(x, y, z, a, b, ICoils, IPlasma) -> SVector{3}
 
 Get the magnetic field from a Tokamak topology consists of 16 coils.
 Original: [Tokamak-Fusion-Reactor](https://github.com/BoschSamuel/Simulation-of-a-Tokamak-Fusion-Reactor/blob/master/Simulation2.m)
@@ -247,7 +247,7 @@ function getB_tokamak_coil(x, y, z, a, b, ICoils, IPlasma)
 end
 
 """
-     getB_tokamak_profile(x, y, z, q_profile, a, R₀, Bζ0) :: SVector{3}
+    getB_tokamak_profile(x, y, z, q_profile, a, R₀, Bζ0) :: SVector{3}
 
 Reconstruct the magnetic field distribution from a safe factor(q) profile.
 Reference: Tokamak, 4th Edition, John Wesson.
@@ -277,8 +277,9 @@ function getB_tokamak_profile(x, y, z, q_profile, a, R₀, Bζ0)
 
     return SVector(Bx, By, Bz)
 end
+
 """
-     getB_zpinch(x, y, z, I, a) -> SVector{3}
+    getB_zpinch(x, y, z, I, a) -> SVector{3}
 
 Get magnetic field from a Z-pinch configuration.
 Reference: [Z-pinch](https://en.wikipedia.org/wiki/Z-pinch)

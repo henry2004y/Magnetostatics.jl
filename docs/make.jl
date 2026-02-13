@@ -8,7 +8,7 @@ makedocs(;
     repo = "https://github.com/henry2004y/Magnetostatics.jl",
     format = DocumenterVitepress.MarkdownVitepress(
         repo = "https://github.com/henry2004y/Magnetostatics.jl",
-        devbranch = "master",
+        devbranch = "main",
         devurl = "dev"
     ),
     pages = [
@@ -21,7 +21,7 @@ makedocs(;
 DocumenterVitepress.deploydocs(;
     repo = "github.com/henry2004y/Magnetostatics.jl",
     target = "build",
-    devbranch = "master",
+    devbranch = "main",
     branch = "gh-pages",
     push_preview = true
 )
