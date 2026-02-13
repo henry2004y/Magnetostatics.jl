@@ -28,3 +28,13 @@ solve
 discretize_loop
 getB_loop
 ```
+
+## Configurations
+
+```@docs
+getB_mirror
+getB_bottle
+getB_tokamak_coil
+getB_tokamak_profile
+getB_zpinch
+```
