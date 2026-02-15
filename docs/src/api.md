@@ -27,6 +27,8 @@ solve
 ```@docs
 discretize_loop
 getB_loop
+set_current_wire!
+set_current_wire
 ```
 
 ## Configurations

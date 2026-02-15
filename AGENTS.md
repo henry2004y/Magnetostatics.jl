@@ -32,8 +32,7 @@ Test code should be written in files that define independent module spaces with
 a `test_` prefix (if not already existing in a large `@testset`).
 Then include these files from [`test/runtests.jl`](./test/runtests.jl).
 This ensures that these files can be run independently from the REPL.
-For example, test code for a new feature would be in a file like
-this:
+For example, test code for a new feature would be in a file like this:
 > test/test_feature.jl
 ```julia
 module test_feature
