@@ -7,7 +7,7 @@ using PrecompileTools
             dipole = Dipole(SVector(0.0, 1.0, 0.0)),
             loop_analytic = CurrentLoopAnalytic(loop),
             r = SVector(0.5, 0.0, 0.0),
-            points = [SVector(0.5, 0.0, 0.0), SVector(0.1, 0.1, 0.1)],
+            points = [SVector(0.1, 0.1, 0.1)],
             bs_solver = BiotSavart(),
             vp_solver = VectorPotential(),
             fft_solver = FFTSolver(),
