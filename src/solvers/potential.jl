@@ -24,7 +24,7 @@ function solve(::VectorPotential, source::Wire{T}, r::SVector{3, T}) where {T}
         l = r2 - r1
         L = norm(l)
         L < 1.0e-20 && continue
-        u = inv(L) # Unit vector along wire
+        u = l / L # Unit vector along wire
 
         # Simpler form using r1 and r2 distances:
         d1 = norm(r - r1)
