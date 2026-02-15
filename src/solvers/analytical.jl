@@ -35,7 +35,6 @@ function (field::Dipole)(r::SVector{3, T}) where {T}
     end
 
     n = r / r_mag
-    μ0_4π = 1.0e-7
 
     return (μ0_4π / r_mag^3) * (3 * dot(field.M, n) * n - field.M)
 end
@@ -48,8 +47,6 @@ Analytical magnetic field of a circular current loop.
 struct CurrentLoopAnalytic{T} <: AbstractMagneticField
     loop::CurrentLoop{T}
 end
-
-const μ₀ = 4π * 1.0e-7
 
 """
     getB_loop(r, loop::CurrentLoop)
@@ -75,7 +72,7 @@ function getB_loop(r::AbstractVector, loop::CurrentLoop)
     # and the center (rho = 0) separately if needed.
     if rho < 1.0e-10 * radius # On the axis
         # B is purely in n direction
-        # B = \mu_0 I a^2 / (2 (a^2 + z^2)^(3/2))
+        # B = μ0 I a^2 / (2 (a^2 + z^2)^(3/2))
         B_mag = μ₀ * current * radius^2 / (2 * (radius^2 + z_local^2)^1.5)
         return B_mag * n_hat
     end
@@ -226,7 +223,7 @@ function getB_tokamak_coil(x, y, z, a, b, ICoils, IPlasma)
     # magnetic field of the plasma current
     σ = a / 3 # parameter of the Gauss curve
     ϕ = atan(y, x)
-    # distance to centre of plasma ring
+    # distance to center of plasma ring
     # Plasma ring radius R_p = a + b
     R_p = a + b
     distance = √(z^2 + (x - R_p * cos(ϕ))^2 + (y - R_p * sin(ϕ))^2)
@@ -263,9 +260,7 @@ Reference: Tokamak, 4th Edition, John Wesson.
 function getB_tokamak_profile(x, y, z, q_profile, a, R₀, Bζ0)
     R = √(x^2 + y^2)
     r = √((R - R₀)^2 + z^2)
-    if r > a
-        throw(OverflowError("out of vacuum vessel"))
-    end
+    r > a && throw(OverflowError("out of vacuum vessel"))
     θ = atan(z, R - R₀)
     Bζ = Bζ0 * R₀ / R
     Bθ = r * Bζ / R₀ / q_profile(r / a)

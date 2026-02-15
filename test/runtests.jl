@@ -8,4 +8,5 @@ using StaticArrays
     include("test_analytical.jl")
     include("test_fft.jl")
     include("test_potential.jl")
+    include("test_utils.jl")
 end
