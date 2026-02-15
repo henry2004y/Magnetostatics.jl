@@ -27,7 +27,7 @@ using Magnetostatics
 
 # Create a circular current loop and discretize it into wire segments
 loop = CurrentLoop(1.0, 1.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
-wire = discretize_loop(1.0, 100, 1.0)
+wire = discretize_loop(loop, 100)
 
 # Compute B at a point using the Biot-Savart solver
 B = solve(BiotSavart(), wire, [0.0, 0.0, 0.5])

@@ -18,7 +18,7 @@ include("utils.jl")
 export AbstractMagneticField, AbstractCurrentSource, AbstractSolver
 export BiotSavart, FFTSolver, VectorPotential, solve
 export Wire, CurrentLoop, HarrisSheet, Dipole, CurrentLoopAnalytic
-export discretize_loop, getB_loop
+export discretize_loop, getB_loop, set_current_wire!, set_current_wire
 export getB_mirror, getB_bottle, getB_tokamak_coil, getB_tokamak_profile, getB_zpinch
 
 end
