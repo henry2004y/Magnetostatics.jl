@@ -91,7 +91,7 @@ function solve(::VectorPotential, loop::CurrentLoop{T}, r::AbstractVector) where
     K_val = ellipk(k_sq)
     E_val = ellipe(k_sq)
 
-    prefactor = (μ0 * current) / (π * k) * sqrt(R / rho)
+    prefactor = (μ₀ * current) / (π * k) * sqrt(R / rho)
 
     A_phi = prefactor * ((1 - k_sq / 2) * K_val - E_val)
 

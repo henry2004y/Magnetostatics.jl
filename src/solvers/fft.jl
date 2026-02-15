@@ -54,7 +54,7 @@ function solve(::FFTSolver, J::AbstractArray{T, 4}, dx::Real) where {T}
     B_k = similar(J_k)
 
     # Calculation: B_k = i * mu0 * (k x J_k) / k^2
-    im_mu0 = im * μ0
+    im_mu0 = im * μ₀
 
     # It's more efficient to loop since we are dealing with vector components per grid point
     # Optimization: Use broadcasting or explicit loops
