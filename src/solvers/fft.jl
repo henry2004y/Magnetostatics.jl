@@ -20,14 +20,9 @@ Compute the magnetic field `B` from a discrete current distribution `J` using FF
 # Returns
 - `B`: 4D array of size (3, Nx, Ny, Nz) representing the magnetic field components (Bx, By, Bz).
 """
-function solve(solver::FFTSolver, J::AbstractArray{T, 4}, dx::Real) where {T}
+function solve(::FFTSolver, J::AbstractArray{T, 4}, dx::Real) where {T}
     @assert size(J, 1) == 3 "First dimension of J must be 3 (components)"
     _, Nx, Ny, Nz = size(J)
-
-    # physical lengths
-    Lx = Nx * dx
-    Ly = Ny * dx
-    Lz = Nz * dx
 
     # k-vectors (angular wavenumbers)
     # fftfreq returns frequencies f = k / (2pi). We need k = 2pi * f.
@@ -59,8 +54,7 @@ function solve(solver::FFTSolver, J::AbstractArray{T, 4}, dx::Real) where {T}
     B_k = similar(J_k)
 
     # Calculation: B_k = i * mu0 * (k x J_k) / k^2
-    μ0 = 4π * 1.0e-7
-    im_mu0 = im * μ0
+    im_mu0 = im * μ₀
 
     # It's more efficient to loop since we are dealing with vector components per grid point
     # Optimization: Use broadcasting or explicit loops
