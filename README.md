@@ -9,7 +9,7 @@ Magnetostatics.jl provides solvers and analytical models for computing magnetic 
 - **Biot-Savart solver** — numerical integration of the Biot-Savart law for arbitrary wire geometries.
 - **FFT solver** — spectral method for computing **B** from a volumetric current density **J** on a uniform grid with periodic boundaries.
 - **Vector Potential solver** — computes the magnetic vector potential **A** for wires, current loops, and dipoles.
-- **Analytical fields** — closed-form models for Harris current sheets, magnetic dipoles, and circular current loops (via elliptic integrals).
+- **Analytical fields** — closed-form models for Harris current sheets, magnetic dipoles, and circular current loops.
 
 ## Installation
 
@@ -17,7 +17,7 @@ To install Magnetostatics.jl, run the following command in the Julia REPL:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/henry2004y/Magnetostatics.jl")
+Pkg.add("Magnetostatics")
 ```
 
 ## Quick Start
@@ -38,4 +38,4 @@ B_exact = getB_loop([0.0, 0.0, 0.5], loop)
 
 ## Documentation
 
-For more detailed information on the API and usage, please refer to the [documentation](docs/src/index.md).
+For more detailed information on the API and usage, please refer to the [documentation](https://henry2004y.github.io/Magnetostatics.jl/dev).
