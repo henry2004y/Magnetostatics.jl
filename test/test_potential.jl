@@ -2,7 +2,6 @@ using Test
 using Magnetostatics
 using StaticArrays
 using LinearAlgebra
-using FiniteDifferences
 
 @testset "Vector Potential Solver" begin
     # Numerical Curl helper
@@ -10,8 +9,7 @@ using FiniteDifferences
         # Central difference curl
         # (dA_z/dy - dA_y/dz, dA_x/dz - dA_z/dx, dA_y/dx - dA_x/dy)
 
-        # We can use FiniteDifferences.jl if we added it, but simpler to write a small helper
-        # Or use central difference manually
+        # Use central difference manually
 
         x, y, z = r[1], r[2], r[3]
 
