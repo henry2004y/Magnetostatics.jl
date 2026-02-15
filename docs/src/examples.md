@@ -111,7 +111,7 @@ For arbitrary wire geometries, discretize the path and sum the contributions.
 ```julia
 # Define a circular loop and discretize it
 loop = CurrentLoop(1.0, 1.0, [0, 0, 0], [0, 0, 1])
-wire = discretize_loop(1.0, 100, 1.0) # radius, n_segments, current
+wire = discretize_loop(loop, 100)
 
 # Define the solver
 solver = BiotSavart()
