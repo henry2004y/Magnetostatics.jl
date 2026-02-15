@@ -39,6 +39,18 @@ function discretize_loop(
 end
 
 """
+    discretize_loop(loop::CurrentLoop, n_segments)
+
+Discretize a `CurrentLoop` object into a `Wire` object.
+"""
+function discretize_loop(loop::CurrentLoop, n_segments)
+    return discretize_loop(
+        loop.radius, n_segments, loop.current;
+        center = loop.center, normal = loop.normal
+    )
+end
+
+"""
     set_current_wire!(J, x, y, z, point, direction, current, width)
 
 Set the current density contribution of a straight wire with a Gaussian profile to `J`.
