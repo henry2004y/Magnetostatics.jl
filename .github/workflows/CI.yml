@@ -5,12 +5,14 @@ on:
       - main
     paths-ignore:
       - 'README.md'
+      - 'AGENTS.md'
   push:
     branches:
       - main
     tags: '*'
     paths-ignore:
       - 'README.md'
+      - 'AGENTS.md'
 env:
   JULIA_NUM_THREADS: 2
 jobs:
