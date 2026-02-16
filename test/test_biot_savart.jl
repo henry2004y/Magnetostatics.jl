@@ -1,8 +1,3 @@
-using Test
-using Magnetostatics
-using StaticArrays
-using LinearAlgebra
-
 @testset "BiotSavart Solver" begin
     # Test 1: Field from a straight wire
     # B = mu0 * I / (2 * pi * r)

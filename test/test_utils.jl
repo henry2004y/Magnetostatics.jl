@@ -1,8 +1,3 @@
-using Magnetostatics
-using StaticArrays
-using LinearAlgebra
-using Test
-
 @testset "Utils" begin
     # Define a function to verify the normal of the loop
     function verify_loop_normal(wire::Wire, expected_normal)

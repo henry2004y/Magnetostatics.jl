@@ -1,7 +1,7 @@
 using Test
 using Magnetostatics
-using LinearAlgebra
 using StaticArrays
+using LinearAlgebra
 
 @testset "Magnetostatics.jl" begin
     include("test_biot_savart.jl")

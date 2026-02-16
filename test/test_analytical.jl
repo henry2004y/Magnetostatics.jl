@@ -1,8 +1,3 @@
-using Test
-using Magnetostatics
-using StaticArrays
-using LinearAlgebra
-
 @testset "Analytical Fields" begin
     @testset "Harris Sheet" begin
         B0 = 1.0
