@@ -17,8 +17,7 @@ using LinearAlgebra
     B = solve(solver, wire, r)
 
     # Analytical expected value for infinite wire
-    μ0 = 4π * 1.0e-7
-    B_expected = μ0 * 1.0 / (2 * π * 1.0)
+    B_expected = Magnetostatics.μ₀ * 1.0 / (2 * π * 1.0)
 
     # The wire is finite, so result will be slightly less
     # exact finite wire: B = mu0 I / (4 pi r) * (cos theta1 + cos theta2)
@@ -37,7 +36,7 @@ using LinearAlgebra
     r_axis = SVector(0.0, 0.0, z)
     B_loop = solve(solver, loop_wire, r_axis)
 
-    B_analytical = μ0 * I * R^2 / (2 * (R^2 + z^2)^(3 / 2))
+    B_analytical = Magnetostatics.μ₀ * I * R^2 / (2 * (R^2 + z^2)^(3 / 2))
 
     @test isapprox(B_loop[3], B_analytical, rtol = 1.0e-2)
     @test abs(B_loop[1]) < 1.0e-10

@@ -59,8 +59,7 @@ using LinearAlgebra
         # A = (mu0/4pi) * (m x r) / r^3
         #   = (mu0/4pi) * (z_hat x x_hat) / r^2
         #   = (mu0/4pi) * y_hat / r^2
-        μ0_4π = 1.0e-7
-        A_exact = SVector(0.0, μ0_4π / 1.0^2, 0.0)
+        A_exact = SVector(0.0, Magnetostatics.μ0_4π / 1.0^2, 0.0)
 
         A_calc = solve(solverA, dipole, r)
         @test isapprox(A_calc, A_exact, rtol = 1.0e-5)

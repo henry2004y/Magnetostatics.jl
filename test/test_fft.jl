@@ -69,8 +69,7 @@ using FFTW
     Bz_c = B_grid[3, c_i, c_j, c_k]
 
     # Analytical verification
-    μ0 = 4π * 1.0e-7
-    Bz_analytical = μ0 * I / (2 * R)
+    Bz_analytical = Magnetostatics.μ₀ * I / (2 * R)
 
     # FFT result will differ slightly due to:
     # 1. Finite grid resolution
@@ -78,10 +77,6 @@ using FFTW
     # 3. Periodic boundary conditions (images of the loop affect the center)
 
     # Being within 5-10% is usually expected for a naive test setup like this without padding
-    println("Bz Center (FFT): $Bz_c")
-    println("Bz Center (Ana): $Bz_analytical")
-
-    @test isapprox(Bz_c, Bz_analytical, rtol = 0.1)
-    @test abs(Bx_c) < 1.0e-8
-    @test abs(By_c) < 1.0e-8
+    @test isapprox(Bz_c, Bz_analytical, rtol = 0.1) &&
+        abs(Bx_c) < 1.0e-8 && abs(By_c) < 1.0e-8
 end
