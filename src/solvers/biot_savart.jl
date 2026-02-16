@@ -42,7 +42,7 @@ function solve(::BiotSavart, source::Wire{T}, r::SVector{3, T}) where {T}
         end
 
         term = (dot(dl, a) / norm(a) - dot(dl, b) / norm(b))
-        B += (μ0_4π * I) * (cross_prod / cross_sq) * term
+        B += (T(μ0_4π) * I) * (cross_prod / cross_sq) * term
     end
 
     return B
