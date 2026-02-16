@@ -1,5 +1,9 @@
 # Magnetostatics.jl
 
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://henry2004y.github.io/Magnetostatics.jl/dev)
+[![Coverage](https://codecov.io/gh/henry2004y/Magnetostatics.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/henry2004y/Magnetostatics.jl)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A Julia package for computing magnetostatic fields from current sources.
 
 ## Overview
