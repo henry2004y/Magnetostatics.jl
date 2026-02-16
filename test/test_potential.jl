@@ -1,8 +1,3 @@
-using Test
-using Magnetostatics
-using StaticArrays
-using LinearAlgebra
-
 @testset "Vector Potential Solver" begin
     # Numerical Curl helper
     function curl_A(solver, source, r, h = 1.0e-5)

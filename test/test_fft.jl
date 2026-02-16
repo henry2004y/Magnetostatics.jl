@@ -1,9 +1,3 @@
-using Test
-using Magnetostatics
-using StaticArrays
-using LinearAlgebra
-using FFTW
-
 @testset "FFT Solver" begin
     # Test Setup: Current Loop
     # We will discretize a loop onto a grid and compare the field at the center
