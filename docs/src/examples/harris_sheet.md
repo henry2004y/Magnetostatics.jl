@@ -21,20 +21,21 @@ Visualizing the field reversal:
 xs = range(-5, 5, length=51)
 zs = range(-2, 2, length=21)
 
-Bx_vals = [sheet(SVector(x, 0.0, z))[1] for x in xs, z in zs]
+Bx = [sheet(SVector(x, 0.0, z))[1] for x in xs, z in zs]
 
 fig = Figure(size = (800, 400), fontsize=20)
 ax = Axis(fig[1, 1];
     xlabel="x", ylabel="z", aspect=DataAspect(), title="Harris Sheet Field (Bx)")
 
-hm = heatmap!(ax, xs, zs, Bx_vals, colormap=:balance)
+hm = heatmap!(ax, xs, zs, Bx, colormap=:balance)
 Colorbar(fig[1, 2], hm, label="Bx")
 
 ps = [Point2f(x, z) for x in xs[5:5:end-5], z in zs[1:3:end]]
 ns = [Vec2f(sheet(SVector(x, 0.0, z))[1], sheet(SVector(x, 0.0, z))[3])
     for x in xs[5:5:end-5], z in zs[1:3:end]]
+Bxs = [sheet(SVector(x, 0.0, z))[1] for x in xs[5:5:end-5], z in zs[1:3:end]]
 
-arrows2d!(ax, vec(ps), vec(ns); lengthscale=0.6, color=vec(Bx_vals), colormap=:rain)
+arrows2d!(ax, vec(ps), vec(ns); lengthscale=0.6, color=vec(Bxs), colormap=:rain)
 
 fig
 ```
