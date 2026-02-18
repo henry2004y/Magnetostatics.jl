@@ -48,6 +48,9 @@ fig
 Reconstruct the magnetic field distribution from a safety factor ($q$) profile.
 
 ```@example tokamak_q
+using Magnetostatics, StaticArrays, LinearAlgebra
+using CairoMakie
+
 # Define q-profile as a function of normalized radius r/a
 q_profile(r_norm) = 1.1 + r_norm^2
 
