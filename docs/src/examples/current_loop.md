@@ -29,20 +29,20 @@ zs = range(-2, 2, length=51)
 
 function field_xz_loop(x, z)
     B = getB_loop(SVector(x, 0.0, z), loop)
-    # Return nan near wire? Usually streamplot handles huge values okay, but let's be safe
     return Point2f(B[1], B[3])
 end
 
-fig = Figure(size = (700, 600), fontsize=20)
-ax = Axis(fig[1, 1]; xlabel="x", ylabel="z", aspect=DataAspect(), title="Current Loop Field")
-
-# Heatmap of magnitude
 Bmag = [norm(getB_loop(SVector(x, 0.0, z), loop)) for x in xs, z in zs]
+
+fig = Figure(size = (700, 600), fontsize=20)
+ax = Axis(fig[1, 1];
+    xlabel="x", ylabel="z", aspect=DataAspect(), title="Current Loop Field")
+
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-# Field lines
-streamplot!(ax, field_xz_loop, -2..2, -2..2; arrow_size = 8, linewidth = 1.5, colormap = :turbo)
+streamplot!(ax, field_xz_loop, -2..2, -2..2;
+    arrow_size = 8, linewidth = 1.5, colormap = :turbo)
 
 fig
 ```
