@@ -32,7 +32,6 @@ Visualizing the 3D magnetic field:
 
 ```@example fft
 # Create points and vectors
-# B .*= 1e9 # [T] -> [nT]
 ps = [Point3f(x[i], y[j], z[k]) for i in 1:Nx, j in 1:Ny, k in 1:Nz]
 ns = [Vec3f(B[1,i,j,k], B[2,i,j,k], B[3,i,j,k]) for i in 1:Nx, j in 1:Ny, k in 1:Nz]
 strength = vec(norm.(ns))

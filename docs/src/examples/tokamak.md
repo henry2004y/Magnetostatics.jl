@@ -89,8 +89,8 @@ Bmag = [get_Bmag_tokamak_q(x, z) for x in xs, z in zs]
 fig = Figure(size = (700, 600), fontsize=20)
 ax = Axis(fig[1, 1], xlabel="x (R)", ylabel="z", aspect=DataAspect(), title="Tokamak q-profile Field")
 
-hm = heatmap!(ax, xs, zs, Bmag, colormap=:plasma)
-Colorbar(fig[1, 2], hm, label="|B|")
+hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
+Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
 streamplot!(ax, field_xz_tokamak_q, xs[1]..xs[end], zs[1]..zs[end]; arrow_size = 8, linewidth = 1.5)
 fig

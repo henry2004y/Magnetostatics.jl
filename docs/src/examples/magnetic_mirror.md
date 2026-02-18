@@ -12,7 +12,7 @@ I = 100.0 # Current * windings
 
 # Field at the center (0,0,0)
 B = getB_mirror(0.0, 0.0, 0.0, distance, a, I)
-println("B at center: $B")
+println("B at center: $B [T]")
 ```
 
 Visualizing the field in the xz-plane:
