@@ -21,11 +21,11 @@ Compute the magnetic field `B` from a discrete current distribution `J` using FF
 function solve(::FFTSolver, J::AbstractArray{T, 4}, dx::Real) where {T}
     @assert size(J, 1) == 3 "First dimension of J must be 3 (components)"
     _, Nx, Ny, Nz = size(J)
-
+    invdx = inv(dx)
     # k-vectors (angular wavenumbers)
-    kx = 2π * fftfreq(Nx, 1 / dx)
-    ky = 2π * fftfreq(Ny, 1 / dx)
-    kz = 2π * fftfreq(Nz, 1 / dx)
+    kx = 2π * fftfreq(Nx, invdx)
+    ky = 2π * fftfreq(Ny, invdx)
+    kz = 2π * fftfreq(Nz, invdx)
 
     # FFT of Current J
     # FFTW works on the last dimensions by default, but here we have (3, Nx, Ny, Nz).
