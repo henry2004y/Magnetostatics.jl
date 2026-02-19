@@ -1,6 +1,6 @@
 name = "Magnetostatics"
 uuid = "e551bd30-f216-4325-9989-532520624021"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Hongyang Zhou <hyzhou@umich.edu>"]
 
 [deps]
