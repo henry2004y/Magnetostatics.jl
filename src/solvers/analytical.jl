@@ -318,8 +318,8 @@ function getB_zpinch(x, y, z, I, a)
     return getB_zpinch(SVector(x, y, z), I, a)
 end
 
-function getB_zpinch(r, I, a)
-    x, y = r[1], r[2]
+function getB_zpinch(pos, I, a)
+    x, y = pos[1], pos[2]
     r = hypot(x, y)
     if r < a
         factor = μ₀ * I / (2π * a^2)
