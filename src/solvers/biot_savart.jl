@@ -25,7 +25,7 @@ function solve(::BiotSavart, source::Wire{T}, r::SVector{3, T}) where {T}
     points = source.points
     I = source.current
 
-    for i in 1:(length(points) - 1)
+    @inbounds for i in 1:(length(points) - 1)
         r1 = points[i]
         r2 = points[i + 1]
 

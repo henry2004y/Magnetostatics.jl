@@ -3,6 +3,7 @@ module Magnetostatics
 using LinearAlgebra
 using StaticArrays
 using SpecialFunctions
+using FFTW
 using PrecompileTools
 
 const μ₀ = 4π * 1.0e-7

@@ -1,5 +1,3 @@
-export AbstractMagneticField, AbstractCurrentSource, AbstractSolver
-
 """
     AbstractMagneticField
 

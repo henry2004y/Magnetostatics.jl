@@ -1,5 +1,3 @@
-using PrecompileTools
-
 @setup_workload begin
     let wire = Wire([SVector(0.0, 0.0, -1.0), SVector(0.0, 0.0, 1.0)], 1.0),
             loop = CurrentLoop(1.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0)),
