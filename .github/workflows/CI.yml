@@ -3,16 +3,18 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - 'README.md'
-      - 'AGENTS.md'
+    paths:
+      - "src/**"
+      - "Project.toml"
+      - "test/**"
   push:
     branches:
       - main
     tags: '*'
-    paths-ignore:
-      - 'README.md'
-      - 'AGENTS.md'
+    paths:
+      - "src/**"
+      - "Project.toml"
+      - "test/**"
 env:
   JULIA_NUM_THREADS: 2
 jobs:

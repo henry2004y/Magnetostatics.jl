@@ -3,11 +3,10 @@ name: Benchmarks
 on:
   pull_request_target:
     branches: [ main ]
-    paths-ignore:
-      - 'README.md'
-      - 'AGENTS.md'
-      - 'test/**'
-      - 'docs/**'
+    paths:
+      - "src/**"
+      - "Project.toml"
+      - "benchmarks/**"
 permissions:
   pull-requests: write    # action needs to post a comment
 
