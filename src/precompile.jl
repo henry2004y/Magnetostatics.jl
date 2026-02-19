@@ -33,7 +33,6 @@
             dipole(r)
             loop_analytic(r)
             getB_loop(r, loop)
-            getB_loop(r, SVector(0.0, 0.0, 0.0), 1.0, 1.0, SVector(0.0, 0.0, 1.0))
 
             # Utilities
             getB_mirror(0.5, 0.0, 0.0, 1.0, 1.0, 1.0)

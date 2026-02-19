@@ -12,7 +12,8 @@ struct HarrisSheet{T} <: AbstractMagneticField
     L::T
 end
 
-function (field::HarrisSheet)(r::SVector{3, T}) where {T}
+function (field::HarrisSheet)(r)
+    T = eltype(r)
     return SVector(field.B0 * tanh(r[3] / field.L), zero(T), zero(T))
 end
 
@@ -28,7 +29,8 @@ struct Dipole{T} <: AbstractMagneticField
     M::SVector{3, T}
 end
 
-function (field::Dipole)(r::SVector{3, T}) where {T}
+function (field::Dipole)(r)
+    T = eltype(r)
     r_mag = norm(r)
     if r_mag < 1.0e-10
         return @SVector zeros(T, 3) # Singularity at origin
@@ -51,9 +53,9 @@ end
 """
     getB_loop(r, loop::CurrentLoop)
 
-Calculate the magnetic field `B` [T] at point `r` from a `CurrentLoop`.
+Calculate the magnetic field `B` [T] at 3D point `r` from a `CurrentLoop`.
 """
-function getB_loop(r::AbstractVector, loop::CurrentLoop)
+function getB_loop(r, loop::CurrentLoop)
     (; radius, current, center, normal) = loop
 
     n_hat = normal
@@ -108,19 +110,6 @@ function getB_loop(r::AbstractVector, loop::CurrentLoop)
     return B
 end
 
-"""
-    getB_loop(r, R, a, I, n)
-
-Calculate the magnetic field `B` [T] at point `r` from a current loop with current `I` [A],
-radius `a` [m], centered at `R`, and normal vector `n`.
-"""
-function getB_loop(
-        r::AbstractVector, R::AbstractVector, a, I, n::AbstractVector
-    )
-    loop = CurrentLoop(a, I, R, n)
-    return getB_loop(r, loop)
-end
-
 # Make structs callable
 function (field::CurrentLoopAnalytic)(r)
     return getB_loop(r, field.loop)
@@ -132,18 +121,23 @@ end
 
 """
     getB_mirror(x, y, z, distance, a, I1) :: SVector{3}
+    getB_mirror(r, distance, a, I1) :: SVector{3}
 
 Get magnetic field at `[x, y, z]` from a magnetic mirror generated from two coils.
 
 # Arguments
 
-  - `x,y,z`: particle coordinates in [m].
+  - `r`: location, vector of length 3 [m]
+  - `x,y,z`: location [m]
   - `distance`: distance between solenoids in [m].
   - `a`: radius of each side coil in [m].
   - `I1`: current in the solenoid times number of windings in side coils.
 """
 function getB_mirror(x, y, z, distance, a, I1)
-    r = SVector(x, y, z)
+    return getB_mirror(SVector(x, y, z), distance, a, I1)
+end
+
+function getB_mirror(r, distance, a, I1)
     cl1 = CurrentLoop(a, I1, SVector(0.0, 0.0, -0.5 * distance), SVector(0.0, 0.0, 1.0))
     cl2 = CurrentLoop(a, I1, SVector(0.0, 0.0, 0.5 * distance), SVector(0.0, 0.0, 1.0))
     B1 = getB_loop(r, cl1)
@@ -154,13 +148,15 @@ end
 
 """
     getB_bottle(x, y, z, distance, a, b, I1, I2) :: SVector{3}
+    getB_bottle(r, distance, a, b, I1, I2) :: SVector{3}
 
 Get magnetic field from a magnetic bottle.
 Reference: [wiki](https://en.wikipedia.org/wiki/Magnetic_mirror#Magnetic_bottles)
 
 # Arguments
 
-  - `x,y,z::Float`: particle coordinates in [m].
+  - `r`: location, vector of length 3 [m]
+  - `x,y,z`: location [m]
   - `distance::Float`: distance between solenoids in [m].
   - `a::Float`: radius of each side coil in [m].
   - `b::Float`: radius of central coil in [m].
@@ -169,34 +165,44 @@ Reference: [wiki](https://en.wikipedia.org/wiki/Magnetic_mirror#Magnetic_bottles
     central loop in [A].
 """
 function getB_bottle(x, y, z, distance, a, b, I1, I2)
-    B = getB_mirror(x, y, z, distance, a, I1)
+    return getB_bottle(SVector(x, y, z), distance, a, b, I1, I2)
+end
+
+function getB_bottle(r, distance, a, b, I1, I2)
+    B = getB_mirror(r, distance, a, I1)
 
     # Central loop
     cl3 = CurrentLoop(b, I2, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
-    B3 = getB_loop(SVector(x, y, z), cl3)
+    B3 = getB_loop(r, cl3)
 
     return B + B3
 end
 
 """
     getB_tokamak_coil(x, y, z, a, b, ICoils, IPlasma) -> SVector{3}
+    getB_tokamak_coil(r, a, b, ICoils, IPlasma) -> SVector{3}
 
 Get the magnetic field from a Tokamak topology consists of 16 coils.
 Original: [Tokamak-Fusion-Reactor](https://github.com/BoschSamuel/Simulation-of-a-Tokamak-Fusion-Reactor/blob/master/Simulation2.m)
 
 # Arguments
 
-  - `x,y,z`: location in [m].
+  - `r`: location, vector of length 3 [m]
+  - `x,y,z`: location [m]
   - `a`: radius of each coil in [m].
   - `b`: radius of central region in [m].
   - `ICoil`: current in the coil times number of windings in [A].
   - `IPlasma`: current of the plasma in [A].
 """
 function getB_tokamak_coil(x, y, z, a, b, ICoils, IPlasma)
+    return getB_tokamak_coil(SVector(x, y, z), a, b, ICoils, IPlasma)
+end
+
+function getB_tokamak_coil(r, a, b, ICoils, IPlasma)
+    x, y, z = r
     a *= 2
 
     Bx, By, Bz = 0.0, 0.0, 0.0
-    r_vec = SVector(x, y, z)
 
     # magnetic field of the coils
     for i in 0:15
@@ -213,7 +219,7 @@ function getB_tokamak_coil(x, y, z, a, b, ICoils, IPlasma)
         normal = SVector(-sin(θ), cos(θ), 0.0)
 
         cl = CurrentLoop(a, ICoils, center, normal)
-        B_coil = getB_loop(r_vec, cl)
+        B_coil = getB_loop(r, cl)
 
         Bx += B_coil[1]
         By += B_coil[2]
@@ -226,14 +232,17 @@ function getB_tokamak_coil(x, y, z, a, b, ICoils, IPlasma)
     # distance to center of plasma ring
     # Plasma ring radius R_p = a + b
     R_p = a + b
-    distance = √(z^2 + (x - R_p * cos(ϕ))^2 + (y - R_p * sin(ϕ))^2)
+    distance_val = √(z^2 + (x - R_p * cos(ϕ))^2 + (y - R_p * sin(ϕ))^2)
 
-    if distance > 0.0001
-        I2_r_plasma = IPlasma * erf(distance / (σ * √2))
+    if distance_val > 0.0001
+        I2_r_plasma = IPlasma * erf(distance_val / (σ * √2))
 
         # Plasma is a horizontal loop at z=0, radius R_p
-        cl_plasma = CurrentLoop(R_p, I2_r_plasma, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
-        B_plasma = getB_loop(r_vec, cl_plasma)
+        cl_plasma = CurrentLoop(
+            R_p, I2_r_plasma,
+            SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0)
+        )
+        B_plasma = getB_loop(r, cl_plasma)
 
         Bx += B_plasma[1]
         By += B_plasma[2]
@@ -245,19 +254,26 @@ end
 
 """
     getB_tokamak_profile(x, y, z, q_profile, a, R₀, Bζ0) :: SVector{3}
+    getB_tokamak_profile(r, q_profile, a, R₀, Bζ0) :: SVector{3}
 
 Reconstruct the magnetic field distribution from a safe factor(q) profile.
 Reference: Tokamak, 4th Edition, John Wesson.
 
 # Arguments
 
-  - `x,y,z`: location in [m].
+  - `r`: location, vector of length 3 [m]
+  - `x,y,z`: location [m]
   - `q_profile::Function`: profile of q. The variable of this function must be the normalized radius.
   - `a`: minor radius [m].
   - `R₀`: major radius [m].
   - `Bζ0`: toroidal magnetic field on axis [T].
 """
 function getB_tokamak_profile(x, y, z, q_profile, a, R₀, Bζ0)
+    return getB_tokamak_profile(SVector(x, y, z), q_profile, a, R₀, Bζ0)
+end
+
+function getB_tokamak_profile(pos, q_profile, a, R₀, Bζ0)
+    x, y, z = pos
     R = √(x^2 + y^2)
     r = √((R - R₀)^2 + z^2)
     r > a && throw(OverflowError("out of vacuum vessel"))
@@ -275,17 +291,24 @@ end
 
 """
     getB_zpinch(x, y, z, I, a) -> SVector{3}
+    getB_zpinch(r, I, a) -> SVector{3}
 
 Get magnetic field from a Z-pinch configuration.
 Reference: [Z-pinch](https://en.wikipedia.org/wiki/Z-pinch)
 
 # Arguments
 
-  - `x,y,z::Float`: particle coordinates in [m].
+  - `r`: location, vector of length 3 [m]
+  - `x,y,z`: location [m]
   - `I::Float`: current in the wire [A].
   - `a::Float`: radius of the wire [m].
 """
 function getB_zpinch(x, y, z, I, a)
+    return getB_zpinch(SVector(x, y, z), I, a)
+end
+
+function getB_zpinch(pos, I, a)
+    x, y = pos[1], pos[2]
     r = hypot(x, y)
     if r < a
         factor = μ₀ * I / (2π * a^2)
