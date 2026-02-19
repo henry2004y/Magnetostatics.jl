@@ -110,17 +110,6 @@ function getB_loop(r, loop::CurrentLoop)
     return B
 end
 
-"""
-    getB_loop(r, R, a, I, n)
-
-Calculate the magnetic field `B` [T] at point `r` from a current loop with current `I` [A],
-radius `a` [m], centered at `R`, and normal vector `n`.
-"""
-function getB_loop(r, R, a, I, n)
-    loop = CurrentLoop(a, I, R, n)
-    return getB_loop(r, loop)
-end
-
 # Make structs callable
 function (field::CurrentLoopAnalytic)(r)
     return getB_loop(r, field.loop)
