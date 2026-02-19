@@ -1,5 +1,3 @@
-using FFTW
-
 """
     FFTSolver <: AbstractSolver
 
@@ -23,69 +21,38 @@ Compute the magnetic field `B` from a discrete current distribution `J` using FF
 function solve(::FFTSolver, J::AbstractArray{T, 4}, dx::Real) where {T}
     @assert size(J, 1) == 3 "First dimension of J must be 3 (components)"
     _, Nx, Ny, Nz = size(J)
-
+    invdx = inv(dx)
     # k-vectors (angular wavenumbers)
-    # fftfreq returns frequencies f = k / (2pi). We need k = 2pi * f.
-    kx = 2π * fftfreq(Nx, 1 / dx)
-    ky = 2π * fftfreq(Ny, 1 / dx)
-    kz = 2π * fftfreq(Nz, 1 / dx)
-
-    # Reshape for broadcasting
-    kx_grid = reshape(kx, Nx, 1, 1)
-    ky_grid = reshape(ky, 1, Ny, 1)
-    kz_grid = reshape(kz, 1, 1, Nz)
-
-    k_sq = zeros(eltype(kx), Nx, Ny, Nz)
-    # Avoid loop for performance if possible, but simple loop is fine for setup
-    @. k_sq = kx_grid^2 + ky_grid^2 + kz_grid^2
-
-    # Handle singularity at k=0 (DC component)
-    # If the total current is zero (sum(J)=0), then B(k=0) should be 0.
-    # We set k^2 to non-zero (infinity) at index 1 to avoid division by zero,
-    # effectively masking the DC component if we don't handle it explicitly.
-    k_sq[1, 1, 1] = Inf
+    kx = 2π * fftfreq(Nx, invdx)
+    ky = 2π * fftfreq(Ny, invdx)
+    kz = 2π * fftfreq(Nz, invdx)
 
     # FFT of Current J
-    # FFTW works on the last dimensions by default if we don't specify,
-    # but here we have (3, Nx, Ny, Nz). We want to transform over dims 2,3,4.
+    # FFTW works on the last dimensions by default, but here we have (3, Nx, Ny, Nz).
     J_k = fft(J, (2, 3, 4))
 
     # Allocate B_k
     B_k = similar(J_k)
 
-    # Calculation: B_k = i * mu0 * (k x J_k) / k^2
     im_mu0 = im * μ₀
 
-    # It's more efficient to loop since we are dealing with vector components per grid point
-    # Optimization: Use broadcasting or explicit loops
-
-    # Let's perform the cross product and scaling
-    # k x J = (ky Jz - kz Jy, kz Jx - kx Jz, kx Jy - ky Jx)
-
-    for k in 1:Nz, j in 1:Ny, i in 1:Nx
+    @inbounds for k in 1:Nz, j in 1:Ny, i in 1:Nx
         # Wave vectors at this grid point
-        k_x = kx[i]
-        k_y = ky[j]
-        k_z = kz[k]
+        k_vec = SVector(kx[i], ky[j], kz[k])
+        k_sq = sum(abs2, k_vec)
 
-        kk = k_sq[i, j, k]
+        if k_sq == 0
+            # Handle singularity at k=0 (DC component)
+            B_k[:, i, j, k] .= 0
+            continue
+        end
 
         # J_k at this grid point
-        Jx = J_k[1, i, j, k]
-        Jy = J_k[2, i, j, k]
-        Jz = J_k[3, i, j, k]
+        J_vec = SVector(J_k[1, i, j, k], J_k[2, i, j, k], J_k[3, i, j, k])
 
-        # Cross product k x J
-        cross_x = k_y * Jz - k_z * Jy
-        cross_y = k_z * Jx - k_x * Jz
-        cross_z = k_x * Jy - k_y * Jx
-
-        # Scale by i * mu0 / k^2
-        factor = im_mu0 / kk
-
-        B_k[1, i, j, k] = factor * cross_x
-        B_k[2, i, j, k] = factor * cross_y
-        B_k[3, i, j, k] = factor * cross_z
+        # Calculation: B_k = i * mu0 * (k x J_k) / k^2
+        factor = im_mu0 / k_sq
+        B_k[:, i, j, k] = factor * cross(k_vec, J_vec)
     end
 
     # Inverse FFT to get B in real space
