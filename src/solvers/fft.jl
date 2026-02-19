@@ -43,9 +43,7 @@ function solve(::FFTSolver, J::AbstractArray{T, 4}, dx::Real) where {T}
 
         if k_sq == 0
             # Handle singularity at k=0 (DC component)
-            B_k[1, i, j, k] = 0
-            B_k[2, i, j, k] = 0
-            B_k[3, i, j, k] = 0
+            B_k[:, i, j, k] .= 0
             continue
         end
 
@@ -54,11 +52,7 @@ function solve(::FFTSolver, J::AbstractArray{T, 4}, dx::Real) where {T}
 
         # Calculation: B_k = i * mu0 * (k x J_k) / k^2
         factor = im_mu0 / k_sq
-        B_vec = factor * cross(k_vec, J_vec)
-
-        B_k[1, i, j, k] = B_vec[1]
-        B_k[2, i, j, k] = B_vec[2]
-        B_k[3, i, j, k] = B_vec[3]
+        B_k[:, i, j, k] = factor * cross(k_vec, J_vec)
     end
 
     # Inverse FFT to get B in real space
