@@ -283,8 +283,8 @@ function getB_tokamak_profile(x, y, z, q_profile, a, R₀, Bζ0)
     return getB_tokamak_profile(SVector(x, y, z), q_profile, a, R₀, Bζ0)
 end
 
-function getB_tokamak_profile(r, q_profile, a, R₀, Bζ0)
-    x, y, z = r
+function getB_tokamak_profile(pos, q_profile, a, R₀, Bζ0)
+    x, y, z = pos
     R = √(x^2 + y^2)
     r = √((R - R₀)^2 + z^2)
     r > a && throw(OverflowError("out of vacuum vessel"))
