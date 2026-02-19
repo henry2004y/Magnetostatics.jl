@@ -123,3 +123,32 @@ function set_current_wire(x, y, z, point, direction, current, width)
     set_current_wire!(J, x, y, z, point, direction, current, width)
     return J
 end
+
+"""
+    sph2cart(r, θ, ϕ)
+
+Convert from spherical to Cartesian coordinates vector.
+"""
+function sph2cart(r, θ, ϕ)
+    sinθ, cosθ = sincos(θ)
+    sinϕ, cosϕ = sincos(ϕ)
+    return SVector{3}(r * sinθ * cosϕ, r * sinθ * sinϕ, r * cosθ)
+end
+
+@inline @inbounds sph2cart(x) = sph2cart(x[1], x[2], x[3])
+
+"""
+    dipole_fieldline(ϕ, L=2.5, nP=100)
+
+Creates `nP` points on one field line of the magnetic field from a dipole. In a centered
+dipole magnetic field model, the path along a given L shell can be described as r = L*cos²λ,
+where r is the radial distance (in planetary radii) to a point on the line,
+λ is its co-latitude, and L is the L-shell of interest.
+"""
+function dipole_fieldline(ϕ, L = 2.5, nP::Int = 100)
+    xyz = [sph2cart(L * sin(θ)^2, θ, ϕ) for θ in range(0, stop = π, length = nP)]
+    x = getindex.(xyz, 1)
+    y = getindex.(xyz, 2)
+    z = getindex.(xyz, 3)
+    return (x, y, z)
+end
