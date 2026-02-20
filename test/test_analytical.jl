@@ -83,6 +83,14 @@
             # x, y, z, distance, a, b, I1, I2
             B = getB_bottle(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0)
             @test B[3] ≈ 1.5274948162911718e-6
+
+            # Test offset and rotation to verify the transformations apply to entire bottle
+            B_offset = getB_bottle(1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0; center = SVector(1.0, 2.0, 3.0))
+            @test B_offset ≈ B
+
+            B_rot = getB_bottle(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0; normal = SVector(0.0, 1.0, 0.0))
+            @test B_rot[2] ≈ B[3]
+            @test abs(B_rot[1]) < 1.0e-15 && abs(B_rot[3]) < 1.0e-15
         end
 
         @testset "getB_zpinch" begin
@@ -121,6 +129,12 @@
         B_bottle_c = getB_bottle(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
         @test B_bottle_s == B_bottle_c
 
+        c_kw = SVector(0.1, 0.2, 0.3)
+        n_kw = SVector(1.0, 0.0, 0.0)
+        B_bottle_kw_s = getB_bottle(r, 1.0, 1.0, 1.0, 1.0, 1.0; center = c_kw, normal = n_kw)
+        B_bottle_kw_c = getB_bottle(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0; center = c_kw, normal = n_kw)
+        @test B_bottle_kw_s == B_bottle_kw_c
+
         # getB_tokamak_coil
         B_tok_coil_s = getB_tokamak_coil(r, 1.0, 1.0, 1.0, 1.0)
         B_tok_coil_c = getB_tokamak_coil(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
@@ -149,5 +163,66 @@
         B_dipole = dipole(r_vec_z)
         @test B_dipole isa SVector
         @test isapprox(B_dipole[3], Magnetostatics.μ0_4π * 2 / 8, rtol = 1.0e-5)
+    end
+
+    @testset "Tuple Inputs" begin
+        r_tuple = (1.0, 1.0, 1.0)
+
+        # HarrisSheet
+        harris = HarrisSheet(1.0, 2.0)
+        @test harris(r_tuple) isa SVector && harris(r_tuple)[1] ≈ harris(SVector(r_tuple...))[1]
+
+        # Dipole
+        dipole = Dipole(SVector(0.0, 0.0, 1.0))
+        @test dipole(r_tuple) isa SVector && dipole(r_tuple) ≈ dipole(SVector(r_tuple...))
+
+        # getB_loop
+        loop = CurrentLoop(1.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
+        @test getB_loop(r_tuple, loop) isa SVector &&
+            getB_loop(r_tuple, loop) ≈ getB_loop(SVector(r_tuple...), loop)
+
+        # getB_mirror
+        @test getB_mirror(r_tuple, 1.0, 1.0, 1.0) isa SVector &&
+            getB_mirror(r_tuple, 1.0, 1.0, 1.0) ≈ getB_mirror(SVector(r_tuple...), 1.0, 1.0, 1.0)
+
+        # getB_bottle
+        @test getB_bottle(r_tuple, 1.0, 1.0, 1.0, 1.0, 1.0) isa SVector &&
+            getB_bottle(r_tuple, 1.0, 1.0, 1.0, 1.0, 1.0) ≈ getB_bottle(SVector(r_tuple...), 1.0, 1.0, 1.0, 1.0, 1.0)
+
+        c_kw = SVector(0.1, 0.2, 0.3)
+        n_kw = SVector(1.0, 0.0, 0.0)
+        @test getB_bottle(r_tuple, 1.0, 1.0, 1.0, 1.0, 1.0; center = c_kw, normal = n_kw) isa SVector &&
+            getB_bottle(r_tuple, 1.0, 1.0, 1.0, 1.0, 1.0; center = c_kw, normal = n_kw) ≈ getB_bottle(SVector(r_tuple...), 1.0, 1.0, 1.0, 1.0, 1.0; center = c_kw, normal = n_kw)
+
+        # getB_tokamak_coil
+        @test getB_tokamak_coil(r_tuple, 1.0, 1.0, 1.0, 1.0) isa SVector &&
+            getB_tokamak_coil(r_tuple, 1.0, 1.0, 1.0, 1.0) ≈ getB_tokamak_coil(SVector(r_tuple...), 1.0, 1.0, 1.0, 1.0)
+
+        # getB_tokamak_profile
+        q_profile(nr) = nr^2 + 2 * nr + 0.5
+        @test getB_tokamak_profile(r_tuple, q_profile, 2.0, 1.0, 1.0) isa SVector &&
+            getB_tokamak_profile(r_tuple, q_profile, 2.0, 1.0, 1.0) ≈ getB_tokamak_profile(SVector(r_tuple...), q_profile, 2.0, 1.0, 1.0)
+
+        # getB_zpinch
+        @test getB_zpinch(r_tuple, 1.0, 0.1) isa SVector &&
+            getB_zpinch(r_tuple, 1.0, 0.1) ≈ getB_zpinch(SVector(r_tuple...), 1.0, 0.1)
+    end
+
+    @testset "Struct Callables" begin
+        r = SVector(1.0, 2.0, 3.0)
+        loop = CurrentLoop(1.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
+
+        # CurrentLoopAnalytic check
+        field = CurrentLoopAnalytic(loop)
+        @test field(r) ≈ getB_loop(r, loop)
+        @test field(Tuple(r)) ≈ getB_loop(r, loop)
+        @test field(Vector(r)) ≈ getB_loop(r, loop)
+
+        # BiotSavart callable check
+        wire = Wire([SVector(0.0, 0.0, -1.0), SVector(0.0, 0.0, 1.0)], 1.0)
+        solver = BiotSavart()
+        @test solver(wire, r) ≈ solve(solver, wire, r)
+        @test solver(wire, Tuple(r)) ≈ solve(solver, wire, r)
+        @test solver(wire, Vector(r)) ≈ solve(solver, wire, r)
     end
 end
