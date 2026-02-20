@@ -149,10 +149,14 @@ Get magnetic field at `[x, y, z]` from a magnetic mirror generated from two coil
     return getB_mirror(SVector(x, y, z), distance, a, I1)
 end
 
-@inline function getB_mirror(r, distance, a, I1)
-    normal = SVector(0.0, 0.0, 1.0)
-    cl1 = CurrentLoop(a, I1, SVector(0.0, 0.0, -0.5 * distance), normal)
-    cl2 = CurrentLoop(a, I1, SVector(0.0, 0.0, 0.5 * distance), normal)
+@inline function getB_mirror(
+        r, distance, a, I1; center = SVector(0.0, 0.0, 0.0),
+        normal = SVector(0.0, 0.0, 1.0)
+    )
+    c1 = center - 0.5 * distance * normal
+    c2 = center + 0.5 * distance * normal
+    cl1 = CurrentLoop(a, I1, c1, normal)
+    cl2 = CurrentLoop(a, I1, c2, normal)
     B1 = getB_loop(r, cl1)
     B2 = getB_loop(r, cl2)
 
@@ -189,7 +193,7 @@ end
         r, distance, a, b, I1, I2; center = SVector(0.0, 0.0, 0.0),
         normal = SVector(0.0, 0.0, 1.0)
     )
-    B = getB_mirror(r, distance, a, I1)
+    B = getB_mirror(r, distance, a, I1; center, normal)
 
     # Central loop
     cl3 = CurrentLoop(b, I2, center, normal)

@@ -83,6 +83,14 @@
             # x, y, z, distance, a, b, I1, I2
             B = getB_bottle(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0)
             @test B[3] ≈ 1.5274948162911718e-6
+
+            # Test offset and rotation to verify the transformations apply to entire bottle
+            B_offset = getB_bottle(1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0, 1.0; center = SVector(1.0, 2.0, 3.0))
+            @test B_offset ≈ B
+
+            B_rot = getB_bottle(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0; normal = SVector(0.0, 1.0, 0.0))
+            @test B_rot[2] ≈ B[3]
+            @test abs(B_rot[1]) < 1.0e-15 && abs(B_rot[3]) < 1.0e-15
         end
 
         @testset "getB_zpinch" begin
@@ -120,6 +128,12 @@
         B_bottle_s = getB_bottle(r, 1.0, 1.0, 1.0, 1.0, 1.0)
         B_bottle_c = getB_bottle(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
         @test B_bottle_s == B_bottle_c
+
+        c_kw = SVector(0.1, 0.2, 0.3)
+        n_kw = SVector(1.0, 0.0, 0.0)
+        B_bottle_kw_s = getB_bottle(r, 1.0, 1.0, 1.0, 1.0, 1.0; center = c_kw, normal = n_kw)
+        B_bottle_kw_c = getB_bottle(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0; center = c_kw, normal = n_kw)
+        @test B_bottle_kw_s == B_bottle_kw_c
 
         # getB_tokamak_coil
         B_tok_coil_s = getB_tokamak_coil(r, 1.0, 1.0, 1.0, 1.0)
@@ -174,6 +188,11 @@
         # getB_bottle
         @test getB_bottle(r_tuple, 1.0, 1.0, 1.0, 1.0, 1.0) isa SVector &&
             getB_bottle(r_tuple, 1.0, 1.0, 1.0, 1.0, 1.0) ≈ getB_bottle(SVector(r_tuple...), 1.0, 1.0, 1.0, 1.0, 1.0)
+
+        c_kw = SVector(0.1, 0.2, 0.3)
+        n_kw = SVector(1.0, 0.0, 0.0)
+        @test getB_bottle(r_tuple, 1.0, 1.0, 1.0, 1.0, 1.0; center = c_kw, normal = n_kw) isa SVector &&
+            getB_bottle(r_tuple, 1.0, 1.0, 1.0, 1.0, 1.0; center = c_kw, normal = n_kw) ≈ getB_bottle(SVector(r_tuple...), 1.0, 1.0, 1.0, 1.0, 1.0; center = c_kw, normal = n_kw)
 
         # getB_tokamak_coil
         @test getB_tokamak_coil(r_tuple, 1.0, 1.0, 1.0, 1.0) isa SVector &&
