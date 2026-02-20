@@ -127,7 +127,7 @@ end
     return getB_loop(r, field.loop)
 end
 
-@inline function (solver::BiotSavart)(source::AbstractCurrentSource, r)
+@inline function (solver::BiotSavart)(source, r)
     return solve(solver, source, r)
 end
 

@@ -207,4 +207,22 @@
         @test getB_zpinch(r_tuple, 1.0, 0.1) isa SVector &&
             getB_zpinch(r_tuple, 1.0, 0.1) ≈ getB_zpinch(SVector(r_tuple...), 1.0, 0.1)
     end
+
+    @testset "Struct Callables" begin
+        r = SVector(1.0, 2.0, 3.0)
+        loop = CurrentLoop(1.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
+
+        # CurrentLoopAnalytic check
+        field = CurrentLoopAnalytic(loop)
+        @test field(r) ≈ getB_loop(r, loop)
+        @test field(Tuple(r)) ≈ getB_loop(r, loop)
+        @test field(Vector(r)) ≈ getB_loop(r, loop)
+
+        # BiotSavart callable check
+        wire = Wire([SVector(0.0, 0.0, -1.0), SVector(0.0, 0.0, 1.0)], 1.0)
+        solver = BiotSavart()
+        @test solver(wire, r) ≈ solve(solver, wire, r)
+        @test solver(wire, Tuple(r)) ≈ solve(solver, wire, r)
+        @test solver(wire, Vector(r)) ≈ solve(solver, wire, r)
+    end
 end

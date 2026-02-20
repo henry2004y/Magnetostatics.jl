@@ -42,6 +42,13 @@
         B_exact = solve(solverB, wire, r)
 
         @test isapprox(B_numeric, B_exact, rtol = 1.0e-3)
+
+        A_calc = solve(solverA, wire, r)
+        @test solve(solverA, wire, Tuple(r)) ≈ A_calc
+        @test solve(solverA, wire, Vector(r)) ≈ A_calc
+        @test solverA(wire, r) ≈ A_calc
+        @test solverA(wire, Tuple(r)) ≈ A_calc
+        @test solverA(wire, Vector(r)) ≈ A_calc
     end
 
     @testset "Dipole" begin
@@ -58,6 +65,12 @@
 
         A_calc = solve(solverA, dipole, r)
         @test isapprox(A_calc, A_exact, rtol = 1.0e-5)
+
+        @test solve(solverA, dipole, Tuple(r)) ≈ A_calc
+        @test solve(solverA, dipole, Vector(r)) ≈ A_calc
+        @test solverA(dipole, r) ≈ A_calc
+        @test solverA(dipole, Tuple(r)) ≈ A_calc
+        @test solverA(dipole, Vector(r)) ≈ A_calc
 
         # Numeric curl check
         r_check = SVector(0.5, 0.5, 0.5)
@@ -79,5 +92,12 @@
         B_exact = getB_loop(r, loop)
 
         @test isapprox(B_numeric, B_exact, rtol = 1.0e-3)
+
+        A_calc = solve(solverA, loop, r)
+        @test solve(solverA, loop, Tuple(r)) ≈ A_calc
+        @test solve(solverA, loop, Vector(r)) ≈ A_calc
+        @test solverA(loop, r) ≈ A_calc
+        @test solverA(loop, Tuple(r)) ≈ A_calc
+        @test solverA(loop, Vector(r)) ≈ A_calc
     end
 end

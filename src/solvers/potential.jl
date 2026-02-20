@@ -117,6 +117,6 @@ function solve(solver::VectorPotential, source::CurrentLoop{T}, r) where {T}
 end
 
 # Make struct callable
-function (solver::VectorPotential)(source::AbstractCurrentSource, r)
+function (solver::VectorPotential)(source, r)
     return solve(solver, source, r)
 end

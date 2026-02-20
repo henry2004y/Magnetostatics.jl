@@ -22,6 +22,13 @@
     @test abs(B[1]) < 1.0e-10
     @test abs(B[3]) < 1.0e-10
 
+    # Test fallbacks and callable
+    @test solve(solver, wire, Tuple(r)) ≈ B
+    @test solve(solver, wire, Vector(r)) ≈ B
+    @test solver(wire, r) ≈ B
+    @test solver(wire, Tuple(r)) ≈ B
+    @test solver(wire, Vector(r)) ≈ B
+
     # Test 2: Field from a circular loop (on-axis)
     R = 1.0
     I = 1.0
