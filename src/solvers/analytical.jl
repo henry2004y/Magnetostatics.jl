@@ -13,6 +13,7 @@ struct HarrisSheet{T} <: AbstractMagneticField
 end
 
 function (field::HarrisSheet)(r)
+    @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
     T = eltype(r)
     return SVector(field.B0 * tanh(r[3] / field.L), zero(T), zero(T))
 end
@@ -29,8 +30,8 @@ struct Dipole{T} <: AbstractMagneticField
     M::SVector{3, T}
 end
 
-function (field::Dipole)(r)
-    T = eltype(r)
+@inline function (field::Dipole)(x::T, y::T, z::T) where {T}
+    r = SVector(x, y, z)
     r_mag = norm(r)
     if r_mag < 1.0e-10
         return @SVector zeros(T, 3) # Singularity at origin
@@ -39,6 +40,11 @@ function (field::Dipole)(r)
     n = r / r_mag
 
     return (μ0_4π / r_mag^3) * (3 * dot(field.M, n) * n - field.M)
+end
+
+@inline function (field::Dipole)(r)
+    @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
+    @inbounds return field(r[1], r[2], r[3])
 end
 
 """
@@ -55,13 +61,19 @@ end
 
 Calculate the magnetic field `B` [T] at 3D point `r` from a `CurrentLoop`.
 """
-function getB_loop(r, loop::CurrentLoop)
+@inline function getB_loop(r, loop::CurrentLoop)
+    @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
+    @inbounds return getB_loop(r[1], r[2], r[3], loop)
+end
+
+@inline function getB_loop(x, y, z, loop::CurrentLoop)
     (; radius, current, center, normal) = loop
 
     n_hat = normal
 
-    # Relative position from center
-    r_rel = r - center
+    # Relative position from center, r_rel = r - center
+    rx, ry, rz = x - center[1], y - center[2], z - center[3]
+    r_rel = SVector(rx, ry, rz)
 
     # Project r_rel onto the normal vector to get z component in local coordinates
     z_local = dot(r_rel, n_hat)
@@ -111,11 +123,11 @@ function getB_loop(r, loop::CurrentLoop)
 end
 
 # Make structs callable
-function (field::CurrentLoopAnalytic)(r)
+@inline function (field::CurrentLoopAnalytic)(r)
     return getB_loop(r, field.loop)
 end
 
-function (solver::BiotSavart)(source::AbstractCurrentSource, r)
+@inline function (solver::BiotSavart)(source::AbstractCurrentSource, r)
     return solve(solver, source, r)
 end
 
@@ -133,13 +145,14 @@ Get magnetic field at `[x, y, z]` from a magnetic mirror generated from two coil
   - `a`: radius of each side coil in [m].
   - `I1`: current in the solenoid times number of windings in side coils.
 """
-function getB_mirror(x, y, z, distance, a, I1)
+@inline function getB_mirror(x, y, z, distance, a, I1)
     return getB_mirror(SVector(x, y, z), distance, a, I1)
 end
 
-function getB_mirror(r, distance, a, I1)
-    cl1 = CurrentLoop(a, I1, SVector(0.0, 0.0, -0.5 * distance), SVector(0.0, 0.0, 1.0))
-    cl2 = CurrentLoop(a, I1, SVector(0.0, 0.0, 0.5 * distance), SVector(0.0, 0.0, 1.0))
+@inline function getB_mirror(r, distance, a, I1)
+    normal = SVector(0.0, 0.0, 1.0)
+    cl1 = CurrentLoop(a, I1, SVector(0.0, 0.0, -0.5 * distance), normal)
+    cl2 = CurrentLoop(a, I1, SVector(0.0, 0.0, 0.5 * distance), normal)
     B1 = getB_loop(r, cl1)
     B2 = getB_loop(r, cl2)
 
@@ -164,15 +177,22 @@ Reference: [wiki](https://en.wikipedia.org/wiki/Magnetic_mirror#Magnetic_bottles
   - `I2::Float`: current in the central solenoid times number of windings in the
     central loop in [A].
 """
-function getB_bottle(x, y, z, distance, a, b, I1, I2)
-    return getB_bottle(SVector(x, y, z), distance, a, b, I1, I2)
+@inline function getB_bottle(
+        x, y, z, distance, a, b, I1, I2;
+        center = SVector(0.0, 0.0, 0.0),
+        normal = SVector(0.0, 0.0, 1.0)
+    )
+    return getB_bottle(SVector(x, y, z), distance, a, b, I1, I2; center, normal)
 end
 
-function getB_bottle(r, distance, a, b, I1, I2)
+@inline function getB_bottle(
+        r, distance, a, b, I1, I2; center = SVector(0.0, 0.0, 0.0),
+        normal = SVector(0.0, 0.0, 1.0)
+    )
     B = getB_mirror(r, distance, a, I1)
 
     # Central loop
-    cl3 = CurrentLoop(b, I2, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
+    cl3 = CurrentLoop(b, I2, center, normal)
     B3 = getB_loop(r, cl3)
 
     return B + B3
@@ -194,11 +214,11 @@ Original: [Tokamak-Fusion-Reactor](https://github.com/BoschSamuel/Simulation-of-
   - `ICoil`: current in the coil times number of windings in [A].
   - `IPlasma`: current of the plasma in [A].
 """
-function getB_tokamak_coil(x, y, z, a, b, ICoils, IPlasma)
+@inline function getB_tokamak_coil(x, y, z, a, b, ICoils, IPlasma)
     return getB_tokamak_coil(SVector(x, y, z), a, b, ICoils, IPlasma)
 end
 
-function getB_tokamak_coil(r, a, b, ICoils, IPlasma)
+@inline function getB_tokamak_coil(r, a, b, ICoils, IPlasma)
     x, y, z = r
     a *= 2
 
@@ -268,11 +288,11 @@ Reference: Tokamak, 4th Edition, John Wesson.
   - `R₀`: major radius [m].
   - `Bζ0`: toroidal magnetic field on axis [T].
 """
-function getB_tokamak_profile(x, y, z, q_profile, a, R₀, Bζ0)
+@inline function getB_tokamak_profile(x, y, z, q_profile, a, R₀, Bζ0)
     return getB_tokamak_profile(SVector(x, y, z), q_profile, a, R₀, Bζ0)
 end
 
-function getB_tokamak_profile(pos, q_profile, a, R₀, Bζ0)
+@inline function getB_tokamak_profile(pos, q_profile, a, R₀, Bζ0)
     x, y, z = pos
     R = √(x^2 + y^2)
     r = √((R - R₀)^2 + z^2)
@@ -281,10 +301,12 @@ function getB_tokamak_profile(pos, q_profile, a, R₀, Bζ0)
     Bζ = Bζ0 * R₀ / R
     Bθ = r * Bζ / R₀ / q_profile(r / a)
     ζ = atan(y, x)
+    sinζ, cosζ = sincos(ζ)
+    sinθ, cosθ = sincos(θ)
 
-    Bx = -Bζ * sin(ζ) - Bθ * sin(θ) * cos(ζ)
-    By = Bζ * cos(ζ) - Bθ * sin(θ) * sin(ζ)
-    Bz = Bθ * cos(θ)
+    Bx = -Bζ * sinζ - Bθ * sinθ * cosζ
+    By = Bζ * cosζ - Bθ * sinθ * sinζ
+    Bz = Bθ * cosθ
 
     return SVector(Bx, By, Bz)
 end
@@ -303,11 +325,11 @@ Reference: [Z-pinch](https://en.wikipedia.org/wiki/Z-pinch)
   - `I::Float`: current in the wire [A].
   - `a::Float`: radius of the wire [m].
 """
-function getB_zpinch(x, y, z, I, a)
+@inline function getB_zpinch(x, y, z, I, a)
     return getB_zpinch(SVector(x, y, z), I, a)
 end
 
-function getB_zpinch(pos, I, a)
+@inline function getB_zpinch(pos, I, a)
     x, y = pos[1], pos[2]
     r = hypot(x, y)
     if r < a

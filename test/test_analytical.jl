@@ -150,4 +150,42 @@
         @test B_dipole isa SVector
         @test isapprox(B_dipole[3], Magnetostatics.μ0_4π * 2 / 8, rtol = 1.0e-5)
     end
+
+    @testset "Tuple Inputs" begin
+        r_tuple = (1.0, 1.0, 1.0)
+
+        # HarrisSheet
+        harris = HarrisSheet(1.0, 2.0)
+        @test harris(r_tuple) isa SVector && harris(r_tuple)[1] ≈ harris(SVector(r_tuple...))[1]
+
+        # Dipole
+        dipole = Dipole(SVector(0.0, 0.0, 1.0))
+        @test dipole(r_tuple) isa SVector && dipole(r_tuple) ≈ dipole(SVector(r_tuple...))
+
+        # getB_loop
+        loop = CurrentLoop(1.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
+        @test getB_loop(r_tuple, loop) isa SVector &&
+            getB_loop(r_tuple, loop) ≈ getB_loop(SVector(r_tuple...), loop)
+
+        # getB_mirror
+        @test getB_mirror(r_tuple, 1.0, 1.0, 1.0) isa SVector &&
+            getB_mirror(r_tuple, 1.0, 1.0, 1.0) ≈ getB_mirror(SVector(r_tuple...), 1.0, 1.0, 1.0)
+
+        # getB_bottle
+        @test getB_bottle(r_tuple, 1.0, 1.0, 1.0, 1.0, 1.0) isa SVector &&
+            getB_bottle(r_tuple, 1.0, 1.0, 1.0, 1.0, 1.0) ≈ getB_bottle(SVector(r_tuple...), 1.0, 1.0, 1.0, 1.0, 1.0)
+
+        # getB_tokamak_coil
+        @test getB_tokamak_coil(r_tuple, 1.0, 1.0, 1.0, 1.0) isa SVector &&
+            getB_tokamak_coil(r_tuple, 1.0, 1.0, 1.0, 1.0) ≈ getB_tokamak_coil(SVector(r_tuple...), 1.0, 1.0, 1.0, 1.0)
+
+        # getB_tokamak_profile
+        q_profile(nr) = nr^2 + 2 * nr + 0.5
+        @test getB_tokamak_profile(r_tuple, q_profile, 2.0, 1.0, 1.0) isa SVector &&
+            getB_tokamak_profile(r_tuple, q_profile, 2.0, 1.0, 1.0) ≈ getB_tokamak_profile(SVector(r_tuple...), q_profile, 2.0, 1.0, 1.0)
+
+        # getB_zpinch
+        @test getB_zpinch(r_tuple, 1.0, 0.1) isa SVector &&
+            getB_zpinch(r_tuple, 1.0, 0.1) ≈ getB_zpinch(SVector(r_tuple...), 1.0, 0.1)
+    end
 end
