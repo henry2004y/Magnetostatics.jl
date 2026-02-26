@@ -1,6 +1,10 @@
 # [Harris Sheet](@id harris_sheet_example)
 
-A current sheet model often used in space physics ($B_x(z) = B_0 \tanh(z/L)$).
+A current sheet model often used in space physics, described by the exact field:
+```math
+\mathbf{B}(z) = B_0 \tanh\left(\frac{z}{L}\right) \hat{x}
+```
+where $B_0$ is the asymptotic magnetic field strength and $L$ is the half-width of the current sheet.
 
 ```@example harris
 using Magnetostatics, StaticArrays, LinearAlgebra

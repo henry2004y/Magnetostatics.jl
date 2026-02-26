@@ -1,5 +1,11 @@
 # [Biot-Savart Solver](@id biot_savart_example)
 
+The magnetic field for a finite wire segment is calculated using the algebraic form of the Biot-Savart law:
+```math
+\mathbf{B} = \frac{\mu_0 I}{4\pi} \frac{d\mathbf{l} \times \mathbf{a}}{|d\mathbf{l} \times \mathbf{a}|^2} \left( \frac{d\mathbf{l} \cdot \mathbf{a}}{|\mathbf{a}|} - \frac{d\mathbf{l} \cdot \mathbf{b}}{|\mathbf{b}|} \right)
+```
+where $\mathbf{a} = \mathbf{r} - \mathbf{r}_{start}$ and $\mathbf{b} = \mathbf{r} - \mathbf{r}_{end}$ are vectors from the ends of the segment to the observation point $\mathbf{r}$, and $d\mathbf{l} = \mathbf{r}_{end} - \mathbf{r}_{start}$ is the segment vector.
+
 For arbitrary wire geometries, discretize the path and sum the contributions.
 
 ```@example biotsavart
