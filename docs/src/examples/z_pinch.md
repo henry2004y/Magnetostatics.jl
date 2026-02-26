@@ -1,6 +1,9 @@
 # [Z-Pinch](@id z_pinch_example)
 
-Magnetic field from a current running through a straight wire of radius $a$.
+Magnetic field from an infinite straight wire of radius $a$ carrying a uniform current $I$ in the $z$-direction. The magnetic field in cylindrical coordinates $(r, \theta, z)$ is given by:
+```math
+\mathbf{B}(r) = \begin{cases} \frac{\mu_0 I r}{2\pi a^2} \hat{\theta} & r \le a \\ \frac{\mu_0 I}{2\pi r} \hat{\theta} & r > a \end{cases}
+```
 
 ```@example zpinch
 using Magnetostatics, StaticArrays, LinearAlgebra

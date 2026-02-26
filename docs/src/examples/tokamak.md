@@ -2,7 +2,10 @@
 
 ## Tokamak Coils
 
-Magnetic field from a Tokamak topology consisting of 16 toroidal field coils and a plasma current.
+Magnetic field from a Tokamak topology consisting of $N$ toroidal field coils and a plasma current. The total field is the sum of contributions from all coils and the plasma ring:
+```math
+\mathbf{B}(\mathbf{r}) = \sum_{i=1}^N \mathbf{B}_{\text{coil}, i}(\mathbf{r}) + \mathbf{B}_{\text{plasma}}(\mathbf{r})
+```
 
 ```@example tokamak
 using Magnetostatics, StaticArrays, LinearAlgebra
@@ -47,7 +50,14 @@ fig
 
 ## Tokamak with q-profile
 
-Reconstruct the magnetic field distribution from a safety factor ($q$) profile.
+Reconstruct the magnetic field distribution from a safety factor ($q$) profile. The magnetic field components in local cylindrical coordinates $(R, \zeta, z)$ relative to the major radius $R_0$ and minor radius $r$ are given by:
+```math
+\begin{aligned}
+B_\zeta &= B_{\zeta 0} \frac{R_0}{R} \\
+B_\theta &= \frac{r B_\zeta}{R_0 q(r/a)}
+\end{aligned}
+```
+where $B_{\zeta 0}$ is the toroidal field on axis, $q(r/a)$ is the safety factor profile, and $\theta$ is the poloidal angle.
 
 ```@example tokamak_q
 using Magnetostatics, StaticArrays, LinearAlgebra

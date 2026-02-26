@@ -1,6 +1,9 @@
 # [Magnetic Mirror](@id magnetic_mirror_example)
 
-Two co-axial current loops separated by a distance.
+Two co-axial current loops of radius $a$ carrying current $I$ separated by a distance $d$. The magnetic field is the superposition of the fields from the two individual loops:
+```math
+\mathbf{B}(\mathbf{r}) = \mathbf{B}_{\text{loop1}}(\mathbf{r}) + \mathbf{B}_{\text{loop2}}(\mathbf{r})
+```
 
 ```@example mirror
 using Magnetostatics, StaticArrays, LinearAlgebra
