@@ -51,10 +51,12 @@ fig
 ## Tokamak with q-profile
 
 Reconstruct the magnetic field distribution from a safety factor ($q$) profile. The magnetic field components in local cylindrical coordinates $(R, \zeta, z)$ relative to the major radius $R_0$ and minor radius $r$ are given by:
-\begin{align}
+```math
+\begin{aligned}
 B_\zeta &= B_{\zeta 0} \frac{R_0}{R} \\
 B_\theta &= \frac{r B_\zeta}{R_0 q(r/a)}
-\end{align}
+\end{aligned}
+```
 where $B_{\zeta 0}$ is the toroidal field on axis, $q(r/a)$ is the safety factor profile, and $\theta$ is the poloidal angle.
 
 ```@example tokamak_q

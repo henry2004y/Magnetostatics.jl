@@ -1,10 +1,12 @@
 # [Current Loop](@id current_loop_example)
 
 The magnetic field of a circular current loop is calculated using complete elliptic integrals. In local cylindrical coordinates $(\rho, \phi, z)$ with the loop in the $z=0$ plane, the magnetic field is given by:
-\begin{align}
+```math
+\begin{aligned}
 B_\rho &= \frac{\mu_0 I}{2\pi} \frac{z}{\rho \sqrt{(\rho+a)^2 + z^2}} \left[ \frac{a^2 + \rho^2 + z^2}{(a-\rho)^2 + z^2} E(k^2) - K(k^2) \right] \\
 B_z &= \frac{\mu_0 I}{2\pi \sqrt{(\rho+a)^2 + z^2}} \left[ \frac{a^2 - \rho^2 - z^2}{(a-\rho)^2 + z^2} E(k^2) + K(k^2) \right]
-\end{align}
+\end{aligned}
+```
 where $a$ is the loop radius, $k^2 = \frac{4a\rho}{(\rho+a)^2 + z^2}$, and $K(k^2)$ and $E(k^2)$ are complete elliptic integrals of the first and second kind.
 
 Calculate the field of a circular current loop.
