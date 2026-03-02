@@ -1,9 +1,14 @@
 """
-    VectorPotential <: AbstractSolver
+    VectorPotential{BC <: AbstractBoundary} <: AbstractSolver
 
 Solver that computes the magnetic vector potential `A`.
+The default constructor `VectorPotential()` uses `OpenBoundary`.
 """
-struct VectorPotential <: AbstractSolver end
+struct VectorPotential{BC <: AbstractBoundary} <: AbstractSolver
+    bc::BC
+end
+
+VectorPotential() = VectorPotential(OpenBoundary())
 
 """
     solve(solver::VectorPotential, source::Wire, r) where T
@@ -105,7 +110,7 @@ function solve(::VectorPotential, loop::CurrentLoop{T}, r::SVector{3, T}) where 
     return A_phi * phi_hat
 end
 
-# Helpers to support arbitrary location input
+# Helpers to support arbitrary location input (open BC, default)
 function solve(solver::VectorPotential, source::Wire{T}, r) where {T}
     return solve(solver, source, SVector{3, T}(r))
 end
@@ -113,6 +118,20 @@ function solve(solver::VectorPotential, source::Dipole{T}, r) where {T}
     return solve(solver, source, SVector{3, T}(r))
 end
 function solve(solver::VectorPotential, source::CurrentLoop{T}, r) where {T}
+    return solve(solver, source, SVector{3, T}(r))
+end
+
+# ConductingWall: sum direct + image potential
+function solve(
+        solver::VectorPotential{ConductingWall}, source::Wire{T},
+        r::SVector{3, T}
+    ) where {T}
+    A_direct = solve(VectorPotential(), source, r)
+    img = image_source(source, solver.bc)
+    A_image = solve(VectorPotential(), img, r)
+    return A_direct + A_image
+end
+function solve(solver::VectorPotential{ConductingWall}, source::Wire{T}, r) where {T}
     return solve(solver, source, SVector{3, T}(r))
 end
 

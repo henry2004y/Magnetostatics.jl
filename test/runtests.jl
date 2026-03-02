@@ -9,4 +9,5 @@ using LinearAlgebra
     include("test_fft.jl")
     include("test_potential.jl")
     include("test_utils.jl")
+    @testset "boundaries" include("test_boundaries.jl")
 end

@@ -152,3 +152,21 @@ function dipole_fieldline(ϕ, L = 2.5, nP::Int = 100)
     z = getindex.(xyz, 3)
     return (x, y, z)
 end
+
+"""
+    image_source(source::Wire, bc::ConductingWall) -> Wire
+
+Return the image `Wire` of `source` reflected across the planar conducting wall
+defined by `bc`.  The image current is negated so that the tangential magnetic
+field vanishes at the wall surface.
+"""
+function image_source(source::Wire{T}, bc::ConductingWall) where {T}
+    ax = bc.axis
+    wall = T(bc.position)
+    reflected = map(source.points) do p
+        delta = p[ax] - wall
+        coords = ntuple(i -> i == ax ? wall - delta : p[i], 3)
+        SVector{3, T}(coords)
+    end
+    return Wire{T}(reflected, -source.current)
+end

@@ -1,9 +1,21 @@
 """
-    BiotSavart <: AbstractSolver
+    BiotSavart{BC <: AbstractBoundary} <: AbstractSolver
 
 Solver that uses the Biot-Savart law to compute the magnetic field.
+The boundary condition `BC` controls how sources outside the physical domain
+are treated (e.g., image sources for a conducting wall).
+
+The default constructor `BiotSavart()` uses `OpenBoundary`.
 """
-struct BiotSavart <: AbstractSolver end
+struct BiotSavart{BC <: AbstractBoundary} <: AbstractSolver
+    bc::BC
+end
+
+BiotSavart() = BiotSavart(OpenBoundary())
+
+# ---------------------------------------------------------------------------
+# Core kernel (open / free-space)
+# ---------------------------------------------------------------------------
 
 """
     solve(solver::BiotSavart, source::Wire, r) where T
@@ -51,4 +63,169 @@ end
 # Helper to support arbitrary location input
 function solve(solver::BiotSavart, source::Wire{T}, r) where {T}
     return solve(solver, source, SVector{3, T}(r))
+end
+
+# ---------------------------------------------------------------------------
+# SurfaceCurrentMesh kernel (shared by all BC variants)
+# ---------------------------------------------------------------------------
+
+"""
+    solve(solver::BiotSavart, mesh::SurfaceCurrentMesh, r)
+
+Compute the magnetic field at `r` from a `SurfaceCurrentMesh` using the
+far-field Biot-Savart approximation for each patch:
+
+    dB(r) = (μ₀/4π) * Aᵢ * (Kᵢ × Rᵢ) / |Rᵢ|³
+"""
+function solve(
+        ::BiotSavart, mesh::SurfaceCurrentMesh{T},
+        r::SVector{3, T}
+    ) where {T}
+    B = @SVector zeros(T, 3)
+    @inbounds for i in eachindex(mesh.centers)
+        R = r - mesh.centers[i]
+        R_norm = norm(R)
+        R_norm < 1.0e-20 && continue
+        K_vec = mesh.K[i][1] * mesh.tangents1[i] + mesh.K[i][2] * mesh.tangents2[i]
+        B += (T(μ0_4π) * mesh.areas[i] / R_norm^3) * cross(K_vec, R)
+    end
+    return B
+end
+
+function solve(solver::BiotSavart, mesh::SurfaceCurrentMesh{T}, r) where {T}
+    return solve(solver, mesh, SVector{3, T}(r))
+end
+
+# ---------------------------------------------------------------------------
+# OpenBoundary (default) — no modification
+# ---------------------------------------------------------------------------
+
+# Already handled by the generic methods above; the type parameter is consumed
+# but no extra work is done.
+
+
+# ---------------------------------------------------------------------------
+# ConductingWall — method of images
+# ---------------------------------------------------------------------------
+
+function solve(
+        solver::BiotSavart{ConductingWall}, source::Wire{T},
+        r::SVector{3, T}
+    ) where {T}
+    B_direct = solve(BiotSavart(), source, r)
+    img = image_source(source, solver.bc)
+    B_image = solve(BiotSavart(), img, r)
+    return B_direct + B_image
+end
+
+function solve(solver::BiotSavart{ConductingWall}, source::Wire{T}, r) where {T}
+    return solve(solver, source, SVector{3, T}(r))
+end
+
+# ---------------------------------------------------------------------------
+# PrescribedBoundary — add background field
+# ---------------------------------------------------------------------------
+
+function solve(
+        solver::BiotSavart{<:PrescribedBoundary}, source::Wire{T},
+        r::SVector{3, T}
+    ) where {T}
+    B_source = solve(BiotSavart(), source, r)
+    B_bg = SVector{3, T}(solver.bc.field_func(r))
+    return B_source + B_bg
+end
+
+function solve(solver::BiotSavart{<:PrescribedBoundary}, source::Wire{T}, r) where {T}
+    return solve(solver, source, SVector{3, T}(r))
+end
+
+# ---------------------------------------------------------------------------
+# ConductingSphere — numerical BEM
+# ---------------------------------------------------------------------------
+
+"""
+    sphere_mesh(bc::ConductingSphere) -> (centers, normals, tangents1, tangents2, areas)
+
+Build a latitude-longitude patch mesh for the conducting sphere.
+"""
+function sphere_mesh(bc::ConductingSphere{T}) where {T}
+    nθ, nφ = bc.n_theta, bc.n_phi
+    N = nθ * nφ
+    centers = Vector{SVector{3, T}}(undef, N)
+    normals = Vector{SVector{3, T}}(undef, N)
+    tangents1 = Vector{SVector{3, T}}(undef, N)
+    tangents2 = Vector{SVector{3, T}}(undef, N)
+    areas = Vector{T}(undef, N)
+
+    dθ = π / nθ
+    dφ = 2π / nφ
+    R = bc.radius
+
+    idx = 1
+    for iθ in 1:nθ
+        θ = (iθ - 0.5) * dθ
+        sinθ, cosθ = sincos(θ)
+        for iφ in 1:nφ
+            φ = (iφ - 0.5) * dφ
+            sinφ, cosφ = sincos(φ)
+
+            n̂ = SVector{3, T}(sinθ * cosφ, sinθ * sinφ, cosθ)
+            centers[idx] = bc.center + R * n̂
+            normals[idx] = n̂
+            tangents1[idx] = SVector{3, T}(cosθ * cosφ, cosθ * sinφ, -sinθ) # θ̂
+            tangents2[idx] = SVector{3, T}(-sinφ, cosφ, zero(T))              # φ̂
+            areas[idx] = R^2 * sinθ * dθ * dφ
+            idx += 1
+        end
+    end
+    return centers, normals, tangents1, tangents2, areas
+end
+
+"""
+    compute_surface_current(bc::ConductingSphere, source::Wire) -> SurfaceCurrentMesh
+
+Solve the BEM linear system for the induced surface current **K** on the
+perfectly-conducting sphere defined by `bc` that cancels the normal component
+of the incident field from `source`.
+
+The incident field is computed with the free-space `BiotSavart` kernel.
+"""
+function compute_surface_current(bc::ConductingSphere, source::Wire{T}) where {T}
+    centers, normals, tangents1, tangents2, areas = sphere_mesh(bc)
+    N = length(centers)
+
+    bare = BiotSavart()
+
+    # Incident normal field at each patch centre
+    b = Vector{T}(undef, N)
+    for i in 1:N
+        B_inc = solve(bare, source, centers[i])
+        b[i] = -dot(normals[i], B_inc)
+    end
+
+    # Influence matrix M (N × 2N): M[i, 2j-1] = n̂ᵢ · dBⱼ(t̂1), M[i, 2j] = n̂ᵢ · dBⱼ(t̂2)
+    M = zeros(T, N, 2N)
+    for j in 1:N
+        Aj = T(areas[j])
+        for i in 1:N
+            i == j && continue   # self-term regularized to zero
+            R = centers[i] - centers[j]
+            R_norm = norm(R)
+            R_norm < 1.0e-20 && continue
+            pre = T(μ0_4π) * Aj / R_norm^3
+            for (k, t̂) in enumerate((tangents1[j], tangents2[j]))
+                dB_n = dot(normals[i], pre * cross(t̂, R))
+                M[i, 2j - 2 + k] = dB_n
+            end
+        end
+    end
+
+    # Minimum-norm least-squares solve (underdetermined system)
+    x = M \ b
+
+    K = [SVector{2, T}(x[2j - 1], x[2j]) for j in 1:N]
+    return SurfaceCurrentMesh{T}(
+        centers, normals, tangents1, tangents2,
+        Vector{T}(areas), K
+    )
 end
