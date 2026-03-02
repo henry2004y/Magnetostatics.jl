@@ -37,3 +37,21 @@ struct CurrentLoop{T} <: AbstractCurrentSource
         return new{T}(T(radius), T(current), SVector{3, T}(center), n_hat)
     end
 end
+
+"""
+    SurfaceCurrentMesh{T} <: AbstractCurrentSource
+
+Discretized surface-current distribution on a closed surface.  Each patch `i`
+carries a surface current density **K** [A/m] expressed in the local tangent
+frame `(tangents1[i], tangents2[i])`.
+
+Created by [`compute_surface_current`](@ref) for a [`ConductingSphere`](@ref) boundary.
+"""
+struct SurfaceCurrentMesh{T} <: AbstractCurrentSource
+    centers::Vector{SVector{3, T}}
+    normals::Vector{SVector{3, T}}
+    tangents1::Vector{SVector{3, T}}
+    tangents2::Vector{SVector{3, T}}
+    areas::Vector{T}
+    K::Vector{SVector{2, T}}
+end
