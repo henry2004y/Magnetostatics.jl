@@ -103,47 +103,6 @@ end
 # Already handled by the generic methods above; the type parameter is consumed
 # but no extra work is done.
 
-# ---------------------------------------------------------------------------
-# Source-transformation helpers
-# ---------------------------------------------------------------------------
-
-"""
-    image_source(source::Wire, bc::ConductingWall) -> Wire
-
-Return the image `Wire` of `source` reflected across the planar conducting wall
-defined by `bc`.  The image current is negated so that the tangential magnetic
-field vanishes at the wall surface.
-"""
-function image_source(source::Wire{T}, bc::ConductingWall) where {T}
-    ax = bc.axis
-    wall = T(bc.position)
-    reflected = map(source.points) do p
-        delta = p[ax] - wall
-        coords = ntuple(i -> i == ax ? wall - delta : p[i], 3)
-        SVector{3, T}(coords)
-    end
-    return Wire{T}(reflected, -source.current)
-end
-
-"""
-    periodic_sources(source::Wire, bc::PeriodicBoundary; nreplica=1) -> Vector{Wire}
-
-Return all periodic image `Wire` sources of `source` within ±`nreplica` periods
-in every direction defined by `bc.period`.  The original source is included.
-"""
-function periodic_sources(
-        source::Wire{T}, bc::PeriodicBoundary;
-        nreplica::Int = 1
-    ) where {T}
-    period = SVector{3, T}(bc.period)
-    images = Wire{T}[]
-    for ix in -nreplica:nreplica, iy in -nreplica:nreplica, iz in -nreplica:nreplica
-        shift = SVector{3, T}(ix * period[1], iy * period[2], iz * period[3])
-        shifted = map(p -> p + shift, source.points)
-        push!(images, Wire{T}(shifted, source.current))
-    end
-    return images
-end
 
 # ---------------------------------------------------------------------------
 # ConductingWall — method of images
@@ -161,29 +120,6 @@ end
 
 function solve(solver::BiotSavart{ConductingWall}, source::Wire{T}, r) where {T}
     return solve(solver, source, SVector{3, T}(r))
-end
-
-# ---------------------------------------------------------------------------
-# PeriodicBoundary — source replication
-# ---------------------------------------------------------------------------
-
-function solve(
-        solver::BiotSavart{PeriodicBoundary}, source::Wire{T},
-        r::SVector{3, T}; nreplica::Int = 1
-    ) where {T}
-    images = periodic_sources(source, solver.bc; nreplica)
-    B = @SVector zeros(T, 3)
-    for img in images
-        B += solve(BiotSavart(), img, r)
-    end
-    return B
-end
-
-function solve(
-        solver::BiotSavart{PeriodicBoundary}, source::Wire{T}, r;
-        nreplica::Int = 1
-    ) where {T}
-    return solve(solver, source, SVector{3, T}(r); nreplica)
 end
 
 # ---------------------------------------------------------------------------
@@ -212,8 +148,7 @@ end
 
 Build a latitude-longitude patch mesh for the conducting sphere.
 """
-function sphere_mesh(bc::ConductingSphere)
-    T = Float64
+function sphere_mesh(bc::ConductingSphere{T}) where {T}
     nθ, nφ = bc.n_theta, bc.n_phi
     N = nθ * nφ
     centers = Vector{SVector{3, T}}(undef, N)
@@ -293,16 +228,4 @@ function compute_surface_current(bc::ConductingSphere, source::Wire{T}) where {T
         centers, normals, tangents1, tangents2,
         Vector{T}(areas), K
     )
-end
-
-function solve(
-        solver::BiotSavart{ConductingSphere}, source::Wire{T},
-        r::SVector{3, T}
-    ) where {T}
-    mesh = compute_surface_current(solver.bc, source)
-    return solve(BiotSavart(), source, r) + solve(BiotSavart(), mesh, r)
-end
-
-function solve(solver::BiotSavart{ConductingSphere}, source::Wire{T}, r) where {T}
-    return solve(solver, source, SVector{3, T}(r))
 end

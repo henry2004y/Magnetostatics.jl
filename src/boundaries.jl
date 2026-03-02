@@ -56,11 +56,20 @@ normal component of the incident field at every patch centre.
 - `n_theta::Int`: number of patches in the polar (latitude) direction.
 - `n_phi::Int`: number of patches in the azimuthal (longitude) direction.
 """
-struct ConductingSphere <: AbstractBoundary
-    center::SVector{3, Float64}
-    radius::Float64
+struct ConductingSphere{T <: AbstractFloat} <: AbstractBoundary
+    center::SVector{3, T}
+    radius::T
     n_theta::Int
     n_phi::Int
+
+    function ConductingSphere(
+            center::AbstractVector, radius::Real,
+            n_theta::Int, n_phi::Int
+        )
+        T = promote_type(eltype(center), typeof(radius))
+        T = T <: AbstractFloat ? T : Float64
+        return new{T}(SVector{3, T}(center), T(radius), n_theta, n_phi)
+    end
 end
 
 """

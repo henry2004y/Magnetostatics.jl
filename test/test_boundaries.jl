@@ -44,22 +44,6 @@ end
     end
 end
 
-@testset "PeriodicBoundary" begin
-    wire = make_wire()
-    period = SVector(4.0, 4.0, 8.0)
-    bc = PeriodicBoundary(period)
-    solver = BiotSavart(bc)
-    r = SVector(1.0, 0.0, 0.0)
-
-    B_periodic = solve(solver, wire, r; nreplica = 1)
-
-    # Manual reference: sum over the (2*1+1)^3 = 27 image sources
-    images = Magnetostatics.periodic_sources(wire, bc; nreplica = 1)
-    B_ref = sum(img -> solve(BiotSavart(), img, r), images)
-
-    @test B_periodic ≈ B_ref atol = 1.0e-14
-end
-
 @testset "PrescribedBoundary" begin
     wire = make_wire()
     B_bg_val = SVector(0.0, 0.0, 1.0e-3)        # uniform background field
