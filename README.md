@@ -2,6 +2,7 @@
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://henry2004y.github.io/Magnetostatics.jl/dev)
 [![Coverage](https://codecov.io/gh/henry2004y/Magnetostatics.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/henry2004y/Magnetostatics.jl)
+[![Aqua](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/refs/heads/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Julia package for computing magnetostatic fields from current sources.
