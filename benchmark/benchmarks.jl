@@ -62,3 +62,16 @@ r_dipole, dipole = let
 end
 
 SUITE["solvers"]["analytical"]["dipole"] = @benchmarkable ($dipole)($r_dipole)
+
+# Poisson Solver
+SUITE["solvers"]["poisson"] = BenchmarkGroup()
+poisson_solver, poisson_J = let
+    xs = range(0.0, 1.0; length = 16)
+    ys = range(0.0, 1.0; length = 16)
+    zs = range(0.0, 1.0; length = 16)
+    solver = PoissonSolver(xs, ys, zs)
+    J = rand(3, 16, 16, 16)
+    solver, J
+end
+
+SUITE["solvers"]["poisson"]["small_grid"] = @benchmarkable solve($poisson_solver, $poisson_J)
