@@ -93,26 +93,13 @@ Two sources of discrepancy are expected and are **not** a sign of grid coarsenes
 ```@example poisson
 using LinearAlgebra
 
-# Numerical curl with anisotropic spacing (dx, dy, dz)
-function curl_z!(B, A, dx, dy, dz)
-    _, Nx, Ny, Nz = size(A)
-    for k in 2:Nz-1, j in 2:Ny-1, i in 2:Nx-1
-        B[1, i, j, k] = (A[3, i, j+1, k] - A[3, i, j-1, k]) / (2dy) -
-                         (A[2, i, j, k+1] - A[2, i, j, k-1]) / (2dz)
-        B[2, i, j, k] = (A[1, i, j, k+1] - A[1, i, j, k-1]) / (2dz) -
-                         (A[3, i+1, j, k] - A[3, i-1, j, k]) / (2dx)
-        B[3, i, j, k] = (A[2, i+1, j, k] - A[2, i-1, j, k]) / (2dx) -
-                         (A[1, i, j+1, k] - A[1, i, j-1, k]) / (2dy)
-    end
-end
-
 B_num = zeros(3, Nx, Ny, Nz)
-curl_z!(B_num, A_direct, dx, dy, dz)
+compute_curl!(B_num, A_direct, xs, ys, zs)
 
 # Radial profile along positive x-axis (y = 0, z = midplane)
-jc    = Ny ÷ 2 + 1                   # y-midplane index
-ir    = ic                           # z-midplane index (= Nz ÷ 2 + 1)
-i_pos = (Nx ÷ 2 + 2):(Nx - 2)       # indices where xs[i] > 0
+jc    = Ny ÷ 2 + 1            # y-midplane index
+ir    = ic                    # z-midplane index
+i_pos = (Nx ÷ 2 + 2):(Nx - 2) # indices where xs[i] > 0
 rs_num = xs[i_pos]
 Bφ_num = [norm(SVector(B_num[1, i, jc, ir], B_num[2, i, jc, ir])) for i in i_pos]
 

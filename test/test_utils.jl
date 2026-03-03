@@ -100,4 +100,28 @@
             isapprox(y2[max_idx], 4.0; atol = 1.0e-2) &&
             isapprox(z2[max_idx], 0.0; atol = 1.0e-2)
     end
+
+    @testset "Numerical Curl" begin
+        # A = (0, 0, x·y)  →  ∇×A = (x, -y, 0).
+        # Central differences are exact for this bilinear field.
+        let
+            Nx, Ny, Nz = 8, 6, 4
+            # Anisotropic grid: verify axis-specific coefficients
+            xs = range(0.0, 2.0; length = Nx)
+            ys = range(0.0, 1.0; length = Ny)
+            zs = range(0.0, 4.0; length = Nz)
+
+            A = zeros(3, Nx, Ny, Nz)
+            for k in 1:Nz, j in 1:Ny, i in 1:Nx
+                A[3, i, j, k] = xs[i] * ys[j]
+            end
+
+            B = compute_curl(A, xs, ys, zs)
+
+            Bx_ref, By_ref = xs[3], -ys[5]
+            @test isapprox(B[1, 3, 5, 2], Bx_ref; atol = 1.0e-12) &&
+                isapprox(B[2, 3, 5, 2], By_ref; atol = 1.0e-12) &&
+                isapprox(B[3, 2, 4, 2], 0.0; atol = 1.0e-12)
+        end
+    end
 end
