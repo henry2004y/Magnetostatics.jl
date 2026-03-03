@@ -10,6 +10,7 @@ Wire
 CurrentLoop
 HarrisSheet
 Dipole
+InfiniteWire
 CurrentLoopAnalytic
 ```
 

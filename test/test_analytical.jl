@@ -28,6 +28,33 @@
         @test isapprox(B_x[3], expected_x, rtol = 1.0e-5)
     end
 
+    @testset "InfiniteWire" begin
+        I = 1.0
+        r_wire = 0.1
+        wire = InfiniteWire(I, r_wire) # default z-axis
+
+        # Outside wire
+        x = 1.0
+        B_out = wire(SVector(x, 0.0, 0.0))
+        expected_mag = Magnetostatics.μ₀ * I / (2 * π * x)
+        @test isapprox(B_out[2], expected_mag, rtol = 1.0e-5)
+
+        # Inside wire
+        x_in = 0.05
+        B_in = wire(SVector(x_in, 0.0, 0.0))
+        expected_in_mag = Magnetostatics.μ₀ * I * x_in / (2 * π * r_wire^2)
+        @test isapprox(B_in[2], expected_in_mag, rtol = 1.0e-5)
+
+        # Arbitrary offset and direction
+        wire_arb = InfiniteWire(I, r_wire, SVector(1.0, 1.0, 0.0), SVector(0.0, 1.0, 0.0))
+        B_arb_out = wire_arb(SVector(2.0, 1.0, 0.0))
+        # Distance to wire (1,1,0) along y is 1.0 (at x=2.0).
+        # B should be in -z direction.
+        @test isapprox(B_arb_out[3], -expected_mag, rtol = 1.0e-5)
+
+        @test wire_arb(2.0, 1.0, 0.0) ≈ B_arb_out
+    end
+
     @testset "CurrentLoop" begin
         # Test on-axis field strength
         R = 1.0
@@ -163,6 +190,10 @@
         B_dipole = dipole(r_vec_z)
         @test B_dipole isa SVector
         @test isapprox(B_dipole[3], Magnetostatics.μ0_4π * 2 / 8, rtol = 1.0e-5)
+
+        inf_wire = InfiniteWire(1.0, 0.1)
+        B_inf_wire = inf_wire(r_vec)
+        @test B_inf_wire isa SVector
     end
 
     @testset "Tuple Inputs" begin
@@ -175,6 +206,10 @@
         # Dipole
         dipole = Dipole(SVector(0.0, 0.0, 1.0))
         @test dipole(r_tuple) isa SVector && dipole(r_tuple) ≈ dipole(SVector(r_tuple...))
+
+        # InfiniteWire
+        inf_wire = InfiniteWire(1.0, 0.1)
+        @test inf_wire(r_tuple) isa SVector && inf_wire(r_tuple) ≈ inf_wire(SVector(r_tuple...))
 
         # getB_loop
         loop = CurrentLoop(1.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
