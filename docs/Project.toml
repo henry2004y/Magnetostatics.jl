@@ -10,3 +10,4 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
 DocumenterVitepress = "0.2"
+CairoMakie = "0.15"
