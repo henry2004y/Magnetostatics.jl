@@ -3,6 +3,11 @@ using Magnetostatics
 using StaticArrays
 using LinearAlgebra
 
+@testset "Code quality (Aqua.jl)" begin
+    using Aqua
+    Aqua.test_all(Magnetostatics)
+end
+
 @testset "Magnetostatics.jl" begin
     include("test_biot_savart.jl")
     include("test_analytical.jl")
