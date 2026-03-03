@@ -139,3 +139,120 @@ end
 function (solver::VectorPotential)(source, r)
     return solve(solver, source, r)
 end
+
+"""
+    PoissonSolver{ALG} <: AbstractSolver
+
+Grid-based solver for the magnetostatic vector potential equation
+∇²**A** = −μ₀ **J** on a uniform Cartesian grid with homogeneous Dirichlet
+boundary conditions (`A = 0` on all domain faces).
+
+Each Cartesian component is solved independently with the same 7-point
+finite-difference Laplacian matrix via `LinearSolve.jl`.  Pass any
+`LinearSolve` algorithm as `alg`; the default is `KrylovJL_CG()`.
+
+# Fields
+- `xs`, `ys`, `zs`: grid node positions as `AbstractRange` objects.
+- `alg`: `LinearSolve` algorithm (e.g. `KrylovJL_CG()`,
+  `KLUFactorization()`, `UMFPACKFactorization()`).
+
+# Example
+```julia
+xs = range(-1.0, 1.0; length = 32)
+ys = range(-1.0, 1.0; length = 32)
+zs = range(-0.5, 0.5; length = 16)
+solver = PoissonSolver(xs, ys, zs)                 # default: CG
+solver_direct = PoissonSolver(xs, ys, zs; alg = KLUFactorization())
+A = solve(solver, J_grid)  # J_grid :: (3,Nx,Ny,Nz)
+```
+"""
+struct PoissonSolver{ALG} <: AbstractSolver
+    xs::AbstractRange
+    ys::AbstractRange
+    zs::AbstractRange
+    alg::ALG
+end
+
+PoissonSolver(xs, ys, zs; alg = KrylovJL_CG()) = PoissonSolver(xs, ys, zs, alg)
+
+# Build the (N×N) sparse matrix for -∇² with 7-point central differences.
+# Supports anisotropic spacing (dx, dy, dz). Boundary nodes carry identity
+# rows (Dirichlet: A = 0).
+function _build_laplacian_3d(Nx::Int, Ny::Int, Nz::Int, dx::Real, dy::Real, dz::Real)
+    N = Nx * Ny * Nz
+    inv_dx2 = inv(dx)^2
+    inv_dy2 = inv(dy)^2
+    inv_dz2 = inv(dz)^2
+    diag_val = 2(inv_dx2 + inv_dy2 + inv_dz2)
+
+    rows = Int[]
+    cols = Int[]
+    vals = Float64[]
+
+    function idx(i, j, k)
+        return (k - 1) * (Nx * Ny) + (j - 1) * Nx + i
+    end
+
+    function is_boundary(i, j, k)
+        return i == 1 || i == Nx || j == 1 || j == Ny || k == 1 || k == Nz
+    end
+
+    for k in 1:Nz, j in 1:Ny, i in 1:Nx
+        row = idx(i, j, k)
+        if is_boundary(i, j, k)
+            push!(rows, row); push!(cols, row); push!(vals, 1.0)
+        else
+            push!(rows, row); push!(cols, row); push!(vals, diag_val)
+            for (di, dj, dk, coeff) in (
+                    (-1, 0, 0, inv_dx2), (1, 0, 0, inv_dx2),
+                    (0, -1, 0, inv_dy2), (0, 1, 0, inv_dy2),
+                    (0, 0, -1, inv_dz2), (0, 0, 1, inv_dz2),
+                )
+                push!(rows, row)
+                push!(cols, idx(i + di, j + dj, k + dk))
+                push!(vals, -coeff)
+            end
+        end
+    end
+
+    return sparse(rows, cols, vals, N, N)
+end
+
+"""
+    solve(solver::PoissonSolver, J::AbstractArray{T,4}) where T
+
+Solve ∇²**A** = −μ₀ **J** on the grid defined by `solver`.
+Grid spacings are derived automatically from `solver.xs`, `solver.ys`, `solver.zs`,
+supporting anisotropic grids (dx ≠ dy ≠ dz).
+
+# Arguments
+- `J`: 4-D array of size `(3, Nx, Ny, Nz)` (same convention as `FFTSolver`).
+
+# Returns
+- `A`: 4-D array of size `(3, Nx, Ny, Nz)` with the vector potential.
+"""
+function solve(solver::PoissonSolver, J::AbstractArray{T, 4}) where {T}
+    @assert size(J, 1) == 3 "First dimension of J must be 3"
+    _, Nx, Ny, Nz = size(J)
+    N = Nx * Ny * Nz
+    dx, dy, dz = step(solver.xs), step(solver.ys), step(solver.zs)
+
+    L = _build_laplacian_3d(Nx, Ny, Nz, dx, dy, dz)
+    A = zeros(T, 3, Nx, Ny, Nz)
+
+    for c in 1:3
+        b = fill(zero(T), N)
+        for k in 1:Nz, j in 1:Ny, i in 1:Nx
+            # Boundary nodes: b stays zero (Dirichlet)
+            if i > 1 && i < Nx && j > 1 && j < Ny && k > 1 && k < Nz
+                row = (k - 1) * (Nx * Ny) + (j - 1) * Nx + i
+                b[row] = μ₀ * J[c, i, j, k]
+            end
+        end
+        prob = LinearProblem(L, b)
+        sol = LinearSolve.solve(prob, solver.alg)
+        A[c, :, :, :] = reshape(sol.u, Nx, Ny, Nz)
+    end
+
+    return A
+end

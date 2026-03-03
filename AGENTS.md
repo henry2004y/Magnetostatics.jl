@@ -24,8 +24,8 @@
 Please make sure to test new code that you write.
 
 If explicit test file or code is provided, prioritize running that.
-Otherwise, you can run the entire test suite for the Magnetostatics project by executing
-`using Pkg; Pkg.test()` from the root directory of this repository.
+Otherwise, you can run the entire test suite for the TestParticle project by activating
+the `test` workspace and running `test` in the Pkg REPL.
 
 # Test code structure
 Test code should be written in files that define independent module spaces with

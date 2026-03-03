@@ -1,9 +1,11 @@
 module Magnetostatics
 
 using LinearAlgebra
+using SparseArrays
 using StaticArrays
 using SpecialFunctions
 using FFTW
+using LinearSolve
 using PrecompileTools
 
 const μ₀ = 4π * 1.0e-7
@@ -19,7 +21,7 @@ include("solvers/potential.jl")
 include("utils.jl")
 
 export AbstractMagneticField, AbstractCurrentSource, AbstractSolver
-export BiotSavart, FFTSolver, VectorPotential, solve
+export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, solve
 export Wire, CurrentLoop, HarrisSheet, Dipole, CurrentLoopAnalytic
 export SurfaceCurrentMesh, compute_surface_current
 export AbstractBoundary, OpenBoundary, PeriodicBoundary
