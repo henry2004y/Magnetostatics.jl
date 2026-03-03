@@ -48,6 +48,58 @@ end
 end
 
 """
+    InfiniteWire{T} <: AbstractMagneticField
+
+Magnetic field of an infinite straight wire.
+
+# Fields
+- `I::T`: Current in the wire [A].
+- `r::T`: Radius of the wire [m].
+- `center::SVector{3, T}`: A point on the wire [m].
+- `direction::SVector{3, T}`: Unit vector pointing in the direction of the current.
+"""
+struct InfiniteWire{T} <: AbstractMagneticField
+    I::T
+    r::T
+    center::SVector{3, T}
+    direction::SVector{3, T}
+
+    function InfiniteWire(
+            I, r,
+            center = SVector(0.0, 0.0, 0.0), direction = SVector(0.0, 0.0, 1.0)
+        )
+        T = promote_type(typeof(I), typeof(r), eltype(center), eltype(direction))
+        dir_hat = normalize(SVector{3, T}(direction))
+        return new{T}(T(I), T(r), SVector{3, T}(center), dir_hat)
+    end
+end
+
+@inline function (field::InfiniteWire)(pos)
+    @boundscheck length(pos) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
+    T = eltype(pos)
+    r_pos = SVector{3, T}(pos[1], pos[2], pos[3]) - field.center
+
+    z_local = dot(r_pos, field.direction)
+    rho_vec = r_pos - z_local * field.direction
+    rho = norm(rho_vec)
+
+    rho < 1.0e-15 && return @SVector zeros(T, 3)
+
+    factor = if rho <= field.r
+        μ₀ * field.I * rho / (2π * field.r^2)
+    else
+        μ₀ * field.I / (2π * rho)
+    end
+
+    B_vec = factor * cross(field.direction, rho_vec) / rho
+    return B_vec
+end
+
+@inline function (field::InfiniteWire)(x, y, z)
+    return field(SVector(x, y, z))
+end
+
+"""
     CurrentLoopAnalytic{T} <: AbstractMagneticField
 
 Analytical magnetic field of a circular current loop.
