@@ -20,6 +20,13 @@
   behavior. However, even in these cases, if the function name and behavior are
   self-explanatory, no special docstring is needed.
 
+# Specific environments
+There are separate Project.toml files for different environments.
+- `Project.toml`: Main package environment.
+- `benchmark/Project.toml`: Benchmarking environment.
+- `test/Project.toml`: Testing environment.
+- `docs/Project.toml`: Documentation environment.
+
 # Running test code
 Please make sure to test new code that you write.
 
