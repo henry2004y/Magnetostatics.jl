@@ -24,6 +24,7 @@ General-purpose solvers for arbitrary geometries:
 - **`BiotSavart`**: Numerical integration of the Biot-Savart law for arbitrary wire geometries.
 - **`FFTSolver`**: Spectral method for computing **B** from a volumetric current density **J** on a uniform grid with periodic boundaries.
 - **`VectorPotential`**: Computes the magnetic vector potential **A** for wires, current loops, and dipoles.
+- **`PoissonSolver`**: Finite-difference Poisson solver (∇²**A** = −μ₀**J**) on a Cartesian grid with Dirichlet boundary conditions, supporting anisotropic grid spacing via `LinearSolve.jl`.
 
 ## Quick Start
 

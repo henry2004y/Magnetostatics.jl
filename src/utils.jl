@@ -145,7 +145,7 @@ dipole magnetic field model, the path along a given L shell can be described as 
 where r is the radial distance (in planetary radii) to a point on the line,
 λ is its co-latitude, and L is the L-shell of interest.
 """
-function dipole_fieldline(ϕ, L = 2.5, nP::Int = 100)
+function dipole_fieldline(ϕ, L = 2.5, nP = 100)
     xyz = [sph2cart(L * sin(θ)^2, θ, ϕ) for θ in range(0, stop = π, length = nP)]
     x = getindex.(xyz, 1)
     y = getindex.(xyz, 2)
@@ -201,4 +201,15 @@ function compute_curl!(B, A, xs, ys, zs)
     return B
 end
 
-compute_curl(A, xs, ys, zs) = compute_curl!(similar(A), A, xs, ys, zs)
+"""
+    compute_curl(A, xs, ys, zs)
+
+Allocate and return `B = ∇ × A`.  See [`compute_curl!`](@ref) for details.
+"""
+function compute_curl(
+        A::AbstractArray{T, 4},
+        xs::AbstractRange, ys::AbstractRange, zs::AbstractRange
+    ) where {T}
+    B = zeros(T, size(A))
+    return compute_curl!(B, A, xs, ys, zs)
+end
