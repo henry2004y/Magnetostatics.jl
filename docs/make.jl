@@ -22,6 +22,7 @@ makedocs(;
             "Z-Pinch" => "examples/z_pinch.md",
             "Biot-Savart Solver" => "examples/biot_savart.md",
             "FFT Solver" => "examples/fft.md",
+            "Poisson Solver" => "examples/poisson.md",
         ],
         "API Reference" => "api.md",
     ],

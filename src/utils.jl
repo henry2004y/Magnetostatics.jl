@@ -145,7 +145,7 @@ dipole magnetic field model, the path along a given L shell can be described as 
 where r is the radial distance (in planetary radii) to a point on the line,
 λ is its co-latitude, and L is the L-shell of interest.
 """
-function dipole_fieldline(ϕ, L = 2.5, nP::Int = 100)
+function dipole_fieldline(ϕ, L = 2.5, nP = 100)
     xyz = [sph2cart(L * sin(θ)^2, θ, ϕ) for θ in range(0, stop = π, length = nP)]
     x = getindex.(xyz, 1)
     y = getindex.(xyz, 2)
@@ -169,4 +169,47 @@ function image_source(source::Wire{T}, bc::ConductingWall) where {T}
         SVector{3, T}(coords)
     end
     return Wire{T}(reflected, -source.current)
+end
+
+"""
+    compute_curl!(B, A, xs, ys, zs)
+
+Compute `B = ∇ × A` in-place using second-order central differences on a
+uniform Cartesian grid with potentially anisotropic spacing.
+
+Interior points are updated; boundary layers are left unchanged (zero).
+
+# Arguments
+- `B`: output 4-D array of size `(3, Nx, Ny, Nz)`.
+- `A`: input 4-D array of size `(3, Nx, Ny, Nz)`.
+- `xs`, `ys`, `zs`: grid coordinate ranges (spacing extracted via `step`).
+"""
+function compute_curl!(B, A, xs, ys, zs)
+    @assert size(B) == size(A) "B and A must have the same size!"
+    @assert size(B, 1) == size(A, 1) == 3 "B and A must have 3 components!"
+    dx, dy, dz = step(xs), step(ys), step(zs)
+    inv2dx, inv2dy, inv2dz = inv(2dx), inv(2dy), inv(2dz)
+    _, Nx, Ny, Nz = size(A)
+    for k in 2:(Nz - 1), j in 2:(Ny - 1), i in 2:(Nx - 1)
+        B[1, i, j, k] = (A[3, i, j + 1, k] - A[3, i, j - 1, k]) * inv2dy -
+            (A[2, i, j, k + 1] - A[2, i, j, k - 1]) * inv2dz
+        B[2, i, j, k] = (A[1, i, j, k + 1] - A[1, i, j, k - 1]) * inv2dz -
+            (A[3, i + 1, j, k] - A[3, i - 1, j, k]) * inv2dx
+        B[3, i, j, k] = (A[2, i + 1, j, k] - A[2, i - 1, j, k]) * inv2dx -
+            (A[1, i, j + 1, k] - A[1, i, j - 1, k]) * inv2dy
+    end
+    return B
+end
+
+"""
+    compute_curl(A, xs, ys, zs)
+
+Allocate and return `B = ∇ × A`.  See [`compute_curl!`](@ref) for details.
+"""
+function compute_curl(
+        A::AbstractArray{T, 4},
+        xs::AbstractRange, ys::AbstractRange, zs::AbstractRange
+    ) where {T}
+    B = zeros(T, size(A))
+    return compute_curl!(B, A, xs, ys, zs)
 end

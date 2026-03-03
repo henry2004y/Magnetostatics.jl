@@ -36,7 +36,7 @@ ps = [Point3f(x[i], y[j], z[k]) for i in 1:Nx, j in 1:Ny, k in 1:Nz]
 ns = [Vec3f(B[1,i,j,k], B[2,i,j,k], B[3,i,j,k]) for i in 1:Nx, j in 1:Ny, k in 1:Nz]
 strength = vec(norm.(ns))
 
-fig = Figure(size = (800, 800), fontsize=20)
+fig = Figure(size = (850, 800), fontsize=20)
 ax = Axis3(fig[1, 1];
     xlabel="x", ylabel="y", zlabel="z", aspect=:data, title="FFT Solver Result (3D)")
 
