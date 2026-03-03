@@ -38,7 +38,6 @@ solve
 
 ```@docs
 SurfaceCurrentMesh
-sphere_mesh
 compute_surface_current
 ```
 
@@ -51,7 +50,6 @@ set_current_wire!
 set_current_wire
 compute_curl!
 compute_curl
-sph2cart
 dipole_fieldline
 image_source
 ```

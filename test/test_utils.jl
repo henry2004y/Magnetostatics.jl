@@ -75,7 +75,7 @@
     @testset "Dipole Fieldline" begin
         # Test default parameters
         ϕ = 0.0
-        x, y, z = Magnetostatics.dipole_fieldline(ϕ)
+        x, y, z = dipole_fieldline(ϕ)
 
         # Verify dimensions
         @test all(length.((x, y, z)) .== 100)
@@ -90,7 +90,7 @@
 
         # Test with custom arguments
         L, nP = 4.0, 51
-        x2, y2, z2 = Magnetostatics.dipole_fieldline(π / 2, L, nP)
+        x2, y2, z2 = dipole_fieldline(π / 2, L, nP)
         r_vals2 = sqrt.(x2 .^ 2 + y2 .^ 2 + z2 .^ 2)
         @test maximum(r_vals2) ≈ 4.0 atol = 1.0e-2
 
