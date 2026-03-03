@@ -51,6 +51,8 @@
         # Distance to wire (1,1,0) along y is 1.0 (at x=2.0).
         # B should be in -z direction.
         @test isapprox(B_arb_out[3], -expected_mag, rtol = 1.0e-5)
+
+        @test wire_arb(2.0, 1.0, 0.0) ≈ B_arb_out
     end
 
     @testset "CurrentLoop" begin

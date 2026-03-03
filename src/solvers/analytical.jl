@@ -85,13 +85,14 @@ end
 
     rho < 1.0e-15 && return @SVector zeros(T, 3)
 
-    factor = if rho <= field.r
-        μ₀ * field.I * rho / (2π * field.r^2)
+    azimuthal_vec = cross(field.direction, rho_vec)
+
+    B_vec = if rho <= field.r
+        (μ₀ * field.I / (2π * field.r^2)) * azimuthal_vec
     else
-        μ₀ * field.I / (2π * rho)
+        (μ₀ * field.I / (2π * rho^2)) * azimuthal_vec
     end
 
-    B_vec = factor * cross(field.direction, rho_vec) / rho
     return B_vec
 end
 
