@@ -11,6 +11,10 @@ Magnetostatics.jl provides solvers and analytical models for computing magnetic 
 ### Analytical Models
 Exact solutions for specific geometries:
 - **`HarrisSheet`**: Harris current sheet model ($B_x(z) = B_0 \tanh(z/L)$).
+- **`AsymmetricHarrisSheet`**: Asymmetric current sheet ($B_x(z) = \frac{B_1+B_2}{2} + \frac{B_1-B_2}{2} \tanh(z/L)$).
+- **`ForceFreeHarrisSheet`**: Force-free sheet ($B_x(z) = B_0 \tanh(z/L)$, $B_y(z) = B_0 \text{sech}(z/L)$).
+- **`BifurcatedHarrisSheet`**: Double-peaked current sheet ($B_x(z) = \frac{B_0}{2} [\tanh((z-d)/L) + \tanh((z+d)/L)]$).
+- **`FadeevIsland`**: 2D magnetic island equilibrium ($A_y(x, z) = -B_0 L \ln[\cosh(z/L) + \epsilon \cos(x/L_x)]$).
 - **`Dipole`**: Magnetic dipole field.
 - **`CurrentLoop`**: Analytics for circular current loops using elliptic integrals.
 - **`getB_mirror`**: Two-coil magnetic mirror configuration.

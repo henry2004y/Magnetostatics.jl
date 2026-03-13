@@ -9,6 +9,47 @@
         @test isapprox(harris(SVector(0.0, 0.0, -100.0))[1], -B0, rtol = 1.0e-5)
     end
 
+    @testset "Asymmetric Harris Sheet" begin
+        B1, B2, L = 2.0, 1.0, 2.0
+        harris = AsymmetricHarrisSheet(B1, B2, L)
+        @test isapprox(harris(SVector(0.0, 0.0, 100.0))[1], B1, rtol = 1.0e-5)
+        @test isapprox(harris(SVector(0.0, 0.0, -100.0))[1], B2, rtol = 1.0e-5)
+        @test isapprox(harris(SVector(0.0, 0.0, 0.0))[1], (B1 + B2) / 2, rtol = 1.0e-5)
+    end
+
+    @testset "Force-Free Harris Sheet" begin
+        B0, L = 1.0, 2.0
+        harris = ForceFreeHarrisSheet(B0, L)
+        # Bx = B0 * tanh(z/L), By = B0 * sech(z/L)
+        # B^2 = B0^2 (tanh^2 + sech^2) = B0^2
+        z = 1.5
+        B = harris(SVector(0.0, 0.0, z))
+        @test isapprox(norm(B), B0, rtol = 1.0e-5)
+        @test isapprox(B[1], B0 * tanh(z / L), rtol = 1.0e-5)
+        @test isapprox(B[2], B0 * sech(z / L), rtol = 1.0e-5)
+    end
+
+    @testset "Bifurcated Harris Sheet" begin
+        B0, L, d = 1.0, 2.0, 1.0
+        harris = BifurcatedHarrisSheet(B0, L, d)
+        # Bx = B0/2 * [tanh((z - d)/L) + tanh((z + d)/L)]
+        @test isapprox(harris(SVector(0.0, 0.0, 100.0))[1], B0, rtol = 1.0e-5)
+        @test isapprox(harris(SVector(0.0, 0.0, -100.0))[1], -B0, rtol = 1.0e-5)
+        @test isapprox(harris(SVector(0.0, 0.0, 0.0))[1], 0.0, atol = 1.0e-10)
+    end
+
+    @testset "Fadeev Island" begin
+        B0, L, Lx, ε = 1.0, 2.0, 10.0, 0.5
+        fadeev = FadeevIsland(B0, L, Lx, ε)
+        # Bx = -B0 * sinh(z/L) / [cosh(z/L) + ε * cos(x/Lx)]
+        # Bz = -B0 * L * ε * sin(x/Lx) / Lx / [cosh(z/L) + ε * cos(x/Lx)]
+        x, z = 1.0, 1.0
+        B = fadeev(SVector(x, 0.0, z))
+        denom = cosh(z / L) + ε * cos(x / Lx)
+        @test isapprox(B[1], -B0 * sinh(z / L) / denom, rtol = 1.0e-5)
+        @test isapprox(B[3], -B0 * L * ε * sin(x / Lx) / Lx / denom, rtol = 1.0e-5)
+    end
+
     @testset "Dipole" begin
         M = SVector(0.0, 0.0, 1.0)
         dipole = Dipole(M)
