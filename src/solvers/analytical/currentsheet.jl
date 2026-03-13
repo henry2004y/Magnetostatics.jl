@@ -15,7 +15,8 @@ end
 function (field::HarrisSheet)(r)
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
     T = eltype(r)
-    return SVector(field.B0 * tanh(r[3] / field.L), zero(T), zero(T))
+    (; B0, L) = field
+    return SVector(B0 * tanh(r[3] / L), zero(T), zero(T))
 end
 
 """
@@ -34,8 +35,8 @@ function (field::AsymmetricHarrisSheet)(r)
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
     T = eltype(r)
     z = r[3]
-    L = field.L
-    B_x = (field.B1 + field.B2) / 2 + (field.B1 - field.B2) / 2 * tanh(z / L)
+    (; B1, B2, L) = field
+    B_x = (B1 + B2) / 2 + (B1 - B2) / 2 * tanh(z / L)
     return SVector(B_x, zero(T), zero(T))
 end
 
@@ -55,9 +56,9 @@ function (field::ForceFreeHarrisSheet)(r)
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
     T = eltype(r)
     z = r[3]
-    L = field.L
-    B_x = field.B0 * tanh(z / L)
-    B_y = field.B0 * sech(z / L)
+    (; B0, L) = field
+    B_x = B0 * tanh(z / L)
+    B_y = B0 * sech(z / L)
     return SVector(B_x, B_y, zero(T))
 end
 
@@ -77,9 +78,8 @@ function (field::BifurcatedHarrisSheet)(r)
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
     T = eltype(r)
     z = r[3]
-    L = field.L
-    d = field.d
-    B_x = field.B0 / 2 * (tanh((z - d) / L) + tanh((z + d) / L))
+    (; B0, L, d) = field
+    B_x = B0 / 2 * (tanh((z - d) / L) + tanh((z + d) / L))
     return SVector(B_x, zero(T), zero(T))
 end
 
@@ -102,7 +102,7 @@ function (field::FadeevIsland)(r)
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
     T = eltype(r)
     x, z = r[1], r[3]
-    B0, L, Lx, ε = field.B0, field.L, field.Lx, field.ε
+    (; B0, L, Lx, ε) = field
 
     denom = cosh(z / L) + ε * cos(x / Lx)
     B_x = -B0 * sinh(z / L) / denom

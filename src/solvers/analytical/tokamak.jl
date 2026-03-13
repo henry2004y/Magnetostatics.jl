@@ -30,8 +30,6 @@ end
         θ = π / 16 + i * π / 8 # angle between the i-th coil and the x-axis
 
         # Coil center and normal
-        # Center at (R_major * cos(θ), R_major * sin(θ), 0)
-        # R_major = b + a
         R_major = b + R_coil
         center = SVector(R_major * cos(θ), R_major * sin(θ), 0.0)
 
@@ -51,8 +49,7 @@ end
     σ = R_coil / 3 # parameter of the Gauss curve
     ϕ = atan(y, x)
     # distance to center of plasma ring
-    # Plasma ring radius R_p = R_coil + b
-    R_p = R_coil + b
+    R_p = R_coil + b # Plasma ring radius
     distance_val = √(z^2 + (x - R_p * cos(ϕ))^2 + (y - R_p * sin(ϕ))^2)
 
     if distance_val > 0.0001

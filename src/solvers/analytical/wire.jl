@@ -28,20 +28,21 @@ end
 @inline function (field::InfiniteWire)(pos)
     @boundscheck length(pos) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
     T = eltype(pos)
-    r_pos = SVector{3, T}(pos[1], pos[2], pos[3]) - field.center
+    (; I, r, center, direction) = field
+    r_pos = SVector{3, T}(pos[1], pos[2], pos[3]) - center
 
-    z_local = dot(r_pos, field.direction)
-    rho_vec = r_pos - z_local * field.direction
+    z_local = dot(r_pos, direction)
+    rho_vec = r_pos - z_local * direction
     rho = norm(rho_vec)
 
     rho < 1.0e-15 && return @SVector zeros(T, 3)
 
-    azimuthal_vec = cross(field.direction, rho_vec)
+    azimuthal_vec = cross(direction, rho_vec)
 
-    B_vec = if rho <= field.r
-        (μ₀ * field.I / (2π * field.r^2)) * azimuthal_vec
+    B_vec = if rho <= r
+        (μ₀ * I / (2π * r^2)) * azimuthal_vec
     else
-        (μ₀ * field.I / (2π * rho^2)) * azimuthal_vec
+        (μ₀ * I / (2π * rho^2)) * azimuthal_vec
     end
 
     return B_vec
