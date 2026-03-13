@@ -18,7 +18,7 @@ makedocs(;
             "Current Loop" => "examples/current_loop.md",
             "Magnetic Mirror" => "examples/magnetic_mirror.md",
             "Tokamak" => "examples/tokamak.md",
-            "Harris Sheet" => "examples/harris_sheet.md",
+            "Current Sheet" => "examples/current_sheet.md",
             "Z-Pinch" => "examples/z_pinch.md",
             "Biot-Savart Solver" => "examples/biot_savart.md",
             "FFT Solver" => "examples/fft.md",
