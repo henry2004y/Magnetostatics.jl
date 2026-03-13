@@ -23,6 +23,7 @@ include("utils.jl")
 export AbstractMagneticField, AbstractCurrentSource, AbstractSolver
 export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, solve
 export Wire, CurrentLoop, HarrisSheet, Dipole, CurrentLoopAnalytic, InfiniteWire
+export AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarrisSheet, FadeevIsland
 export SurfaceCurrentMesh, compute_surface_current
 export AbstractBoundary, OpenBoundary, PeriodicBoundary
 export ConductingWall, ConductingSphere, PrescribedBoundary

@@ -13,6 +13,10 @@ end
 
 BiotSavart() = BiotSavart(OpenBoundary())
 
+@inline function (solver::BiotSavart)(source, r)
+    return solve(solver, source, r)
+end
+
 # ---------------------------------------------------------------------------
 # Core kernel (open / free-space)
 # ---------------------------------------------------------------------------
