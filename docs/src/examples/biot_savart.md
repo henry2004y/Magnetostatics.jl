@@ -192,10 +192,8 @@ hm = heatmap!(ax2, xs ./ R, zs ./ R, log10.(Bmag .+ 1e-9); colormap=:plasma)
 Colorbar(fig2[1, 2], hm; label="log10(|B| / T)")
 
 str2 = evenstream(xs ./ R, zs ./ R,
-    (x, z) -> in_sphere(x*R, z*R) ? 0.0f0 :
-        (let B = B_total(SVector(Float64(x*R), 0.0, Float64(z*R))); B[1] end),
-    (x, z) -> in_sphere(x*R, z*R) ? 0.0f0 :
-        (let B = B_total(SVector(Float64(x*R), 0.0, Float64(z*R))); B[3] end))
+    (x, z) -> in_sphere(x*R, z*R) ? 0.0 : B_total(SVector(x*R, 0.0, z*R))[1],
+    (x, z) -> in_sphere(x*R, z*R) ? 0.0 : B_total(SVector(x*R, 0.0, z*R))[3])
 streamlines!(ax2, str2; linewidth=1.5, with_arrows=true)
 
 # Draw sphere boundary
