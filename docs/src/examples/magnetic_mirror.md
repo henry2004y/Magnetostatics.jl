@@ -24,9 +24,9 @@ Visualizing the field in the xz-plane:
 xs = range(-2, 2, length=51)
 zs = range(-2, 2, length=51)
 
-function field_xz_mirror(x, z)
+@inbounds function field_xz_mirror(x, z)
     B = getB_mirror(x, 0.0, z, distance, a, I)
-    return Point2f(B[1], B[3])
+    return SA[B[1], B[3]]
 end
 
 fig = Figure(size = (700, 600), fontsize=20)
@@ -37,7 +37,7 @@ Bmag = [norm(getB_mirror(x, 0.0, z, distance, a, I)) for x in xs, z in zs]
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-str = evenstream(xs, zs, (x, z) -> field_xz_mirror(x, z)[1], (x, z) -> field_xz_mirror(x, z)[2])
+str = evenstream(xs, zs, field_xz_mirror)
 streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
 
 fig
