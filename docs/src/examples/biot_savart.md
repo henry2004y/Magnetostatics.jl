@@ -91,8 +91,8 @@ hm_w = heatmap!(ax_wall, xs_w, zs_w, log10.(Bmag_w .+ 1e-9); colormap=:plasma)
 Colorbar(fig_wall[1, 2], hm_w; label="log10(|B| / T)")
 
 str_w = evenstream(xs_w, zs_w,
-    (x, z) -> let B = B_wall(Float64(x), Float64(z)); B[1] end,
-    (x, z) -> let B = B_wall(Float64(x), Float64(z)); B[3] end)
+    (x, z) -> B_wall(x, z)[1],
+    (x, z) -> B_wall(x, z)[3])
 streamlines!(ax_wall, str_w; linewidth=1.5, with_arrows=true)
 
 # Wall boundary
