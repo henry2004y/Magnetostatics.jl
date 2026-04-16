@@ -24,9 +24,9 @@ Visualizing the field in the xz-plane:
 xs = range(-2, 2, length=51)
 zs = range(-2, 2, length=51)
 
-@inbounds function field_xz_mirror(x, z)
-    B = getB_mirror(x, 0.0, z, distance, a, I)
-    return SA[B[1], B[3]]
+@inbounds function field_xz_mirror(x)
+    B = getB_mirror(x[1], 0.0, x[2], distance, a, I)
+    return B[SA[1,3]]
 end
 
 fig = Figure(size = (700, 600), fontsize=20)

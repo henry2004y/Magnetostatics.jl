@@ -36,9 +36,9 @@ Visualizing the field in the xz-plane:
 xs = range(-2, 2, length=51)
 zs = range(-2, 2, length=51)
 
-@inbounds function field_xz_loop(x, z)
-    B = getB_loop(SVector(x, 0.0, z), loop)
-    return SA[B[1], B[3]]
+@inbounds function field_xz_loop(x)
+    B = getB_loop(SVector(x[1], 0.0, x[2]), loop)
+    return B[SA[1,3]]
 end
 
 Bmag = [norm(getB_loop(SVector(x, 0.0, z), loop)) for x in xs, z in zs]
