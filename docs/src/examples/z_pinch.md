@@ -7,7 +7,7 @@ Magnetic field from an infinite straight wire of radius $a$ carrying a uniform c
 
 ```@example zpinch
 using Magnetostatics, StaticArrays, LinearAlgebra
-using CairoMakie
+using CairoMakie, UniformStreamlines
 
 I = 100.0 # Current [A]
 a = 0.1   # Radius [m]
@@ -36,8 +36,8 @@ ax = Axis(fig[1, 1], xlabel="x", ylabel="y", aspect=DataAspect(), title="Z-Pinch
 hm = heatmap!(ax, xs, ys, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-streamplot!(ax, field_xy_zpinch, xs[1]..xs[end], ys[1]..ys[end];
-    arrow_size = 8, linewidth = 1.5)
+str = evenstream(xs, ys, (x, y) -> field_xy_zpinch(x, y)[1], (x, y) -> field_xy_zpinch(x, y)[2])
+streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
 
 # Draw the wire circle
 arc!(ax, Point2f(0,0), a, -π, π, color=:red, linestyle=:dash)

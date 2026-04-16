@@ -13,7 +13,7 @@ Calculate the field of a circular current loop.
 
 ```@example loop
 using Magnetostatics, StaticArrays, LinearAlgebra
-using CairoMakie
+using CairoMakie, UniformStreamlines
 
 # Define loop parameters
 radius = 1.0
@@ -50,8 +50,8 @@ ax = Axis(fig[1, 1];
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-streamplot!(ax, field_xz_loop, -2..2, -2..2;
-    arrow_size = 8, linewidth = 1.5, colormap = :turbo)
+str = evenstream(xs, zs, (x, z) -> field_xz_loop(x, z)[1], (x, z) -> field_xz_loop(x, z)[2])
+streamlines!(ax, str; linewidth = 1.5, colormap = :turbo, with_arrows = true)
 
 fig
 ```
