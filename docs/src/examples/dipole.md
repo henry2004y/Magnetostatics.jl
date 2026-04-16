@@ -27,7 +27,7 @@ xs = range(-2, 2, length=51)
 zs = range(-2, 2, length=51)
 
 @inbounds function field_xz_dipole(x)
-    B = dipole(SVector(x[1], zero(T), x[2]))
+    B = dipole(SVector(x[1], zero(eltype(x)), x[2]))
     return B[SA[1,3]]
 end
 
