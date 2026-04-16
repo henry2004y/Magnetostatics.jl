@@ -30,7 +30,7 @@ export ConductingWall, ConductingSphere, PrescribedBoundary
 export discretize_loop, getB_loop, set_current_wire!, set_current_wire
 export compute_curl!, compute_curl
 export getB_mirror, getB_bottle, getB_tokamak_coil, getB_tokamak_profile, getB_zpinch
-export image_source, dipole_fieldline
+export image_source, dipole_fieldline, sph2cart, sphere_mesh
 
 include("precompile.jl")
 
