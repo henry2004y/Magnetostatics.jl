@@ -9,7 +9,7 @@ Magnetic field from a Tokamak topology consisting of $N$ toroidal field coils an
 
 ```@example tokamak
 using Magnetostatics, StaticArrays, LinearAlgebra
-using CairoMakie
+using CairoMakie, UniformStreamlines
 
 a = 1.0  # Coil radius
 b = 2.0  # Major radius offset
@@ -42,8 +42,8 @@ ax = Axis(fig[1, 1];
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-streamplot!(ax, field_xz_tokamak, xs[1]..xs[end], zs[1]..zs[end];
-    arrow_size = 8, linewidth = 1.5)
+str = evenstream(xs, zs, (x, z) -> field_xz_tokamak(x, z)[1], (x, z) -> field_xz_tokamak(x, z)[2])
+streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
 
 fig
 ```
@@ -61,7 +61,7 @@ where $B_{\zeta 0}$ is the toroidal field on axis, $q(r/a)$ is the safety factor
 
 ```@example tokamak_q
 using Magnetostatics, StaticArrays, LinearAlgebra
-using CairoMakie
+using CairoMakie, UniformStreamlines
 
 # Define q-profile as a function of normalized radius r/a
 q_profile(r_norm) = 1.1 + r_norm^2
@@ -108,7 +108,7 @@ ax = Axis(fig[1, 1];
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-streamplot!(ax, field_xz_tokamak_q, xs[1]..xs[end], zs[1]..zs[end];
-    arrow_size = 8, linewidth = 1.5)
+str = evenstream(xs, zs, (x, z) -> field_xz_tokamak_q(x, z)[1], (x, z) -> field_xz_tokamak_q(x, z)[2])
+streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
 fig
 ```

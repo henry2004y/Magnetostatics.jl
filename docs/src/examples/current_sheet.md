@@ -12,7 +12,7 @@ where $B_0$ is the asymptotic magnetic field strength and $L$ is the half-width 
 
 ```@example currentsheet
 using Magnetostatics, StaticArrays, LinearAlgebra
-using CairoMakie
+using CairoMakie, UniformStreamlines
 
 B0 = 1.0       # Asymptotic field strength
 L = 2.0        # Half-width
@@ -139,8 +139,10 @@ zs = range(-5, 5, length=50)
 fig = Figure(size=(800, 400))
 ax = Axis(fig[1, 1], xlabel="x", ylabel="z", title="Fadeev Island Magnetic Field Lines")
 
-# Streamplot to visualize the islands
-streamplot!(ax, (x, z) -> Point2f(fadeev(SVector(x, 0, z))[1], fadeev(SVector(x, 0, z))[3]),
-    -20..20, -5..5, colormap=:viridis)
+# Streamlines to visualize the islands
+str = evenstream(xs, zs,
+    (x, z) -> fadeev(SVector(x, 0, z))[1],
+    (x, z) -> fadeev(SVector(x, 0, z))[3])
+streamlines!(ax, str, colormap=:viridis, with_arrows=true)
 fig
 ```

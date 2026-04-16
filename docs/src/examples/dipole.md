@@ -10,7 +10,7 @@ Calculate the field of a magnetic dipole moment $\mathbf{M} = (0,0,1)$ at variou
 
 ```@example dipole
 using Magnetostatics, StaticArrays, LinearAlgebra
-using CairoMakie
+using CairoMakie, UniformStreamlines
 
 M = SVector(0.0, 0.0, 1.0)
 dipole = Dipole(M)
@@ -39,7 +39,8 @@ Bmag = [norm(dipole(SVector(x, 0.0, z))) for x in xs, z in zs]
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-streamplot!(ax, field_xz, -2..2, -2..2; arrow_size = 8, linewidth = 1.5)
+str = evenstream(xs, zs, (x, z) -> field_xz(x, z)[1], (x, z) -> field_xz(x, z)[2])
+streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
 
 fig
 ```

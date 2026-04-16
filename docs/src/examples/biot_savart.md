@@ -10,7 +10,7 @@ For arbitrary wire geometries, discretize the path and sum the contributions.
 
 ```@example biotsavart
 using Magnetostatics, StaticArrays, LinearAlgebra
-using CairoMakie
+using CairoMakie, UniformStreamlines
 
 # Define a circular loop and discretize it
 loop = CurrentLoop(1.0, 1.0, [0, 0, 0], [0, 0, 1])
@@ -44,8 +44,8 @@ Bmag = [norm(solve(solver, wire, SVector(x, 0.0, z))) for x in xs, z in zs]
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-streamplot!(ax, field_xz_bs, -2..2, -2..2;
-    arrow_size = 8, linewidth = 1.5)
+str = evenstream(xs, zs, (x, z) -> field_xz_bs(x, z)[1], (x, z) -> field_xz_bs(x, z)[2])
+streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
 
 fig
 ```
@@ -90,9 +90,10 @@ ax_wall  = Axis(fig_wall[1, 1];
 hm_w = heatmap!(ax_wall, xs_w, zs_w, log10.(Bmag_w .+ 1e-9); colormap=:plasma)
 Colorbar(fig_wall[1, 2], hm_w; label="log10(|B| / T)")
 
-streamplot!(ax_wall,
-    (x, z) -> let B = B_wall(Float64(x), Float64(z)); Point2f(B[1], B[3]) end,
-    -4..4, 0..4; arrow_size=8, linewidth=1.5)
+str_w = evenstream(xs_w, zs_w,
+    (x, z) -> let B = B_wall(Float64(x), Float64(z)); B[1] end,
+    (x, z) -> let B = B_wall(Float64(x), Float64(z)); B[3] end)
+streamlines!(ax_wall, str_w; linewidth=1.5, with_arrows=true)
 
 # Wall boundary
 hlines!(ax_wall, [0.0]; color=:white, linewidth=2, linestyle=:dash)
@@ -190,13 +191,12 @@ Bmag = [in_sphere(x, z) ? NaN :
 hm = heatmap!(ax2, xs ./ R, zs ./ R, log10.(Bmag .+ 1e-9); colormap=:plasma)
 Colorbar(fig2[1, 2], hm; label="log10(|B| / T)")
 
-streamplot!(ax2,
-    (x, z) -> in_sphere(x, z) ?
-        Point2f(0, 0) :
-        let B = B_total(SVector(Float64(x*R), 0.0, Float64(z*R)))
-            Point2f(B[1], B[3])
-        end,
-    -3..3, -3..3; arrow_size=8, linewidth=1.5)
+str2 = evenstream(xs ./ R, zs ./ R,
+    (x, z) -> in_sphere(x*R, z*R) ? 0.0f0 :
+        (let B = B_total(SVector(Float64(x*R), 0.0, Float64(z*R))); B[1] end),
+    (x, z) -> in_sphere(x*R, z*R) ? 0.0f0 :
+        (let B = B_total(SVector(Float64(x*R), 0.0, Float64(z*R))); B[3] end))
+streamlines!(ax2, str2; linewidth=1.5, with_arrows=true)
 
 # Draw sphere boundary
 θs = range(0, 2π, length=200)
