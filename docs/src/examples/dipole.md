@@ -39,7 +39,7 @@ Bmag = [norm(dipole(SVector(x, 0.0, z))) for x in xs, z in zs]
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-str = evenstream(xs, zs, field_xz)
+str = evenstream(xs, zs, field_xz_dipole)
 streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
 
 fig

@@ -195,7 +195,7 @@ Colorbar(fig2[1, 2], hm; label="log10(|B| / T)")
     if in_sphere(x[1]*R, x[2]*R)
         SVector(NaN, NaN)
     else
-        B_total(x[1]*R, 0.0, x[2]*R)[SA[1,3]]
+        B_total(SVector(x[1]*R, 0.0, x[2]*R))[SA[1,3]]
     end
 end
 

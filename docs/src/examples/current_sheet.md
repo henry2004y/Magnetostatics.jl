@@ -139,8 +139,8 @@ zs = range(-5, 5, length=50)
 fig = Figure(size=(800, 400))
 ax = Axis(fig[1, 1], xlabel="x", ylabel="z", title="Fadeev Island Magnetic Field Lines")
 
-@inbounds function field(x, z)
-    return fadeev(SVector(x, 0, z))[SA[1,3]]
+@inbounds function field(x)
+    return fadeev(SVector(x[1], 0, x[2]))[SA[1,3]]
 end
 
 # Streamlines to visualize the islands
