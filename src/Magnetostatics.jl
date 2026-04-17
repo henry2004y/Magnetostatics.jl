@@ -20,17 +20,16 @@ include("solvers/fft.jl")
 include("solvers/potential.jl")
 include("utils.jl")
 
-export AbstractMagneticField, AbstractCurrentSource, AbstractSolver
-export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, solve
-export Wire, CurrentLoop, HarrisSheet, Dipole, CurrentLoopAnalytic, InfiniteWire
-export AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarrisSheet, FadeevIsland
-export SurfaceCurrentMesh, compute_surface_current
-export AbstractBoundary, OpenBoundary, PeriodicBoundary
-export ConductingWall, ConductingSphere, PrescribedBoundary
-export discretize_loop, getB_loop, set_current_wire!, set_current_wire
-export compute_curl!, compute_curl
-export getB_mirror, getB_bottle, getB_tokamak_coil, getB_tokamak_profile, getB_zpinch
-export image_source, dipole_fieldline, sph2cart, sphere_mesh
+export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, BiotSavart, FFTSolver,
+    VectorPotential, PoissonSolver, solve, Wire, CurrentLoop, TorusKnot, TrefoilKnot,
+    HarrisSheet, Dipole, CurrentLoopAnalytic, InfiniteWire,
+    AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarrisSheet, FadeevIsland,
+    SurfaceCurrentMesh, compute_surface_current,
+    AbstractBoundary, OpenBoundary, PeriodicBoundary, ConductingWall, ConductingSphere,
+    PrescribedBoundary,
+    discretize_loop, discretize_knot, getB_loop, set_current_wire!, set_current_wire,
+    compute_curl!, compute_curl, getB_mirror, getB_bottle, getB_tokamak_coil,
+    getB_tokamak_profile, getB_zpinch, image_source, dipole_fieldline, sph2cart, sphere_mesh
 
 include("precompile.jl")
 

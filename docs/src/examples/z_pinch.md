@@ -37,7 +37,7 @@ hm = heatmap!(ax, xs, ys, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
 str = evenstream(xs, ys, field_xy_zpinch)
-streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
+streamlines!(ax, str; color = :white, linewidth = 1.5, with_arrows = true)
 
 # Draw the wire circle
 arc!(ax, Point2f(0,0), a, -π, π, color=:red, linestyle=:dash)
