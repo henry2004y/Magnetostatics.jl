@@ -36,9 +36,9 @@ Visualizing the field in the xz-plane:
 xs = range(-2, 2, length=51)
 zs = range(-2, 2, length=51)
 
-function field_xz_loop(x, z)
-    B = getB_loop(SVector(x, 0.0, z), loop)
-    return Point2f(B[1], B[3])
+@inbounds function field_xz_loop(x)
+    B = getB_loop(SVector(x[1], 0.0, x[2]), loop)
+    return B[SA[1,3]]
 end
 
 Bmag = [norm(getB_loop(SVector(x, 0.0, z), loop)) for x in xs, z in zs]
@@ -50,7 +50,7 @@ ax = Axis(fig[1, 1];
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-str = evenstream(xs, zs, (x, z) -> field_xz_loop(x, z)[1], (x, z) -> field_xz_loop(x, z)[2])
+str = evenstream(xs, zs, field_xz_loop)
 streamlines!(ax, str; linewidth = 1.5, colormap = :turbo, with_arrows = true)
 
 fig

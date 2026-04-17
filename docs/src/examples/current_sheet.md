@@ -139,10 +139,12 @@ zs = range(-5, 5, length=50)
 fig = Figure(size=(800, 400))
 ax = Axis(fig[1, 1], xlabel="x", ylabel="z", title="Fadeev Island Magnetic Field Lines")
 
+@inbounds function field(x)
+    return fadeev(SVector(x[1], 0, x[2]))[SA[1,3]]
+end
+
 # Streamlines to visualize the islands
-str = evenstream(xs, zs,
-    (x, z) -> fadeev(SVector(x, 0, z))[1],
-    (x, z) -> fadeev(SVector(x, 0, z))[3])
+str = evenstream(xs, zs, field)
 streamlines!(ax, str, colormap=:viridis, with_arrows=true)
 fig
 ```

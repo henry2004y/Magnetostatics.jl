@@ -191,9 +191,15 @@ Bmag = [in_sphere(x, z) ? NaN :
 hm = heatmap!(ax2, xs ./ R, zs ./ R, log10.(Bmag .+ 1e-9); colormap=:plasma)
 Colorbar(fig2[1, 2], hm; label="log10(|B| / T)")
 
-str2 = evenstream(xs ./ R, zs ./ R,
-    (x, z) -> in_sphere(x*R, z*R) ? 0.0 : B_total(SVector(x*R, 0.0, z*R))[1],
-    (x, z) -> in_sphere(x*R, z*R) ? 0.0 : B_total(SVector(x*R, 0.0, z*R))[3])
+@inbounds function field(x)
+    if in_sphere(x[1]*R, x[2]*R)
+        SVector(NaN, NaN)
+    else
+        B_total(SVector(x[1]*R, 0.0, x[2]*R))[SA[1,3]]
+    end
+end
+
+str2 = evenstream(xs ./ R, zs ./ R, field)
 streamlines!(ax2, str2; linewidth=1.5, with_arrows=true)
 
 # Draw sphere boundary

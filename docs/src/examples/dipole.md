@@ -26,9 +26,9 @@ Visualizing the field in the xz-plane:
 xs = range(-2, 2, length=51)
 zs = range(-2, 2, length=51)
 
-function field_xz(x::T, z::T) where T
-    B = dipole(SVector(x, zero(T), z))
-    return Point(B[1], B[3])
+@inbounds function field_xz_dipole(x)
+    B = dipole(SVector(x[1], zero(eltype(x)), x[2]))
+    return B[SA[1,3]]
 end
 
 fig = Figure(size = (700, 600), fontsize=20)
@@ -39,7 +39,7 @@ Bmag = [norm(dipole(SVector(x, 0.0, z))) for x in xs, z in zs]
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-str = evenstream(xs, zs, (x, z) -> field_xz(x, z)[1], (x, z) -> field_xz(x, z)[2])
+str = evenstream(xs, zs, field_xz_dipole)
 streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
 
 fig

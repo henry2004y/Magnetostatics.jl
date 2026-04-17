@@ -28,9 +28,9 @@ Visualizing the poloidal field (xz-plane):
 xs = range(0.5, 4.5, length=51)
 zs = range(-2, 2, length=51)
 
-function field_xz_tokamak(x, z)
-    B = getB_tokamak_coil(x, 0.0, z, a, b, ICoils, IPlasma)
-    return Point2f(B[1], B[3])
+@inbounds function field_xz_tokamak(x)
+    B = getB_tokamak_coil(x[1], 0.0, x[2], a, b, ICoils, IPlasma)
+    return B[SA[1,3]]
 end
 
 Bmag = [norm(getB_tokamak_coil(x, 0.0, z, a, b, ICoils, IPlasma)) for x in xs, z in zs]
@@ -42,7 +42,7 @@ ax = Axis(fig[1, 1];
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-str = evenstream(xs, zs, (x, z) -> field_xz_tokamak(x, z)[1], (x, z) -> field_xz_tokamak(x, z)[2])
+str = evenstream(xs, zs, field_xz_tokamak)
 streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
 
 fig

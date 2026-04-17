@@ -23,9 +23,9 @@ Visualizing the field in the xy-plane (perpendicular to wire):
 xs = range(-0.5, 0.5, length=51)
 ys = range(-0.5, 0.5, length=51)
 
-function field_xy_zpinch(x, y)
-    B = getB_zpinch(x, y, 0.0, I, a)
-    return Point2f(B[1], B[2])
+@inbounds function field_xy_zpinch(x)
+    B = getB_zpinch(x[1], x[2], 0.0, I, a)
+    return B[SA[1,2]]
 end
 
 Bmag = [norm(getB_zpinch(x, y, 0.0, I, a)) for x in xs, y in ys]
@@ -36,7 +36,7 @@ ax = Axis(fig[1, 1], xlabel="x", ylabel="y", aspect=DataAspect(), title="Z-Pinch
 hm = heatmap!(ax, xs, ys, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-str = evenstream(xs, ys, (x, y) -> field_xy_zpinch(x, y)[1], (x, y) -> field_xy_zpinch(x, y)[2])
+str = evenstream(xs, ys, field_xy_zpinch)
 streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
 
 # Draw the wire circle
