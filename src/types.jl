@@ -18,3 +18,10 @@ abstract type AbstractCurrentSource end
 Abstract supertype for all magnetic field solvers.
 """
 abstract type AbstractSolver end
+
+"""
+    current_density(field::AbstractMagneticField, r)
+
+Return the current density vector [A/m²] at position `r` for the given magnetic field model.
+"""
+function current_density end

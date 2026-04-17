@@ -19,6 +19,15 @@ function (field::HarrisSheet)(r)
     return SVector(B0 * tanh(r[3] / L), zero(T), zero(T))
 end
 
+function current_density(field::HarrisSheet, r)
+    @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
+    T = eltype(r)
+    z = r[3]
+    (; B0, L) = field
+    j_y = B0 / (μ₀ * L) * sech(z / L)^2
+    return SVector(zero(T), j_y, zero(T))
+end
+
 """
     AsymmetricHarrisSheet{T} <: AbstractMagneticField
 
@@ -38,6 +47,15 @@ function (field::AsymmetricHarrisSheet)(r)
     (; B1, B2, L) = field
     B_x = (B1 + B2) / 2 + (B1 - B2) / 2 * tanh(z / L)
     return SVector(B_x, zero(T), zero(T))
+end
+
+function current_density(field::AsymmetricHarrisSheet, r)
+    @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
+    T = eltype(r)
+    z = r[3]
+    (; B1, B2, L) = field
+    j_y = (B1 - B2) / (2 * μ₀ * L) * sech(z / L)^2
+    return SVector(zero(T), j_y, zero(T))
 end
 
 """
@@ -62,6 +80,17 @@ function (field::ForceFreeHarrisSheet)(r)
     return SVector(B_x, B_y, zero(T))
 end
 
+function current_density(field::ForceFreeHarrisSheet, r)
+    @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
+    T = eltype(r)
+    z = r[3]
+    (; B0, L) = field
+    sech_zL = sech(z / L)
+    j_x = B0 / (μ₀ * L) * sech_zL * tanh(z / L)
+    j_y = B0 / (μ₀ * L) * sech_zL^2
+    return SVector(j_x, j_y, zero(T))
+end
+
 """
     BifurcatedHarrisSheet{T} <: AbstractMagneticField
 
@@ -81,6 +110,15 @@ function (field::BifurcatedHarrisSheet)(r)
     (; B0, L, d) = field
     B_x = B0 / 2 * (tanh((z - d) / L) + tanh((z + d) / L))
     return SVector(B_x, zero(T), zero(T))
+end
+
+function current_density(field::BifurcatedHarrisSheet, r)
+    @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
+    T = eltype(r)
+    z = r[3]
+    (; B0, L, d) = field
+    j_y = B0 / (2 * μ₀ * L) * (sech((z - d) / L)^2 + sech((z + d) / L)^2)
+    return SVector(zero(T), j_y, zero(T))
 end
 
 """
@@ -109,4 +147,24 @@ function (field::FadeevIsland)(r)
     B_z = -B0 * L * ε * sin(x / Lx) / Lx / denom
 
     return SVector(B_x, zero(T), B_z)
+end
+
+function current_density(field::FadeevIsland, r)
+    @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
+    T = eltype(r)
+    x, z = r[1], r[3]
+    (; B0, L, Lx, ε) = field
+
+    cosh_zL = cosh(z / L)
+    cos_xLx = cos(x / Lx)
+    f = cosh_zL + ε * cos_xLx
+    prod = cosh_zL * cos_xLx
+
+    # jy = -1/μ₀ * ∇²Ay
+    # Following the derivation for general L, Lx:
+    term1 = (1 / L) * (1 + ε * prod)
+    term2 = (L * ε / Lx^2) * (ε + prod)
+    j_y = B0 / (μ₀ * f^2) * (term1 - term2)
+
+    return SVector(zero(T), j_y, zero(T))
 end
