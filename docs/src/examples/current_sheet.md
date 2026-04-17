@@ -107,22 +107,29 @@ fig
 
 ## [Bifurcated Harris Sheet](@id bifurcated_harris_sheet_example)
 
-A current sheet model with two peaks in the current density, often observed in the Earth's magnetotail.
-
+A current sheet model with two peaks in the current density, often observed in the Earth's magnetotail:
 ```math
 B_x(z) = \frac{B_0}{2} \left[ \tanh\left(\frac{z - d}{L}\right) + \tanh\left(\frac{z + d}{L}\right) \right]
 ```
 
+The bifurcation is most clearly seen in the current density profile, which exhibits two distinct peaks at $z = \pm d$ when $d$ is sufficiently large compared to $L$.
+
 ```@example currentsheet
-B0, L, d = 1.0, 2.0, 1.5
+B0, L, d = 1.0, 1.0, 2.0
 sheet_bif = BifurcatedHarrisSheet(B0, L, d)
 
-zs = range(-10, 10, length=200)
+zs = range(-6, 6, length=200)
 Bxs = [sheet_bif(SVector(0.0, 0.0, z))[1] for z in zs]
+# Current density jy is obtained directly from the model
+jys = [current_density(sheet_bif, SVector(0.0, 0.0, z))[2] for z in zs]
 
-fig = Figure()
-ax = Axis(fig[1, 1], xlabel="z", ylabel="Bx", title="Bifurcated Harris Sheet Profile")
-lines!(ax, zs, Bxs)
+fig = Figure(size = (800, 350))
+ax1 = Axis(fig[1, 1], xlabel="z", ylabel="Bx [T]", title="Magnetic Field Profile")
+lines!(ax1, zs, Bxs)
+
+ax2 = Axis(fig[1, 2], xlabel="z", ylabel="jy [A/m²]", title="Current Density Profile")
+lines!(ax2, zs, jys)
+
 fig
 ```
 

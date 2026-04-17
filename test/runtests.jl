@@ -14,6 +14,7 @@ end
     include("test_fft.jl")
     include("test_potential.jl")
     include("test_utils.jl")
+    include("test_current_density.jl")
     @testset "knot" include("test_knot.jl")
     @testset "boundaries" include("test_boundaries.jl")
     @testset "Poisson" include("test_poisson.jl")
