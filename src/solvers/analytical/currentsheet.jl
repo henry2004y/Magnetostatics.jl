@@ -155,14 +155,15 @@ function current_density(field::FadeevIsland, r)
     x, z = r[1], r[3]
     (; B0, L, Lx, ε) = field
 
-    f = cosh(z / L) + ε * cos(x / Lx)
     cosh_zL = cosh(z / L)
     cos_xLx = cos(x / Lx)
+    f = cosh_zL + ε * cos_xLx
+    prod = cosh_zL * cos_xLx
 
     # jy = -1/μ₀ * ∇²Ay
     # Following the derivation for general L, Lx:
-    term1 = (1 / L) * (1 + ε * cosh_zL * cos_xLx)
-    term2 = (L * ε / Lx^2) * (ε + cosh_zL * cos_xLx)
+    term1 = (1 / L) * (1 + ε * prod)
+    term2 = (L * ε / Lx^2) * (ε + prod)
     j_y = B0 / (μ₀ * f^2) * (term1 - term2)
 
     return SVector(zero(T), j_y, zero(T))
