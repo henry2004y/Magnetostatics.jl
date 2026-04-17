@@ -51,6 +51,40 @@ function discretize_loop(loop::CurrentLoop, n_segments)
 end
 
 """
+    discretize_knot(knot::TorusKnot, n_segments) -> Wire
+
+Discretize a torus knot into a `Wire` object.
+"""
+function discretize_knot(knot::TorusKnot{T}, n_segments) where {T}
+    # Create local coordinate system
+    n = knot.normal
+    u = knot.up
+    v = cross(n, u)
+
+    points = Vector{SVector{3, T}}(undef, n_segments + 1)
+    for i in 0:n_segments
+        t = 2π * i / n_segments
+        # Parametric coordinates in local frame
+        x_loc = (knot.R + knot.r * cos(knot.q * t)) * cos(knot.p * t)
+        y_loc = (knot.R + knot.r * cos(knot.q * t)) * sin(knot.p * t)
+        z_loc = knot.r * sin(knot.q * t)
+
+        # Transform to global frame
+        points[i + 1] = knot.center + x_loc * u + y_loc * v + z_loc * n
+    end
+    return Wire(points, knot.current)
+end
+
+"""
+    Wire(knot::TorusKnot, n_segments=200)
+
+Alternative constructor for `Wire` from a `TorusKnot`.
+"""
+function Wire(knot::TorusKnot, n_segments = 200)
+    return discretize_knot(knot, n_segments)
+end
+
+"""
     set_current_wire!(J, x, y, z, point, direction, current, width)
 
 Set the current density contribution of a straight wire with a Gaussian profile to `J`.
