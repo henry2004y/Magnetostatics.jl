@@ -45,7 +45,7 @@ hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
 str = evenstream(xs, zs, (x, z) -> field_xz_bs(x, z)[1], (x, z) -> field_xz_bs(x, z)[2])
-streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
+streamlines!(ax, str; color = :white, linewidth = 1.0, with_arrows = true)
 
 fig
 ```
@@ -93,7 +93,7 @@ Colorbar(fig_wall[1, 2], hm_w; label="log10(|B| / T)")
 str_w = evenstream(xs_w, zs_w,
     (x, z) -> B_wall(x, z)[1],
     (x, z) -> B_wall(x, z)[3])
-streamlines!(ax_wall, str_w; linewidth=1.5, with_arrows=true)
+streamlines!(ax_wall, str_w; color = :white, linewidth = 1.0, with_arrows = true)
 
 # Wall boundary
 hlines!(ax_wall, [0.0]; color=:white, linewidth=2, linestyle=:dash)
@@ -200,7 +200,7 @@ Colorbar(fig2[1, 2], hm; label="log10(|B| / T)")
 end
 
 str2 = evenstream(xs ./ R, zs ./ R, field)
-streamlines!(ax2, str2; linewidth=1.5, with_arrows=true)
+streamlines!(ax2, str2; color = :white, linewidth = 1.5, with_arrows = true)
 
 # Draw sphere boundary
 θs = range(0, 2π, length=200)

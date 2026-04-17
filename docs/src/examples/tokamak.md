@@ -43,7 +43,7 @@ hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
 str = evenstream(xs, zs, field_xz_tokamak)
-streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
+streamlines!(ax, str; color = :white, linewidth = 1.0, with_arrows = true)
 
 fig
 ```
@@ -109,6 +109,6 @@ hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
 str = evenstream(xs, zs, (x, z) -> field_xz_tokamak_q(x, z)[1], (x, z) -> field_xz_tokamak_q(x, z)[2])
-streamlines!(ax, str; linewidth = 1.5, with_arrows = true)
+streamlines!(ax, str; color = :white, linewidth = 1.5, with_arrows = true)
 fig
 ```

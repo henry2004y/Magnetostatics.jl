@@ -145,6 +145,6 @@ end
 
 # Streamlines to visualize the islands
 str = evenstream(xs, zs, field)
-streamlines!(ax, str, colormap=:viridis, with_arrows=true)
+streamlines!(ax, str; color = :white, linewidth = 1.5, with_arrows = true)
 fig
 ```

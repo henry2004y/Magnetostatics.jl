@@ -16,6 +16,7 @@ makedocs(;
         "Examples" => [
             "Magnetic Dipole" => "examples/dipole.md",
             "Current Loop" => "examples/current_loop.md",
+            "Trefoil Knot" => "examples/trefoil_knot.md",
             "Magnetic Mirror" => "examples/magnetic_mirror.md",
             "Tokamak" => "examples/tokamak.md",
             "Current Sheet" => "examples/current_sheet.md",
