@@ -65,9 +65,12 @@ function discretize_knot(knot::TorusKnot{T}, n_segments) where {T}
     for i in 0:n_segments
         t = 2π * i / n_segments
         # Parametric coordinates in local frame
-        x_loc = (knot.R + knot.r * cos(knot.q * t)) * cos(knot.p * t)
-        y_loc = (knot.R + knot.r * cos(knot.q * t)) * sin(knot.p * t)
-        z_loc = knot.r * sin(knot.q * t)
+        sin_qt, cos_qt = sincos(knot.q * t)
+        sin_pt, cos_pt = sincos(knot.p * t)
+        R_eff = knot.R + knot.r * cos_qt
+        x_loc = R_eff * cos_pt
+        y_loc = R_eff * sin_pt
+        z_loc = knot.r * sin_qt
 
         # Transform to global frame
         points[i + 1] = knot.center + x_loc * u + y_loc * v + z_loc * n

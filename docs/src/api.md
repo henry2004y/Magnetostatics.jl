@@ -14,6 +14,8 @@ ForceFreeHarrisSheet
 BifurcatedHarrisSheet
 FadeevIsland
 Dipole
+TorusKnot
+TrefoilKnot
 InfiniteWire
 CurrentLoopAnalytic
 ```
@@ -51,6 +53,7 @@ compute_surface_current
 
 ```@docs
 discretize_loop
+discretize_knot
 getB_loop
 set_current_wire!
 set_current_wire

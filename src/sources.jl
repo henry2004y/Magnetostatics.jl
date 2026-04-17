@@ -81,7 +81,7 @@ struct TorusKnot{T} <: AbstractCurrentSource
     normal::SVector{3, T}
     up::SVector{3, T}
 
-    function TorusKnot(R, r, p, q, current, center = [0, 0, 0], normal = [0, 0, 1], up = [1, 0, 0])
+    function TorusKnot(R, r, p, q, current, center = SA[0, 0, 0], normal = SA[0, 0, 1], up = SA[1, 0, 0])
         T = promote_type(
             typeof(R), typeof(r), typeof(current), eltype(center),
             eltype(normal), eltype(up)

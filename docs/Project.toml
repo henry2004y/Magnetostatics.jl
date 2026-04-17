@@ -11,5 +11,5 @@ UniformStreamlines = "d45a1faf-ed48-5bcd-af90-6f9b3352014e"
 
 [compat]
 CairoMakie = "0.15"
-DocumenterVitepress = "0.2, 0.3"
+DocumenterVitepress = "0.2"
 UniformStreamlines = "0.2"
