@@ -27,21 +27,30 @@ println("B at $r: $B [T]")
 xs = range(-5, 5, length=51)
 zs = range(-2, 2, length=21)
 
-Bx = [sheet(SVector(x, 0.0, z))[1] for x in xs, z in zs]
+function field(x)
+    B = sheet(SA[x[1], 0.0, x[2]])
+    return B[SA[1,3]]
+end
 
-fig = Figure(size = (800, 400), fontsize=20)
+fig = Figure(size = (800, 350), fontsize=20)
 ax = Axis(fig[1, 1];
-    xlabel="x", ylabel="z", aspect=DataAspect(), title="Harris Sheet Field (Bx)")
+    xlabel="x", ylabel="z", aspect=DataAspect(), 
+    title="Harris Sheet Magnetic Field")
 
-hm = heatmap!(ax, xs, zs, Bx, colormap=:balance)
-Colorbar(fig[1, 2], hm, label="Bx")
+# Generate uniform field lines
+str = evenstream(xs, zs, field; min_density=1.5, max_density=3.0)
+# Color by Bx component to show the reversal
+color = colorize(str, :u)
+cmax = maximum(abs, filter(!isnan, color))
+crange = (-cmax, cmax)
+colormap = Reverse(:RdBu)
 
-ps = [Point2f(x, z) for x in xs[5:5:end-5], z in zs[1:3:end]]
-ns = [Vec2f(sheet(SVector(x, 0.0, z))[1], sheet(SVector(x, 0.0, z))[3])
-    for x in xs[5:5:end-5], z in zs[1:3:end]]
-Bxs = [sheet(SVector(x, 0.0, z))[1] for x in xs[5:5:end-5], z in zs[1:3:end]]
+sl = streamlines!(ax, str; 
+    color, colormap, 
+    linewidth=1.8,
+    with_arrows=true)
 
-arrows2d!(ax, vec(ps), vec(ns); lengthscale=0.6, color=vec(Bxs), colormap=:rain)
+Colorbar(fig[1, 2]; limits=crange, colormap, label="Bx [T]")
 
 fig
 ```
@@ -132,19 +141,31 @@ fadeev = FadeevIsland(B0, L, Lx, ε)
 xs = range(-20, 20, length=100)
 zs = range(-5, 5, length=50)
 
-# Calculate B components for streamplot
-# Bx = -B0 * sinh(z/L) / denom
-# Bz = -B0 * L * ε * sin(x/Lx) / Lx / denom
-
-fig = Figure(size=(800, 400))
-ax = Axis(fig[1, 1], xlabel="x", ylabel="z", title="Fadeev Island Magnetic Field Lines")
-
-@inbounds function field(x)
-    return fadeev(SVector(x[1], 0, x[2]))[SA[1,3]]
+function field(x)
+    B = fadeev(SA[x[1], 0.0, x[2]])
+    return B[SA[1,3]]
 end
 
-# Streamlines to visualize the islands
-str = evenstream(xs, zs, field)
-streamlines!(ax, str; color = :white, linewidth = 1.5, with_arrows = true)
+fig = Figure(size = (800, 280), fontsize=20)
+ax = Axis(fig[1, 1];
+    xlabel="x", ylabel="z", aspect=DataAspect(),
+    limits = (-20, 20, -5, 5), 
+    title="Fadeev Island Magnetic Field Lines")
+
+# Generate uniform field lines
+str = evenstream(xs, zs, field; min_density=1.5, max_density=3.0)
+# Color by Bx component
+color = colorize(str, :u)
+cmax = maximum(abs, filter(!isnan, color))
+crange = (-cmax, cmax)
+colormap = Reverse(:RdBu)
+
+sl = streamlines!(ax, str; 
+    color, colormap, 
+    linewidth=1.5,
+    with_arrows=true)
+
+Colorbar(fig[1, 2]; limits=crange, colormap, label="Bx [T]")
+
 fig
 ```
