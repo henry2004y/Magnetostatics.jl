@@ -88,7 +88,7 @@ We visualize the magnetosphere in the X-Z plane (GSM coordinates), showing the c
 xs = range(-30, 15, length=100)
 zs = range(-20, 20, length=100)
 
-@inbounds function get_B_xz(p)
+function get_B_xz(p)
     B = mag_model(SVector(p[1], 0.0, p[2]))
     return Point2f(B[1], B[3])
 end
