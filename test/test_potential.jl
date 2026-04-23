@@ -131,7 +131,7 @@ using LinearAlgebra
         r_large = SVector(0.0, 0.0, 1000.0 * L_tail) # z/L = 1000, would overflow cosh
         A_large = solve(solverA, tail, r_large)
         @test all(isfinite, A_large)
-        @test A_large[2] ≈ -B0_tail * L_tail * (1000.0 - log(2.0)) rtol=1e-5
+        @test A_large[2] ≈ -B0_tail * L_tail * (1000.0 - log(2.0)) rtol = 1.0e-5
     end
 
     @testset "UniformField" begin
