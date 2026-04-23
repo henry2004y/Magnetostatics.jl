@@ -17,13 +17,13 @@ Construct the topology of Tokamak.
 function get_tokamak_topology(R0, a)
     nθ = LinRange(0, 2π, 30)
     nζ = LinRange(0, 2π, 30)
-    nx = [R0 * cos(ζ) + a * cos(θ) * cos(ζ) for θ in nθ, ζ in nζ]
-    ny = [R0 * sin(ζ) + a * cos(θ) * sin(ζ) for θ in nθ, ζ in nζ]
-    nz = [a * sin(θ) for θ in nθ, ζ in nζ]
-    points = vec([Point3f(xv, yv, zv) for (xv, yv, zv) in zip(nx, ny, nz)])
-    faces = decompose(QuadFace{GLIndex}, Tesselation(Rect(0, 0, 1, 1), size(nz)))
+    points = [let (sinθ, cosθ) = sincos(θ), (sinζ, cosζ) = sincos(ζ)
+                  Point3f(
+                    (R0 + a * cosθ) * cosζ, (R0 + a * cosθ) * sinζ, a * sinθ)
+              end for θ in nθ, ζ in nζ]
+    faces = decompose(QuadFace{GLIndex}, Tesselation(Rect(0, 0, 1, 1), size(points)))
 
-    return GeometryBasics.Mesh(points, faces)
+    return GeometryBasics.Mesh(vec(points), faces)
 end
 
 const a = 1.0  # Coil radius
@@ -120,14 +120,11 @@ B_\theta &= \frac{r B_\zeta}{R_0 q(r/a)}
 ```
 where $B_{\zeta 0}$ is the toroidal field on axis, $q(r/a)$ is the safety factor profile, and $\theta$ is the poloidal angle.
 
-```@example tokamak_q
-using Magnetostatics, StaticArrays, LinearAlgebra
-using CairoMakie, UniformStreamlines
-
+```@example tokamak
 # Define q-profile as a function of normalized radius r/a
 q_profile(r_norm) = 1.1 + r_norm^2
 
-const a = 1.0   # Minor radius
+# Minor radius a = 1.0 is already defined
 const R0 = 3.0  # Major radius
 const B0 = 2.0  # Toroidal field on axis
 
@@ -139,7 +136,7 @@ println("B at ($x, $y, $z): $B [T]")
 
 Visualizing the q-profile field:
 
-```@example tokamak_q
+```@example tokamak
 xs = range(R0 - a, R0 + a, length=51)
 zs = range(-a, a, length=51)
 
@@ -176,7 +173,7 @@ fig
 
 Visualizing the 3D field lines with q-profile:
 
-```@example tokamak_q
+```@example tokamak
 tor_mesh = get_tokamak_topology(R0, a)
 
 fig = Figure(size = (800, 700), fontsize=20)
