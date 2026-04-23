@@ -69,7 +69,10 @@ A = (0, -B0 * L * log(cosh(z/L)), 0)
 """
 function solve(::VectorPotential, field::HarrisSheet{T}, r::SVector{3, T}) where {T}
     z, L, B0 = r[3], field.L, field.B0
-    return SVector(zero(T), -B0 * L * log(cosh(z / L)), zero(T))
+    z_norm = abs(z / L)
+    # Stable implementation of log(cosh(x))
+    val = z_norm + log1p(exp(-2 * z_norm)) - log(T(2))
+    return SVector(zero(T), -B0 * L * val, zero(T))
 end
 
 """
