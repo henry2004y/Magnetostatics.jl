@@ -8,8 +8,10 @@ LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 Magnetostatics = "e551bd30-f216-4325-9989-532520624021"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 UniformStreamlines = "d45a1faf-ed48-5bcd-af90-6f9b3352014e"
+GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 
 [compat]
 CairoMakie = "0.15"
 DocumenterVitepress = "0.2, 0.3"
 UniformStreamlines = "0.2"
+GeometryBasics = "0.5"

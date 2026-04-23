@@ -7,8 +7,8 @@ Original: [Tokamak-Fusion-Reactor](https://github.com/BoschSamuel/Simulation-of-
 
 # Arguments
 
-  - `r`: location, vector of length 3 [m]
-  - `x,y,z`: location [m]
+  - `r`: location, vector of length 3 in [m].
+  - `x,y,z`: location in [m].
   - `a`: radius of each coil in [m].
   - `b`: radius of central region in [m].
   - `ICoil`: current in the coil times number of windings in [A].
