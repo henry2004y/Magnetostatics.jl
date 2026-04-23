@@ -11,12 +11,22 @@ Earth's intrinsic magnetic field is primarily dipolar. We use the `Dipole` model
 
 ## 2. The Magnetopause: Image Dipole Method
 
-To model the shielding effect of the Chapman-Ferraro currents at the magnetopause, we employ the method of images. By placing an "image dipole" upstream in the solar wind, we can cancel the normal component of the magnetic field at a specified standoff distance $R_{\text{mp}}$. For a subsolar standoff distance $R_{\text{mp}}$ along the x-axis, the image dipole is placed at $x = 2R_{\text{mp}}$.
+To model the shielding effect of the Chapman-Ferraro currents, we use a smooth scalar weighting function $w(\mathbf{r})$ that transitions from 1 inside the magnetosphere to 0 in the solar wind. Instead of applying this to the magnetic field directly, we apply it to the **magnetic vector potential** $\mathbf{A}$.
 
-## 3. The Magnetotail: The Harris Current Sheet
+The total vector potential is:
+$$\mathbf{A}_{\text{total}} = w(\mathbf{r}) \mathbf{A}_{\text{inner}} + (1 - w(\mathbf{r})) \mathbf{A}_{\text{outer}}$$
+where $\mathbf{A}_{\text{inner}}$ contains the dipole, image dipole, and magnetotail, and $\mathbf{A}_{\text{outer}}$ represents the IMF. Taking the curl analytically ensures the total field is perfectly divergence-free ($\nabla \cdot \mathbf{B} = 0$):
+$$\mathbf{B}_{\text{total}} = w \mathbf{B}_{\text{inner}} + (1 - w) \mathbf{B}_{\text{outer}} + \nabla w \times (\mathbf{A}_{\text{inner}} - \mathbf{A}_{\text{outer}})$$
+The third term $\nabla w \times (\mathbf{A}_{\text{inner}} - \mathbf{A}_{\text{outer}})$ analytically generates the magnetopause surface currents within a transition layer of thickness $d$. We define the boundary as a paraboloid of revolution: $f(\mathbf{r}) = x - R_{\text{mp}} + (y^2 + z^2) / (2R_{\text{mp}})$, with $w(\mathbf{r}) = \frac{1}{2}(1 - \tanh(f/d))$.
 
-The nightside magnetotail is modeled using the Harris current sheet, which provides a magnetic field reversal across the equatorial plane:
-$$B_x(z) = B_0 \tanh(z/L)$$
+## 3. The Magnetotail: Stretching and Reconnection
+
+The Earth's magnetotail is an elongated region where magnetic field lines are stretched far into the nightside. We model this complex structure using two primary components:
+
+1. **The Harris Current Sheet**: This provides the characteristic magnetic field reversal across the equatorial plane:
+   $$B_x(z) = B_0 \tanh(z/L)$$
+   This component represents the effect of the cross-tail current and is responsible for the elongated "tail-like" appearance of the field lines.
+2. **The Inner Southward Field**: A realistic magnetosphere features a magnetic null point (X-line) where reconnection can occur. Since the Earth's intrinsic field is northward ($B_z > 0$) on the nightside equator, an X-line can only form if there is a competing southward field contribution. We introduce a background southward field $\mathbf{B}_{\text{tail}, z}$ to represent the combined effect of the tail current sheet and partial IMF penetration. The position of the X-line is determined by the balance between this component and the planetary dipole.
 
 ## 4. The Interplanetary Magnetic Field (IMF)
 
@@ -34,7 +44,9 @@ const BEQ = 31000.0  # Field at equator [nT]
 const RMP = 10.0     # Magnetopause standoff distance [RE]
 const B0_tail = 20.0 # Tail field strength [nT]
 const L_tail = 2.0   # Tail sheet half-thickness [RE]
-const B_imf = SVector(0.0, 0.0, -10.0) # Southward IMF [nT]
+const DMP = 1.0      # Magnetopause thickness [RE]
+const B_imf = UniformField(SVector(0.0, 0.0, -10.0)) # Southward IMF [nT]
+const B_tail_z = UniformField(SVector(0.0, 0.0, -5.0)) # Southward field inside magnetosphere [nT]
 
 # Magnetic moments
 # We scale the moment M such that (μ0_4π * M / RE^3) = BEQ
@@ -57,22 +69,48 @@ tail = HarrisSheet(B0_tail, L_tail)
 
 A composite field model for Earth's magnetosphere.
 """
-struct SuperposedEarthField{D, T, S} <: AbstractMagneticField
+struct SuperposedEarthField{D, T, U, S} <: AbstractMagneticField
     dipole_intrinsic::D
     dipole_mp::D
     tail::T
-    B_imf::SVector{3, S}
+    imf::U
+    tail_z::U
     image_pos::SVector{3, S}
+    r_mp::S
+    d_mp::S
 end
+
+
 function (f::SuperposedEarthField)(r)
-    B_int = f.dipole_intrinsic(r)
-    B_mp = f.dipole_mp(r - f.image_pos)
-    B_tail = f.tail(r)
-    return B_int + B_mp + B_tail + f.B_imf
+    # 1. Geometry and weighting function
+    # Paraboloid: x - Rmp + (y^2 + z^2)/(2Rmp) = 0
+    x, y, z = r[1], r[2], r[3]
+    dist = x - f.r_mp + (y^2 + z^2) / (2 * f.r_mp)
+    w = 0.5 * (1 - tanh(dist / f.d_mp))
+    
+    # Gradient of weighting function
+    dw_ddist = -0.5 * sech(dist / f.d_mp)^2 / f.d_mp
+    grad_dist = SVector(1.0, y / f.r_mp, z / f.r_mp)
+    grad_w = dw_ddist * grad_dist
+    
+    # 2. Inner components (Magnetosphere)
+    # We include a southward B_tail_z representing tail current contributions
+    B_inner = f.dipole_intrinsic(r) + f.dipole_mp(r - f.image_pos) + f.tail(r) + f.tail_z(r)
+    A_inner = vector_potential(f.dipole_intrinsic, r) + 
+              vector_potential(f.dipole_mp, r - f.image_pos) + 
+              vector_potential(f.tail, r) +
+              vector_potential(f.tail_z, r)
+    
+    # 3. Outer components (Solar Wind)
+    B_outer = f.imf(r)
+    A_outer = vector_potential(f.imf, r)
+    
+    # 4. Total B = w*B_inner + (1-w)*B_outer + grad_w x (A_inner - A_outer)
+    return w * B_inner + (1 - w) * B_outer + cross(grad_w, A_inner - A_outer)
 end
 
 # Instantiate the model
-mag_model = SuperposedEarthField(dipole_intrinsic, dipole_mp, tail, B_imf, image_pos)
+mag_model = SuperposedEarthField(dipole_intrinsic, dipole_mp, tail, B_imf, B_tail_z, image_pos, RMP, DMP)
 
 # Query at a point (e.g., 5 RE on the nightside)
 r_test = SVector(-5.0, 0.0, 0.0)
@@ -95,23 +133,23 @@ end
 
 Bmag = [norm(mag_model(SVector(x, 0.0, z))) for x in xs, z in zs]
 
-fig = Figure(size = (900, 600), fontsize=20)
+fig = Figure(size = (850, 700), fontsize=20)
 ax = Axis(fig[1, 1], 
-    xlabel="X [RE]", ylabel="Z [RE]", 
+    xlabel=L"X [$R_E$]", ylabel=L"Z [$R_E$]", 
     title="Analytical Earth Magnetosphere Model",
     aspect=DataAspect())
 
 # Heatmap of field strength
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1.0), 
-    colormap=:viridis, colorrange=(0, 5))
-Colorbar(fig[1, 2], hm, label="log10(|B| [nT])")
+    colormap=:turbo, colorrange=(0, 5))
+Colorbar(fig[1, 2], hm, label=L"$\log_{10}$(|B| [nT])")
 
 # Streamlines
 str = evenstream(xs, zs, get_B_xz; min_density=2.0)
-streamlines!(ax, str; color = :white, linewidth = 1.0, with_arrows = true)
+streamlines!(ax, str; color = :black, linewidth = 1.0, with_arrows = true)
 
 # Plot Earth
-poly!(ax, Circle(Point2f(0, 0), RE), color=:blue)
+poly!(ax, Circle(Point2f(0, 0), RE), color=:gray)
 
 limits!(ax, -30, 15, -20, 20)
 fig

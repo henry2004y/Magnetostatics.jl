@@ -25,3 +25,10 @@ abstract type AbstractSolver end
 Return the current density vector [A/m²] at position `r` for the given magnetic field model.
 """
 function current_density end
+
+"""
+    vector_potential(field::AbstractMagneticField, r)
+
+Return the magnetic vector potential vector **A** at position `r` for the given field model.
+"""
+function vector_potential end

@@ -1,3 +1,9 @@
+module test_potential
+using Test
+using Magnetostatics
+using StaticArrays
+using LinearAlgebra
+
 @testset "Vector Potential Solver" begin
     # Numerical Curl helper
     function curl_A(solver, source, r, h = 1.0e-5)
@@ -100,4 +106,57 @@
         @test solverA(loop, Tuple(r)) ≈ A_calc
         @test solverA(loop, Vector(r)) ≈ A_calc
     end
+
+    @testset "HarrisSheet" begin
+        B0_tail, L_tail = 20.0, 2.0
+        tail = HarrisSheet(B0_tail, L_tail)
+        r = SVector(1.0, 2.0, 3.0)
+
+        A_calc = solve(solverA, tail, r)
+        Ay_expected = -B0_tail * L_tail * log(cosh(r[3] / L_tail))
+        @test A_calc ≈ SVector(0.0, Ay_expected, 0.0)
+
+        @test solve(solverA, tail, Tuple(r)) ≈ A_calc
+        @test solve(solverA, tail, Vector(r)) ≈ A_calc
+        @test solverA(tail, r) ≈ A_calc
+        @test solverA(tail, Tuple(r)) ≈ A_calc
+        @test solverA(tail, Vector(r)) ≈ A_calc
+
+        # Numeric curl check
+        B_numeric = curl_A(solverA, tail, r)
+        B_exact = tail(r)
+        @test isapprox(B_numeric, B_exact, rtol = 1.0e-3)
+    end
+
+    @testset "UniformField" begin
+        B0 = SVector(0.0, 0.0, -10.0)
+        field = UniformField(B0)
+        r = SVector(1.0, 2.0, 3.0)
+
+        A_calc = solve(solverA, field, r)
+        A_expected = 0.5 * cross(B0, r)
+        @test A_calc ≈ A_expected
+
+        @test solve(solverA, field, Tuple(r)) ≈ A_calc
+        @test solve(solverA, field, Vector(r)) ≈ A_calc
+        @test solverA(field, r) ≈ A_calc
+        @test solverA(field, Tuple(r)) ≈ A_calc
+        @test solverA(field, Vector(r)) ≈ A_calc
+
+        # Numeric curl check
+        B_numeric = curl_A(solverA, field, r)
+        B_exact = field(r)
+        @test isapprox(B_numeric, B_exact, rtol = 1.0e-3)
+    end
+
+    @testset "vector_potential convenience" begin
+        B0 = SVector(1.0, 2.0, 3.0)
+        field = UniformField(B0)
+        r = SVector(0.1, 0.2, 0.3)
+        @test vector_potential(field, r) ≈ solve(solverA, field, r)
+        @test vector_potential(field, Tuple(r)) ≈ solve(solverA, field, r)
+        @test vector_potential(field, Vector(r)) ≈ solve(solverA, field, r)
+    end
 end
+
+end # module test_potential

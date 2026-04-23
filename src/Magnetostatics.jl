@@ -21,8 +21,8 @@ include("solvers/potential.jl")
 include("utils.jl")
 
 export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, BiotSavart, FFTSolver,
-    VectorPotential, PoissonSolver, solve, Wire, CurrentLoop, TorusKnot, TrefoilKnot,
-    HarrisSheet, Dipole, CurrentLoopAnalytic, InfiniteWire,
+    VectorPotential, PoissonSolver, solve, vector_potential, Wire, CurrentLoop, TorusKnot, TrefoilKnot,
+    HarrisSheet, Dipole, CurrentLoopAnalytic, InfiniteWire, UniformField,
     AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarrisSheet, FadeevIsland,
     SurfaceCurrentMesh, compute_surface_current, current_density,
     AbstractBoundary, OpenBoundary, PeriodicBoundary, ConductingWall, ConductingSphere,
