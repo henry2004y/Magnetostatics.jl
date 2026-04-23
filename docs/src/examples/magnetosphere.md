@@ -81,32 +81,41 @@ struct SuperposedEarthField{D, T, U, S} <: AbstractMagneticField
 end
 
 
-function (f::SuperposedEarthField)(r)
-    # 1. Geometry and weighting function
-    # Paraboloid: x - Rmp + (y^2 + z^2)/(2Rmp) = 0
+# Helper functions for the magnetosphere components
+@inline inner_field(f::SuperposedEarthField{D, T, U, S}, r) where {D, T, U, S} = 
+    f.dipole_intrinsic(r) + f.dipole_mp(r .- f.image_pos) + f.tail(r) + f.tail_z(r)
+
+@inline outer_field(f::SuperposedEarthField, r) = f.imf(r)
+
+@inline inner_potential(f::SuperposedEarthField{D, T, U, S}, r) where {D, T, U, S} = 
+    vector_potential(f.dipole_intrinsic, r) + vector_potential(f.dipole_mp, r .- f.image_pos) + 
+    vector_potential(f.tail, r) + vector_potential(f.tail_z, r)
+
+@inline outer_potential(f::SuperposedEarthField, r) = vector_potential(f.imf, r)
+
+@inline function Magnetostatics.vector_potential(f::SuperposedEarthField{D, T, U, S}, r) where {D, T, U, S}
+    dist = r[1] - f.r_mp + (r[2]^2 + r[3]^2) / (2 * f.r_mp)
+    w = 0.5 * (1 - tanh(dist / f.d_mp))
+    return w * inner_potential(f, r) + (1 - w) * outer_potential(f, r)
+end
+
+@inline function (f::SuperposedEarthField{D, T, U, S})(r) where {D, T, U, S}
+    # Geometry and weighting function
     x, y, z = r[1], r[2], r[3]
     dist = x - f.r_mp + (y^2 + z^2) / (2 * f.r_mp)
     w = 0.5 * (1 - tanh(dist / f.d_mp))
     
     # Gradient of weighting function
     dw_ddist = -0.5 * sech(dist / f.d_mp)^2 / f.d_mp
-    grad_dist = SVector(1.0, y / f.r_mp, z / f.r_mp)
+    grad_dist = SVector(one(S), y / f.r_mp, z / f.r_mp)
     grad_w = dw_ddist * grad_dist
     
-    # 2. Inner components (Magnetosphere)
-    # We include a southward B_tail_z representing tail current contributions
-    B_inner = f.dipole_intrinsic(r) + f.dipole_mp(r - f.image_pos) + f.tail(r) + f.tail_z(r)
-    A_inner = vector_potential(f.dipole_intrinsic, r) + 
-              vector_potential(f.dipole_mp, r - f.image_pos) + 
-              vector_potential(f.tail, r) +
-              vector_potential(f.tail_z, r)
+    # Field and Potential evaluation
+    B_in, B_out = inner_field(f, r), outer_field(f, r)
+    A_in, A_out = inner_potential(f, r), outer_potential(f, r)
     
-    # 3. Outer components (Solar Wind)
-    B_outer = f.imf(r)
-    A_outer = vector_potential(f.imf, r)
-    
-    # 4. Total B = w*B_inner + (1-w)*B_outer + grad_w x (A_inner - A_outer)
-    return w * B_inner + (1 - w) * B_outer + cross(grad_w, A_inner - A_outer)
+    # Total B
+    return w * B_in + (1 - w) * B_out + cross(grad_w, A_in - A_out)
 end
 
 # Instantiate the model
