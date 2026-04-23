@@ -48,7 +48,7 @@ image_pos = SVector(2 * RMP, 0.0, 0.0)
 M_mp = M_int # Image dipole moment for cancellation
 
 # Define components
-dipole_int = Dipole(M_int)
+dipole_intrinsic = Dipole(M_int)
 dipole_mp = Dipole(M_mp)
 tail = HarrisSheet(B0_tail, L_tail)
 
@@ -57,26 +57,22 @@ tail = HarrisSheet(B0_tail, L_tail)
 
 A composite field model for Earth's magnetosphere.
 """
-struct SuperposedEarthField <: AbstractMagneticField end
-
+struct SuperposedEarthField{D, T, S} <: AbstractMagneticField
+    dipole_intrinsic::D
+    dipole_mp::D
+    tail::T
+    B_imf::SVector{3, S}
+    image_pos::SVector{3, S}
+end
 function (f::SuperposedEarthField)(r)
-    # 1. Internal Dipole
-    B_int = dipole_int(r)
-    
-    # 2. Magnetopause Image Dipole
-    # B_mp(r) = B_dipole(r - r_image)
-    r_img = r - image_pos
-    B_mp = dipole_mp(r_img)
-    
-    # 3. Magnetotail
-    B_tail = tail(r)
-    
-    # 4. IMF
-    return B_int + B_mp + B_tail + B_imf
+    B_int = f.dipole_intrinsic(r)
+    B_mp = f.dipole_mp(r - f.image_pos)
+    B_tail = f.tail(r)
+    return B_int + B_mp + B_tail + f.B_imf
 end
 
 # Instantiate the model
-mag_model = SuperposedEarthField()
+mag_model = SuperposedEarthField(dipole_intrinsic, dipole_mp, tail, B_imf, image_pos)
 
 # Query at a point (e.g., 5 RE on the nightside)
 r_test = SVector(-5.0, 0.0, 0.0)
@@ -92,7 +88,7 @@ We visualize the magnetosphere in the X-Z plane (GSM coordinates), showing the c
 xs = range(-30, 15, length=100)
 zs = range(-20, 20, length=100)
 
-function get_B_xz(p)
+@inbounds function get_B_xz(p)
     B = mag_model(SVector(p[1], 0.0, p[2]))
     return Point2f(B[1], B[3])
 end
