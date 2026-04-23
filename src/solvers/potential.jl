@@ -62,6 +62,30 @@ function solve(::VectorPotential, source::Dipole{T}, r::SVector{3, T}) where {T}
 end
 
 """
+    solve(solver::VectorPotential, field::HarrisSheet, r)
+
+Compute vector potential A for a Harris current sheet.
+A = (0, -B0 * L * log(cosh(z/L)), 0)
+"""
+function solve(::VectorPotential, field::HarrisSheet{T}, r::SVector{3, T}) where {T}
+    z, L, B0 = r[3], field.L, field.B0
+    z_norm = abs(z / L)
+    # Stable implementation of log(cosh(x))
+    val = z_norm + log1p(exp(-2 * z_norm)) - log(T(2))
+    return SVector(zero(T), -B0 * L * val, zero(T))
+end
+
+"""
+    solve(solver::VectorPotential, field::UniformField, r)
+
+Compute vector potential A for a uniform magnetic field.
+A = 0.5 * (B x r)
+"""
+function solve(::VectorPotential, field::UniformField{T}, r::SVector{3, T}) where {T}
+    return 0.5 * cross(field.B0, r)
+end
+
+"""
     solve(solver::VectorPotential, source::CurrentLoop, r::AbstractVector)
 
 Compute vector potential A for a circular current loop.
@@ -121,6 +145,14 @@ function solve(solver::VectorPotential, source::CurrentLoop{T}, r) where {T}
     return solve(solver, source, SVector{3, T}(r))
 end
 
+function solve(solver::VectorPotential, source::HarrisSheet{T}, r) where {T}
+    return solve(solver, source, SVector{3, T}(r))
+end
+
+function solve(solver::VectorPotential, source::UniformField{T}, r) where {T}
+    return solve(solver, source, SVector{3, T}(r))
+end
+
 # ConductingWall: sum direct + image potential
 function solve(
         solver::VectorPotential{ConductingWall}, source::Wire{T},
@@ -138,6 +170,11 @@ end
 # Make struct callable
 function (solver::VectorPotential)(source, r)
     return solve(solver, source, r)
+end
+
+# Convenience function
+function vector_potential(field::AbstractMagneticField, r)
+    return solve(VectorPotential(), field, r)
 end
 
 """
