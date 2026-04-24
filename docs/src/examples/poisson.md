@@ -5,7 +5,7 @@ The magnetostatic vector potential satisfies the Poisson equation
 \nabla^2 \mathbf{A} = -\mu_0 \mathbf{J},
 ```
 where ``\mathbf{A}`` is related to the magnetic field via ``\mathbf{B} = \nabla \times \mathbf{A}``.
-The three Cartesian components of ``\mathbf{A}`` decouple into independent scalar Poisson problems solved on a Cartesian grid using a sparse 7-point finite-difference Laplacian with homogeneous Dirichlet boundary conditions (``\mathbf{A} = 0`` at domain faces). Each axis may have a different spacing ($\Delta x$, $\Delta y$, $\Delta z$); the solver derives these automatically from the grid ranges passed to `PoissonSolver`.
+The three Cartesian components of ``\mathbf{A}`` decouple into independent scalar Poisson problems solved on a Cartesian grid using a sparse 7-point finite-difference Laplacian with homogeneous Dirichlet boundary conditions (``\mathbf{A} = 0`` at domain faces). Each axis may have a different spacing (``\Delta x``, ``\Delta y``, ``\Delta z``); the solver derives these automatically from the grid ranges passed to `PoissonSolver`.
 
 `PoissonSolver` wraps any `LinearSolve.jl` algorithm.  The default is the iterative conjugate-gradient (`KrylovJL_CG`), while sparse-direct factorizations such as `KLUFactorization` are also supported.
 
