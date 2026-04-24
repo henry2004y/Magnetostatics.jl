@@ -29,7 +29,8 @@ export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, BiotSavart,
     PrescribedBoundary,
     discretize_loop, discretize_knot, getB_loop, set_current_wire!, set_current_wire,
     compute_curl!, compute_curl, getB_mirror, getB_bottle, getB_tokamak_coil,
-    getB_tokamak_profile, getB_zpinch, image_source, dipole_fieldline, sph2cart, sphere_mesh
+    getB_tokamak_profile, getB_zpinch, image_source, dipole_fieldline, sph2cart, sphere_mesh,
+    AnalyticalMagnetosphere, NullField
 
 include("precompile.jl")
 

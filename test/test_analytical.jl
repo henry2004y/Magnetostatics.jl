@@ -9,6 +9,14 @@
         @test isapprox(harris(SVector(0.0, 0.0, -100.0))[1], -B0, rtol = 1.0e-5)
     end
 
+    @testset "UniformField" begin
+        B0 = SVector(1.0, 2.0, 3.0)
+        field = UniformField(B0)
+        r = SVector(4.0, 5.0, 6.0)
+
+        @test field(r) == field(4.0, 5.0, 6.0) == field(Tuple(r)) == field(Vector(r)) == B0
+    end
+
     @testset "Asymmetric Harris Sheet" begin
         B1, B2, L = 2.0, 1.0, 2.0
         harris = AsymmetricHarrisSheet(B1, B2, L)
@@ -282,6 +290,33 @@
         # getB_zpinch
         @test getB_zpinch(r_tuple, 1.0, 0.1) isa SVector &&
             getB_zpinch(r_tuple, 1.0, 0.1) ≈ getB_zpinch(SVector(r_tuple...), 1.0, 0.1)
+    end
+
+    @testset "NullField" begin
+        field = NullField()
+        r = SVector(1.0, 2.0, 3.0)
+        @test field(r) == SVector(0.0, 0.0, 0.0)
+        @test vector_potential(field, r) == SVector(0.0, 0.0, 0.0)
+    end
+
+    @testset "AnalyticalMagnetosphere" begin
+        # Test basic instantiation with defaults
+        mag = AnalyticalMagnetosphere()
+        r = SVector(0.0, 0.0, 0.0)
+        # All defaults are NullField, so result should be zero
+        @test mag(r) == SVector(0.0, 0.0, 0.0)
+        @test vector_potential(mag, r) == SVector(0.0, 0.0, 0.0)
+
+        # Test with a simple dipole
+        dip = Dipole(SVector(0.0, 0.0, 1.0))
+        mag_dip = AnalyticalMagnetosphere(; dipole_intrinsic = dip, r_mp = 10.0, has_shock = false)
+
+        # Inside the magnetosphere, at the origin, it should be zero (due to singularity handling in Dipole)
+        @test mag_dip(r) == SVector(0.0, 0.0, 0.0)
+
+        # Test field at some distance
+        r_test = SVector(1.0, 0.0, 0.0)
+        @test isapprox(mag_dip(r_test), dip(r_test), atol = 1.0e-5)
     end
 
     @testset "Struct Callables" begin
