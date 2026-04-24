@@ -23,10 +23,7 @@ Visualizing the field in the xy-plane (perpendicular to wire):
 xs = range(-0.5, 0.5, length=51)
 ys = range(-0.5, 0.5, length=51)
 
-@inbounds function field_xy_zpinch(x)
-    B = getB_zpinch(x[1], x[2], 0.0, I, a)
-    return B[SA[1,2]]
-end
+field_xy_zpinch(x, y) = getB_zpinch(x, y, 0.0, I, a)[SA[1,2]]
 
 Bmag = [norm(getB_zpinch(x, y, 0.0, I, a)) for x in xs, y in ys]
 

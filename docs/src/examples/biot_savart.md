@@ -44,7 +44,7 @@ Bmag = [norm(solve(solver, wire, SVector(x, 0.0, z))) for x in xs, z in zs]
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-str = evenstream(xs, zs, (x, z) -> field_xz_bs(x, z)[1], (x, z) -> field_xz_bs(x, z)[2])
+str = evenstream(xs, zs, field_xz_bs)
 streamlines!(ax, str; color = :white, linewidth = 1.0, with_arrows = true)
 
 fig
@@ -89,9 +89,7 @@ ax_wall  = Axis(fig_wall[1, 1];
 hm_w = heatmap!(ax_wall, xs_w, zs_w, log10.(Bmag_w .+ 1e-9); colormap=:plasma)
 Colorbar(fig_wall[1, 2], hm_w; label="log10(|B| / T)")
 
-str_w = evenstream(xs_w, zs_w,
-    (x, z) -> B_wall(x, z)[1],
-    (x, z) -> B_wall(x, z)[3])
+str_w = evenstream(xs_w, zs_w, (x, z) -> B_wall(x, z)[SA[1, 3]])
 streamlines!(ax_wall, str_w; color = :white, linewidth = 1.0, with_arrows = true)
 
 # Wall boundary
@@ -190,11 +188,11 @@ Bmag = [in_sphere(x, z) ? NaN :
 hm = heatmap!(ax2, xs ./ R, zs ./ R, log10.(Bmag .+ 1e-9); colormap=:plasma)
 Colorbar(fig2[1, 2], hm; label="log10(|B| / T)")
 
-@inbounds function field(x)
-    if in_sphere(x[1]*R, x[2]*R)
+function field(x, z)
+    if in_sphere(x*R, z*R)
         SVector(NaN, NaN)
     else
-        B_total(SVector(x[1]*R, 0.0, x[2]*R))[SA[1,3]]
+        B_total(SVector(x*R, 0.0, z*R))[SA[1,3]]
     end
 end
 

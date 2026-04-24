@@ -27,10 +27,7 @@ println("B at $r: $B [T]")
 xs = range(-5, 5, length=51)
 zs = range(-2, 2, length=21)
 
-function field(x)
-    B = sheet(SA[x[1], 0.0, x[2]])
-    return B[SA[1,3]]
-end
+field(x, z) = sheet(SA[x, 0.0, z])[SA[1, 3]]
 
 fig = Figure(size = (800, 350), fontsize=20)
 ax = Axis(fig[1, 1];
@@ -148,10 +145,7 @@ fadeev = FadeevIsland(B0, L, Lx, ε)
 xs = range(-20, 20, length=100)
 zs = range(-5, 5, length=50)
 
-function field(x)
-    B = fadeev(SA[x[1], 0.0, x[2]])
-    return B[SA[1,3]]
-end
+field(x, z) = fadeev(SA[x, 0.0, z])[SA[1, 3]]
 
 fig = Figure(size = (800, 280), fontsize=20)
 ax = Axis(fig[1, 1];
