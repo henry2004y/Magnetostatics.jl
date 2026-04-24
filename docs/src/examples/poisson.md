@@ -70,7 +70,7 @@ B_\phi(r) = \frac{\mu_0 I}{2\pi r}
 
 Two sources of discrepancy are expected and are **not** a sign of grid coarseness:
 
-- **Inside the Gaussian core ($r < w$):** the current is deposited with a Gaussian profile of half-width ``w`` (`width = 3dx`), not on an infinitely thin wire.  Inside the wire the field peaks at a finite value and falls to zero at ``r = 0``, whereas the thin-wire formula diverges.  The analytical formula is valid only for ``r > w``.
+- **Inside the Gaussian core (``r < w``):** the current is deposited with a Gaussian profile of half-width ``w`` (`width = 3dx`), not on an infinitely thin wire.  Inside the wire the field peaks at a finite value and falls to zero at ``r = 0``, whereas the thin-wire formula diverges.  The analytical formula is valid only for ``r > w``.
 - **Near the domain boundary ($r \to L$):** the Dirichlet BCs force ``\mathbf{A} = 0`` at the box faces, suppressing ``\mathbf{A}`` — and hence the curl — below the free-space value.  This is a finite-box artefact, independent of grid resolution.
 
 ```@example poisson
