@@ -316,7 +316,7 @@
 
         # Test field at some distance
         r_test = SVector(1.0, 0.0, 0.0)
-        @test isapprox(mag_dip(r_test), dip(r_test), atol = 1e-5)
+        @test isapprox(mag_dip(r_test), dip(r_test), atol = 1.0e-5)
     end
 
     @testset "Struct Callables" begin

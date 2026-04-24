@@ -33,8 +33,8 @@ A magnetic field that is zero everywhere.
 """
 struct NullField <: AbstractMagneticField end
 
-(::NullField)(r) = SVector(0.0, 0.0, 0.0)
-(::NullField)(x, y, z) = SVector(0.0, 0.0, 0.0)
+(::NullField)(r::AbstractVector{T}) where {T} = zero(SVector{3, T})
+(::NullField)(x, y, z) = zero(SVector{3, promote_type(typeof(x), typeof(y), typeof(z))})
 
 """
     vector_potential(field::AbstractMagneticField, r)
