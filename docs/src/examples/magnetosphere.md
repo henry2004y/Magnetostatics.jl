@@ -13,17 +13,17 @@ Earth's intrinsic magnetic field is primarily dipolar. We use the `Dipole` model
 
 ## 2. The Magnetopause: Image Dipole Method
 
-To model the shielding effect of the Chapman-Ferraro currents, we use a smooth scalar weighting function $w(\mathbf{r})$ that transitions from 1 inside the magnetosphere to 0 in the solar wind. Instead of applying this to the magnetic field directly, we apply it to the **magnetic vector potential** $\mathbf{A}$.
+To model the shielding effect of the Chapman-Ferraro currents, we use a smooth scalar weighting function $w(\mathbf{r})$ that transitions from 1 inside the magnetosphere to 0 in the solar wind. Instead of applying this to the magnetic field directly, we apply it to the **magnetic vector potential** ``\mathbf{A}``.
 
 The total vector potential is:
 ```math
 \mathbf{A}_{\text{total}} = w(\mathbf{r}) \mathbf{A}_{\text{inner}} + (1 - w(\mathbf{r})) \mathbf{A}_{\text{outer}}
 ```
-where $\mathbf{A}_{\text{inner}}$ contains the dipole, image dipole, and magnetotail, and $\mathbf{A}_{\text{outer}}$ represents the IMF. Taking the curl analytically ensures the total field is perfectly divergence-free ($\nabla \cdot \mathbf{B} = 0$):
+where ``\mathbf{A}_{\text{inner}}`` contains the dipole, image dipole, and magnetotail, and ``\mathbf{A}_{\text{outer}}`` represents the IMF. Taking the curl analytically ensures the total field is perfectly divergence-free (``\nabla \cdot \mathbf{B} = 0``):
 ```math
 \mathbf{B}_{\text{total}} = w \mathbf{B}_{\text{inner}} + (1 - w) \mathbf{B}_{\text{outer}} + \nabla w \times (\mathbf{A}_{\text{inner}} - \mathbf{A}_{\text{outer}})
 ```
-The third term $\nabla w \times (\mathbf{A}_{\text{inner}} - \mathbf{A}_{\text{outer}})$ analytically generates the magnetopause surface currents within a transition layer of thickness $d$. We define the boundary as a paraboloid of revolution: $f(\mathbf{r}) = x - R_{\text{mp}} + (y^2 + z^2) / (2R_{\text{mp}})$, with $w(\mathbf{r}) = \frac{1}{2}(1 - \tanh(f/d))$.
+The third term ``\nabla w \times (\mathbf{A}_{\text{inner}} - \mathbf{A}_{\text{outer}})`` analytically generates the magnetopause surface currents within a transition layer of thickness ``d``. We define the boundary as a paraboloid of revolution: ``f(\mathbf{r}) = x - R_{\text{mp}} + (y^2 + z^2) / (2R_{\text{mp}})``, with ``w(\mathbf{r}) = \frac{1}{2}(1 - \tanh(f/d))``.
 
 ## 3. The Magnetotail: Stretching and Reconnection
 
@@ -34,29 +34,29 @@ The Earth's magnetotail is an elongated region where magnetic field lines are st
    B_x(z) = B_0 \tanh(z/L)
    ```
    This component represents the effect of the cross-tail current and is responsible for the elongated "tail-like" appearance of the field lines.
-2. **The Inner Southward Field**: A realistic magnetosphere features a magnetic null point (X-line) where reconnection can occur. Since the Earth's intrinsic field is northward ($B_z > 0$) on the nightside equator, an X-line can only form if there is a competing southward field contribution. We introduce a background southward field $\mathbf{B}_{\text{tail}, z}$ to represent the combined effect of the tail current sheet and partial IMF penetration. The position of the X-line is determined by the balance between this component and the planetary dipole.
+2. **The Inner Southward Field**: A realistic magnetosphere features a magnetic null point (X-line) where reconnection can occur. Since the Earth's intrinsic field is northward (``B_z > 0``) on the nightside equator, an X-line can only form if there is a competing southward field contribution. We introduce a background southward field ``\mathbf{B}_{\text{tail}, z}`` to represent the combined effect of the tail current sheet and partial IMF penetration. The position of the X-line is determined by the balance between this component and the planetary dipole.
 
 ## 4. The Bow Shock and Magnetosheath
 
-To implement a bow shock without breaking the $\nabla\cdot\mathbf{B}=0$ constraint required by TestParticle.jl, we extend the smooth blending method to encompass three distinct spatial domains: the inner magnetosphere, the magnetosheath, and the pristine upstream solar wind.
+To implement a bow shock without breaking the ``\nabla\cdot\mathbf{B}=0`` constraint, we extend the smooth blending method to encompass three distinct spatial domains: the inner magnetosphere, the magnetosheath, and the pristine upstream solar wind.
 
 **Defining the Nested Boundaries**
 
-We utilize two geometric surfaces. The magnetopause is a paraboloid $f(\mathbf{r})=0$. Upstream of the magnetopause lies the bow shock. Because the solar wind flow is deflected and expanded around the obstacle, empirical models typically represent the bow shock as a hyperboloid of revolution:
+We utilize two geometric surfaces. The magnetopause is a paraboloid ``f(\mathbf{r})=0``. Upstream of the magnetopause lies the bow shock. Because the solar wind flow is deflected and expanded around the obstacle, empirical models typically represent the bow shock as a hyperboloid of revolution:
 ```math
 g(x, y, z)=x-R_{\text{bs}}+\sqrt{A(y^2+z^2)+B^2}-B
 ```
-Here, $R_{\text{bs}}$ is the subsolar bow shock standoff distance (where $R_{\text{bs}} > R_{\text{mp}}$), and $A$ and $B$ control the flaring angle of the shock surface.
+Here, ``R_{\text{bs}}`` is the subsolar bow shock standoff distance (where ``R_{\text{bs}} > R_{\text{mp}}``), and ``A`` and ``B`` control the flaring angle of the shock surface.
 From these two surfaces, we generate two independent, smooth step functions using a hyperbolic tangent to dictate the transitions:
-- $w_{\text{mp}}(\mathbf{r})$: Transitions from $1$ (inside the magnetosphere) to $0$ (in the magnetosheath).
-- $w_{\text{bs}}(\mathbf{r})$: Transitions from $1$ (inside the magnetosheath) to $0$ (in the upstream solar wind).
+- ``w_{\text{mp}}(\mathbf{r})``: Transitions from 1 (inside the magnetosphere) to 0 (in the magnetosheath).
+- ``w_{\text{bs}}(\mathbf{r})``: Transitions from 1 (inside the magnetosheath) to 0 (in the upstream solar wind).
 
 **The Three-Region Vector Potential**
 
 To ensure strict divergence-free physics across multiple boundaries, we define vector potentials for all three regions:
-* $\mathbf{A}_{\text{inner}}$: The planetary dipole, image dipole, and tail currents.
-* $\mathbf{A}_{\text{sw}}$: The pristine interplanetary magnetic field (IMF).
-* $\mathbf{A}_{\text{sheath}}$: The compressed and draped magnetic field within the magnetosheath.
+* ``\mathbf{A}_{\text{inner}}``: The planetary dipole, image dipole, and tail currents.
+* ``\mathbf{A}_{\text{sw}}``: The pristine interplanetary magnetic field (IMF).
+* ``\mathbf{A}_{\text{sheath}}``: The compressed and draped magnetic field within the magnetosheath.
 
 We then nest the interpolations. First, construct the field completely external to the magnetopause:
 ```math
@@ -70,25 +70,25 @@ Next, blend this outer field with the inner magnetosphere field:
 
 **Calculating the Total Field and Shock Currents**
 
-When taking the curl to find $\mathbf{B}_{\text{total}}=\nabla\times\mathbf{A}_{\text{total}}$, the resulting field smoothly transitions through all three regions. The nested product rule automatically generates two distinct boundary current layers:
+When taking the curl to find ``\mathbf{B}_{\text{total}}=\nabla\times\mathbf{A}_{\text{total}}``, the resulting field smoothly transitions through all three regions. The nested product rule automatically generates two distinct boundary current layers:
 ```math
 \mathbf{B}_{\text{total}}=w_{\text{mp}}\mathbf{B}_{\text{inner}}+(1-w_{\text{mp}})[w_{\text{bs}}\mathbf{B}_{\text{sheath}}+(1-w_{\text{bs}})\mathbf{B}_{\text{sw}}]+\mathbf{B}_{\text{currents}}
 ```
-The $\mathbf{B}_{\text{currents}}$ term isolates the analytical currents generated at the boundaries:
+The ``\mathbf{B}_{\text{currents}}`` term isolates the analytical currents generated at the boundaries:
 ```math
 \mathbf{B}_{\text{currents}}=\nabla w_{\text{mp}}\times(\mathbf{A}_{\text{inner}}-\mathbf{A}_{\text{outer}})+(1-w_{\text{mp}})[\nabla w_{\text{bs}}\times(\mathbf{A}_{\text{sheath}}-\mathbf{A}_{\text{sw}})]
 ```
-The first cross product represents the Chapman-Ferraro magnetopause currents. The second cross product represents the shock currents flowing on the bow shock surface. By tuning the steepness of the $w_{\text{bs}}$ weighting function, you control the physical thickness of the shock ramp.
+The first cross product represents the Chapman-Ferraro magnetopause currents. The second cross product represents the shock currents flowing on the bow shock surface. By tuning the steepness of the ``w_{\text{bs}}`` weighting function, you control the physical thickness of the shock ramp.
 
 **Formulating the Magnetosheath Field**
 
-To define an accurate $\mathbf{A}_{\text{sheath}}$, the field cannot simply be uniform, as the plasma slows down and the magnetic field lines drape around the magnetopause obstacle. To satisfy the macroscopic jump conditions across the bow shock, the solar wind magnetic field is compressed by a ratio $r_c$.
+To define an accurate ``\mathbf{A}_{\text{sheath}}``, the field cannot simply be uniform, as the plasma slows down and the magnetic field lines drape around the magnetopause obstacle. To satisfy the macroscopic jump conditions across the bow shock, the solar wind magnetic field is compressed by a ratio ``r_c``.
 
-A practical analytical approach is to map the upstream uniform vector potential $\mathbf{A}_{\text{sw}}$ through a continuous coordinate transformation $\mathbf{r}' = \mathcal{T}(\mathbf{r})$ that mimics potential flow around the paraboloid obstacle:
+A practical analytical approach is to map the upstream uniform vector potential ``\mathbf{A}_{\text{sw}}`` through a continuous coordinate transformation ``\mathbf{r}' = \mathcal{T}(\mathbf{r})`` that mimics potential flow around the paraboloid obstacle:
 ```math
 \mathbf{A}_{\text{sheath}}(\mathbf{r})\approx r_c \mathbf{A}_{\text{sw}}(\mathcal{T}(\mathbf{r}))
 ```
-For this implementation, we map the uniform vector potential using $\mathcal{T}(\mathbf{r}) = (f(\mathbf{r}), y, z)$, where $f(\mathbf{r})$ is the magnetopause paraboloid geometry. This analytically stretches and compresses the vector potential, natively capturing the magnetic draping effect and the pile-up of flux on the dayside magnetopause, all while strictly preserving $\nabla\cdot\mathbf{B}=0$ everywhere in the simulation domain.
+For this implementation, we map the uniform vector potential using ``\mathcal{T}(\mathbf{r}) = (f(\mathbf{r}), y, z)``, where ``f(\mathbf{r})`` is the magnetopause paraboloid geometry. This analytically stretches and compresses the vector potential, natively capturing the magnetic draping effect and the pile-up of flux on the dayside magnetopause, all while strictly preserving ``\nabla\cdot\mathbf{B}=0`` everywhere in the simulation domain.
 
 ## Implementation
 
