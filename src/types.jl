@@ -27,6 +27,16 @@ Return the current density vector [A/m²] at position `r` for the given magnetic
 function current_density end
 
 """
+    NullField <: AbstractMagneticField
+
+A magnetic field that is zero everywhere.
+"""
+struct NullField <: AbstractMagneticField end
+
+(::NullField)(r) = SVector(0.0, 0.0, 0.0)
+(::NullField)(x, y, z) = SVector(0.0, 0.0, 0.0)
+
+"""
     vector_potential(field::AbstractMagneticField, r)
 
 Return the magnetic vector potential vector **A** at position `r` for the given field model.

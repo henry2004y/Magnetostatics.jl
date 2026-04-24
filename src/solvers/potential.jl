@@ -81,8 +81,34 @@ end
 Compute vector potential A for a uniform magnetic field.
 A = 0.5 * (B x r)
 """
-function solve(::VectorPotential, field::UniformField{T}, r::SVector{3, T}) where {T}
-    return 0.5 * cross(field.B0, r)
+function solve(::VectorPotential, source::UniformField{T}, r::SVector{3, T}) where {T}
+    return 0.5 * cross(source.B0, r)
+end
+
+"""
+    solve(solver::VectorPotential, field::AnalyticalMagnetosphere, r)
+
+Compute vector potential A for a generalized magnetosphere model.
+"""
+function solve(::VectorPotential, f::AnalyticalMagnetosphere, r::SVector{3, T}) where {T}
+    dist_mp = r[1] - f.r_mp + (r[2]^2 + r[3]^2) / (2 * f.r_mp)
+    w_mp = 0.5 * (1 - tanh(dist_mp / f.d_mp))
+    A = w_mp * Magnetostatics.inner_potential(f, r) +
+        (1 - w_mp) * Magnetostatics.outer_potential(f, r)
+    return A
+end
+
+function solve(solver::VectorPotential, f::AnalyticalMagnetosphere, r)
+    return solve(solver, f, SVector{3, eltype(r)}(r))
+end
+
+"""
+    solve(solver::VectorPotential, field::NullField, r)
+
+Compute vector potential A for a null field.
+"""
+function solve(::VectorPotential, ::NullField, r::SVector{3, T}) where {T}
+    return @SVector zeros(T, 3)
 end
 
 """
