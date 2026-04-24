@@ -3,6 +3,7 @@
             loop = CurrentLoop(1.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0)),
             harris = HarrisSheet(1.0, 1.0),
             dipole = Dipole(SVector(0.0, 1.0, 0.0)),
+            mag = AnalyticalMagnetosphere(),
             loop_analytic = CurrentLoopAnalytic(loop),
             r = SVector(0.5, 0.0, 0.0),
             points = [SVector(0.1, 0.1, 0.1)],
@@ -27,11 +28,17 @@
 
             # VectorPotential
             solve(vp_solver, wire, r)
+            solve(vp_solver, loop, r)
+            solve(vp_solver, harris, r)
+            solve(vp_solver, dipole, r)
+            solve(vp_solver, mag, r)
+            vector_potential(mag, r)
 
             # Analytical Fields
             harris(r)
             dipole(r)
             loop_analytic(r)
+            mag(r)
             getB_loop(r, loop)
 
             # Utilities
@@ -42,6 +49,15 @@
 
             # FFT Solver
             solve(fft_solver, J_fft, dx)
+
+            # Poisson Solver
+            p_solver = PoissonSolver(
+                range(-1.0, 1.0; length = 4),
+                range(-1.0, 1.0; length = 4),
+                range(-1.0, 1.0; length = 4)
+            )
+            J_p = zeros(3, 4, 4, 4)
+            solve(p_solver, J_p)
 
             # Helper set_current_wire!
             J_wire = zeros(3, 10, 10, 10)
