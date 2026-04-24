@@ -8,7 +8,7 @@ A current sheet model often used in space physics, described by the exact field:
 ```math
 \mathbf{B}(z) = B_0 \tanh\left(\frac{z}{L}\right) \hat{x}
 ```
-where ``B_0`` is the asymptotic magnetic field strength and $L$ is the half-width of the current sheet.
+where ``B_0`` is the asymptotic magnetic field strength and ``L`` is the half-width of the current sheet.
 
 ```@example currentsheet
 using Magnetostatics, StaticArrays, LinearAlgebra

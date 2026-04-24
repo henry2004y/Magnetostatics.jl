@@ -5,7 +5,7 @@ The magnetostatic vector potential satisfies the Poisson equation
 \nabla^2 \mathbf{A} = -\mu_0 \mathbf{J},
 ```
 where ``\mathbf{A}`` is related to the magnetic field via ``\mathbf{B} = \nabla \times \mathbf{A}``.
-The three Cartesian components of ``\mathbf{A}`` decouple into independent scalar Poisson problems solved on a Cartesian grid using a sparse 7-point finite-difference Laplacian with homogeneous Dirichlet boundary conditions (``\mathbf{A} = 0`` at domain faces). Each axis may have a different spacing ($\Delta x$, $\Delta y$, $\Delta z$); the solver derives these automatically from the grid ranges passed to `PoissonSolver`.
+The three Cartesian components of ``\mathbf{A}`` decouple into independent scalar Poisson problems solved on a Cartesian grid using a sparse 7-point finite-difference Laplacian with homogeneous Dirichlet boundary conditions (``\mathbf{A} = 0`` at domain faces). Each axis may have a different spacing (``\Delta x``, ``\Delta y``, ``\Delta z``); the solver derives these automatically from the grid ranges passed to `PoissonSolver`.
 
 `PoissonSolver` wraps any `LinearSolve.jl` algorithm.  The default is the iterative conjugate-gradient (`KrylovJL_CG`), while sparse-direct factorizations such as `KLUFactorization` are also supported.
 
@@ -70,8 +70,8 @@ B_\phi(r) = \frac{\mu_0 I}{2\pi r}
 
 Two sources of discrepancy are expected and are **not** a sign of grid coarseness:
 
-- **Inside the Gaussian core ($r < w$):** the current is deposited with a Gaussian profile of half-width ``w`` (`width = 3dx`), not on an infinitely thin wire.  Inside the wire the field peaks at a finite value and falls to zero at ``r = 0``, whereas the thin-wire formula diverges.  The analytical formula is valid only for ``r > w``.
-- **Near the domain boundary ($r \to L$):** the Dirichlet BCs force ``\mathbf{A} = 0`` at the box faces, suppressing ``\mathbf{A}`` — and hence the curl — below the free-space value.  This is a finite-box artefact, independent of grid resolution.
+- **Inside the Gaussian core (``r < w``):** the current is deposited with a Gaussian profile of half-width ``w`` (`width = 3dx`), not on an infinitely thin wire.  Inside the wire the field peaks at a finite value and falls to zero at ``r = 0``, whereas the thin-wire formula diverges.  The analytical formula is valid only for ``r > w``.
+- **Near the domain boundary (``r \to L``):** the Dirichlet BCs force ``\mathbf{A} = 0`` at the box faces, suppressing ``\mathbf{A}`` — and hence the curl — below the free-space value.  This is a finite-box artefact, independent of grid resolution.
 
 ```@example poisson
 using LinearAlgebra
