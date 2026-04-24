@@ -1,26 +1,17 @@
 # [Poisson Solver](@id poisson_example)
 
 The magnetostatic vector potential satisfies the Poisson equation
-
 ```math
 \nabla^2 \mathbf{A} = -\mu_0 \mathbf{J},
 ```
+where ``\mathbf{A}`` is related to the magnetic field via ``\mathbf{B} = \nabla \times \mathbf{A}``.
+The three Cartesian components of ``\mathbf{A}`` decouple into independent scalar Poisson problems solved on a Cartesian grid using a sparse 7-point finite-difference Laplacian with homogeneous Dirichlet boundary conditions (``\mathbf{A} = 0`` at domain faces). Each axis may have a different spacing (``\Delta x``, ``\Delta y``, ``\Delta z``); the solver derives these automatically from the grid ranges passed to `PoissonSolver`.
 
-where $\mathbf{A}$ is related to the magnetic field via $\mathbf{B} = \nabla \times \mathbf{A}$.
-The three Cartesian components of $\mathbf{A}$ decouple into independent scalar Poisson
-problems solved on a Cartesian grid using a sparse 7-point finite-difference Laplacian
-with homogeneous Dirichlet boundary conditions ($\mathbf{A} = 0$ at domain faces).
-Each axis may have a different spacing ($\Delta x$, $\Delta y$, $\Delta z$); the solver
-derives these automatically from the grid ranges passed to `PoissonSolver`.
-
-`PoissonSolver` wraps any `LinearSolve.jl` algorithm.  The default is the iterative
-conjugate-gradient (`KrylovJL_CG`), while sparse-direct factorizations such as
-`KLUFactorization` are also supported.
+`PoissonSolver` wraps any `LinearSolve.jl` algorithm.  The default is the iterative conjugate-gradient (`KrylovJL_CG`), while sparse-direct factorizations such as `KLUFactorization` are also supported.
 
 ## Infinite Wire — Comparing Direct and Krylov Solvers
 
-We deposit a finite current-carrying wire along the z-axis onto a grid and solve for
-$A_z$ with both a direct and an iterative solver, then compare.
+We deposit a finite current-carrying wire along the z-axis onto a grid and solve for ``A_z`` with both a direct and an iterative solver, then compare.
 
 ```@example poisson
 using Magnetostatics, StaticArrays, LinearSolve
@@ -53,8 +44,7 @@ println("Max |A_direct - A_cg| / max|A_direct| = ",
     maximum(abs, A_direct .- A_cg) / maximum(abs, A_direct))
 ```
 
-Both solvers produce the same result.  The midplane slice of $A_z$ shows the expected
-bell-shaped peak centred on the wire:
+Both solvers produce the same result.  The midplane slice of ``A_z`` shows the expected bell-shaped peak centred on the wire:
 
 ```@example poisson
 ic = Nz ÷ 2 + 1 # index closest to grid center
@@ -73,22 +63,15 @@ fig
 
 ## Recovering B = ∇ × A via Central Differences
 
-After solving for $\mathbf{A}$ we can numerically recover $\mathbf{B}$ and compare
-it against the analytical solution for an infinite straight wire:
-
+After solving for ``\mathbf{A}`` we can numerically recover ``\mathbf{B}`` and compare it against the analytical solution for an infinite straight wire:
 ```math
 B_\phi(r) = \frac{\mu_0 I}{2\pi r}
 ```
 
 Two sources of discrepancy are expected and are **not** a sign of grid coarseness:
 
-- **Inside the Gaussian core ($r < w$):** the current is deposited with a Gaussian
-  profile of half-width $w$ (`width = 3dx`), not on an infinitely thin wire.  Inside
-  the wire the field peaks at a finite value and falls to zero at $r = 0$, whereas the
-  thin-wire formula diverges.  The analytical formula is valid only for $r > w$.
-- **Near the domain boundary ($r \to L$):** the Dirichlet BCs force $\mathbf{A} = 0$
-  at the box faces, suppressing $\mathbf{A}$ — and hence the curl — below the
-  free-space value.  This is a finite-box artefact, independent of grid resolution.
+- **Inside the Gaussian core (``r < w``):** the current is deposited with a Gaussian profile of half-width ``w`` (`width = 3dx`), not on an infinitely thin wire.  Inside the wire the field peaks at a finite value and falls to zero at ``r = 0``, whereas the thin-wire formula diverges.  The analytical formula is valid only for ``r > w``.
+- **Near the domain boundary (``r \to L``):** the Dirichlet BCs force ``\mathbf{A} = 0`` at the box faces, suppressing ``\mathbf{A}`` — and hence the curl — below the free-space value.  This is a finite-box artefact, independent of grid resolution.
 
 ```@example poisson
 using LinearAlgebra

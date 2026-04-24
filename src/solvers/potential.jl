@@ -90,10 +90,11 @@ end
     solve(solver::VectorPotential, field::AnalyticalMagnetosphere, r)
 
 Compute vector potential A for a generalized magnetosphere model.
+See [`AnalyticalMagnetosphere`](@ref) for details on the model parameters.
 """
 function solve(::VectorPotential, f::AnalyticalMagnetosphere, r)
-    dist_mp = r[1] - f.r_mp + (r[2]^2 + r[3]^2) / (2 * f.r_mp)
-    w_mp, _ = tanh_weight(dist_mp, f.d_mp)
+    dist_mp = r[1] - f.mp_standoff + (r[2]^2 + r[3]^2) / (2 * f.mp_standoff)
+    w_mp, _ = tanh_weight(dist_mp, f.mp_thickness)
     A = w_mp * inner_potential(f, r) + (1 - w_mp) * outer_potential(f, r, dist_mp)
     return A
 end

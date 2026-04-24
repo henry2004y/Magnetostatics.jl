@@ -4,7 +4,7 @@ The magnetic field for a finite wire segment is calculated using the algebraic f
 ```math
 \mathbf{B} = \frac{\mu_0 I}{4\pi} \frac{d\mathbf{l} \times \mathbf{a}}{|d\mathbf{l} \times \mathbf{a}|^2} \left( \frac{d\mathbf{l} \cdot \mathbf{a}}{|\mathbf{a}|} - \frac{d\mathbf{l} \cdot \mathbf{b}}{|\mathbf{b}|} \right)
 ```
-where $\mathbf{a} = \mathbf{r} - \mathbf{r}_{start}$ and $\mathbf{b} = \mathbf{r} - \mathbf{r}_{end}$ are vectors from the ends of the segment to the observation point $\mathbf{r}$, and $d\mathbf{l} = \mathbf{r}_{end} - \mathbf{r}_{start}$ is the segment vector.
+where ``\mathbf{a} = \mathbf{r} - \mathbf{r}_{start}`` and ``\mathbf{b} = \mathbf{r} - \mathbf{r}_{end}`` are vectors from the ends of the segment to the observation point ``\mathbf{r}``, and ``d\mathbf{l} = \mathbf{r}_{end} - \mathbf{r}_{start}`` is the segment vector.
 
 For arbitrary wire geometries, discretize the path and sum the contributions.
 
@@ -53,10 +53,9 @@ fig
 ## Conducting Wall (Method of Images)
 
 A perfectly-conducting plane forces the **normal component** of $\mathbf{B}$ to zero
-at its surface.  For a long straight wire carrying current $I$ at height $h$
+at its surface.  For a long straight wire carrying current ``I`` at height ``h``
 above a conducting plane, the solution is given exactly by the method of images:
-an image wire at $-h$ carries the **opposite** current $-I$, so their combined
-normal (perpendicular-to-wall) components cancel at $z = 0$.
+an image wire at ``-h`` carries the **opposite** current ``-I``, so their combined normal (perpendicular-to-wall) components cancel at ``z = 0``.
 
 ```@example biotsavart
 using Magnetostatics, StaticArrays, LinearAlgebra
@@ -105,8 +104,8 @@ fig_wall
 
 ### Analytical verification
 
-At the wall surface ($z = 0$), $B_z$ must vanish by the boundary condition.
-The on-wall $B_z$ from the real wire and its image along the x-direction is:
+At the wall surface (``z = 0``), ``B_z`` must vanish by the boundary condition.
+The on-wall ``B_z`` from the real wire and its image along the x-direction is:
 
 ```math
 B_z(x, 0) = \frac{\mu_0 I}{2\pi}\frac{h}{x^2 + h^2}
@@ -124,11 +123,11 @@ println("max |Bz| at wall: ", maximum(abs, Bz_at_wall))
 ## Conducting Sphere in a Uniform Background Field
 
 A perfectly-conducting sphere expels all magnetic flux from its interior.
-When placed in an external field $\mathbf{B}_0 = B_0\hat{z}$, the sphere
-develops induced surface currents $\mathbf{K}$ whose field exactly cancels the
-normal component of $\mathbf{B}_0$ on the sphere surface.  Outside the sphere,
-the total field is the superposition of $\mathbf{B}_0$ and the field of a
-magnetic dipole whose moment is chosen to cancel $\mathbf{B}\cdot\hat{r}$ at $r=R$:
+When placed in an external field ``\mathbf{B}_0 = B_0\hat{z}``, the sphere
+develops induced surface currents ``\mathbf{K}`` whose field exactly cancels the
+normal component of ``\mathbf{B}_0`` on the sphere surface.  Outside the sphere,
+the total field is the superposition of ``\mathbf{B}_0`` and the field of a
+magnetic dipole whose moment is chosen to cancel ``\mathbf{B}\cdot\hat{r}`` at ``r=R``:
 
 ```math
 \mathbf{B}_\mathrm{out} = B_0\hat{z}
@@ -137,7 +136,7 @@ magnetic dipole whose moment is chosen to cancel $\mathbf{B}\cdot\hat{r}$ at $r=
 \mathbf{m} = -\frac{2\pi}{\mu_0}B_0 R^3\,\hat{z}
 ```
 
-The negative sign on $\mathbf{m}$ means the image dipole **opposes** the
+The negative sign on ``\mathbf{m}`` means the image dipole **opposes** the
 background field.
 Here we approximate the uniform background with a Helmholtz coil pair (two
 large co-axial loops of equal current separated by one loop radius), then use
@@ -211,8 +210,8 @@ fig2
 
 ### Analytical validation
 
-On the positive z-axis at $r > R$, the total field has only a z-component.
-The image dipole cancels exactly half the background at $r = R$, giving zero
+On the positive z-axis at ``r > R``, the total field has only a z-component.
+The image dipole cancels exactly half the background at ``r = R``, giving zero
 normal flux there:
 
 ```math

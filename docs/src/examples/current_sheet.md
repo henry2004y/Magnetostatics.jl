@@ -8,7 +8,7 @@ A current sheet model often used in space physics, described by the exact field:
 ```math
 \mathbf{B}(z) = B_0 \tanh\left(\frac{z}{L}\right) \hat{x}
 ```
-where $B_0$ is the asymptotic magnetic field strength and $L$ is the half-width of the current sheet.
+where ``B_0`` is the asymptotic magnetic field strength and ``L`` is the half-width of the current sheet.
 
 ```@example currentsheet
 using Magnetostatics, StaticArrays, LinearAlgebra
@@ -112,7 +112,7 @@ A current sheet model with two peaks in the current density, often observed in t
 B_x(z) = \frac{B_0}{2} \left[ \tanh\left(\frac{z - d}{L}\right) + \tanh\left(\frac{z + d}{L}\right) \right]
 ```
 
-The bifurcation is most clearly seen in the current density profile, which exhibits two distinct peaks at $z = \pm d$ when $d$ is sufficiently large compared to $L$.
+The bifurcation is most clearly seen in the current density profile, which exhibits two distinct peaks at ``z = \pm d`` when ``d`` is sufficiently large compared to ``L``.
 
 ```@example currentsheet
 B0, L, d = 1.0, 1.0, 2.0
