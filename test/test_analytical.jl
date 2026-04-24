@@ -309,7 +309,7 @@
 
         # Test with a simple dipole
         dip = Dipole(SVector(0.0, 0.0, 1.0))
-        mag_dip = AnalyticalMagnetosphere(; dipole_intrinsic = dip, r_mp = 10.0, has_shock = false)
+        mag_dip = AnalyticalMagnetosphere(; intrinsic_dipole = dip, mp_standoff = 10.0, has_shock = false)
 
         # Inside the magnetosphere, at the origin, it should be zero (due to singularity handling in Dipole)
         @test mag_dip(r) == SVector(0.0, 0.0, 0.0)

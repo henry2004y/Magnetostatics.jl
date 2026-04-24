@@ -1,10 +1,6 @@
 # Magnetostatics.jl
 
-A Julia package for computing magnetostatic fields from current sources.
-
-## Overview
-
-Magnetostatics.jl provides solvers and analytical models for computing magnetic fields produced by steady-state current distributions.
+Magnetostatics.jl provides solvers and analytical models for computing magnetic fields produced by steady-state current distributions or potentials.
 
 ## Methods
 

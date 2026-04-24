@@ -5,11 +5,11 @@
 [![Aqua](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/refs/heads/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Julia package for computing magnetostatic fields from current sources.
+A Julia package for computing magnetostatic fields from current sources or potentials.
 
 ## Overview
 
-Magnetostatics.jl provides solvers and analytical models for computing magnetic fields produced by steady-state current distributions. The package includes:
+Magnetostatics.jl provides solvers and analytical models for computing magnetic fields produced by steady-state current distributions or potentials. The package includes:
 
 - **Biot-Savart solver** — numerical integration of the Biot-Savart law for arbitrary wire geometries.
 - **FFT solver** — spectral method for computing **B** from a volumetric current density **J** on a uniform grid with periodic boundaries.

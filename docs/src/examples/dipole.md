@@ -4,9 +4,9 @@ The magnetic field of a dipole moment $\mathbf{M}$ at position $\mathbf{r}$ rela
 ```math
 \mathbf{B}(\mathbf{r}) = \frac{\mu_0}{4\pi r^3} \left( 3(\mathbf{M} \cdot \hat{\mathbf{n}})\hat{\mathbf{n}} - \mathbf{M} \right)
 ```
-where $\hat{\mathbf{n}} = \mathbf{r}/r$ is the unit vector and $r = |\mathbf{r}|$.
+where ``\hat{\mathbf{n}} = \mathbf{r}/r`` is the unit vector and ``r = |\mathbf{r}|``.
 
-Calculate the field of a magnetic dipole moment $\mathbf{M} = (0,0,1)$ at various points.
+Calculate the field of a magnetic dipole moment ``\mathbf{M} = (0,0,1)`` at various points.
 
 ```@example dipole
 using Magnetostatics, StaticArrays, LinearAlgebra

@@ -1,8 +1,8 @@
 # [Trefoil Knot](@id trefoil_knot_example)
 
-A torus knot is a knot that lies on the surface of a torus. It is characterized by two coprime integers $p$ and $q$, where $p$ is the number of times the knot winds around the symmetry axis, and $q$ is the number of times it winds through the "hole" of the torus.
+A torus knot is a knot that lies on the surface of a torus. It is characterized by two coprime integers ``p`` and ``q``, where ``p`` is the number of times the knot winds around the symmetry axis, and ``q`` is the number of times it winds through the "hole" of the torus.
 
-The parametric representation of a $(p, q)$ torus knot on a torus with major radius $R$ and minor radius $r$ is given by:
+The parametric representation of a ``(p, q)`` torus knot on a torus with major radius ``R`` and minor radius ``r`` is given by:
 ```math
 \begin{aligned}
 x(\phi) &= (R + r \cos(q\phi)) \cos(p\phi) \\
@@ -10,9 +10,9 @@ y(\phi) &= (R + r \cos(q\phi)) \sin(p\phi) \\
 z(\phi) &= r \sin(q\phi)
 \end{aligned}
 ```
-where $\phi \in [0, 2\pi)$.
+where ``\phi \in [0, 2\pi)``.
 
-The trefoil knot is the simplest non-trivial knot, and it can be represented as a $(2, 3)$ torus knot.
+The trefoil knot is the simplest non-trivial knot, and it can be represented as a ``(2, 3)`` torus knot.
 
 In `Magnetostatics.jl`, the magnetic field of a trefoil knot is calculated by discretizing the knot into a series of straight wire segments and applying the Biot-Savart law to each segment.
 

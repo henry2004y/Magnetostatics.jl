@@ -98,52 +98,52 @@ using CairoMakie, UniformStreamlines, GeometryBasics
 
 # Constants (normalized to RE = 1 and nT)
 const RE = 1.0
-const BEQ = 31000.0  # Field at equator [nT]
-const RMP = 10.0     # Magnetopause standoff distance [RE]
-const B0_tail = 20.0 # Tail field strength [nT]
-const L_tail = 2.0   # Tail sheet half-thickness [RE]
-const DMP = 1.0      # Magnetopause thickness [RE]
+const B_EQUATOR = 31000.0  # Field at equator [nT]
+const R_MP = 10.0         # Magnetopause standoff distance [RE]
+const B_TAIL = 20.0       # Tail field strength [nT]
+const L_TAIL = 2.0        # Tail sheet half-thickness [RE]
+const D_MP = 1.0          # Magnetopause thickness [RE]
 
 # Bow shock parameters
-const RBS = 13.0     # Bow shock subsolar standoff distance [RE]
-const ABS = 0.04     # Bow shock flaring parameter
-const BBS = 2.0      # Bow shock hyperboloid parameter
-const DBS = 0.5      # Bow shock thickness [RE]
-const RC = 3.0       # Magnetosheath compression ratio
+const R_BS = 13.0         # Bow shock subsolar standoff distance [RE]
+const A_BS = 0.04         # Bow shock flaring parameter
+const B_BS = 2.0          # Bow shock hyperboloid parameter
+const D_BS = 0.5          # Bow shock thickness [RE]
+const RC = 3.0            # Magnetosheath compression ratio
 
-const B_imf = UniformField(SVector(0.0, 0.0, -10.0)) # Southward IMF [nT]
-const B_tail_z = UniformField(SVector(0.0, 0.0, -5.0)) # Southward field inside magnetosphere [nT]
+const B_IMF = UniformField(SVector(0.0, 0.0, -10.0)) # Southward IMF [nT]
+const B_BACKGROUND = UniformField(SVector(0.0, 0.0, -5.0)) # Southward field inside magnetosphere [nT]
 
 # Magnetic moments
-# We scale the moment M such that (μ0_4π * M / RE^3) = BEQ, where μ0_4π is 1e-7.
+# We scale the moment M such that (μ0_4π * M / RE^3) = B_EQUATOR, where μ0_4π is 1e-7.
 M_scaling = Magnetostatics.μ0_4π
-M_val = BEQ / M_scaling
+M_val = B_EQUATOR / M_scaling
 
 # Internal dipole (Southward moment for Northward field at surface)
 M_int = SVector(0.0, 0.0, -M_val * RE^3)
-image_pos = SVector(2 * RMP, 0.0, 0.0)
+shielding_dipole_pos = SVector(2 * R_MP, 0.0, 0.0)
 M_mp = M_int # Image dipole moment for cancellation
 
 # Define components
-dipole_intrinsic = Dipole(M_int)
-dipole_mp = Dipole(M_mp)
-tail = HarrisSheet(B0_tail, L_tail)
+intrinsic_dipole = Dipole(M_int)
+shielding_dipole = Dipole(M_mp)
+tail_field = HarrisSheet(B_TAIL, L_TAIL)
 
 # Instantiate the model
 mag_model = AnalyticalMagnetosphere(;
-    dipole_intrinsic,
-    dipole_mp,
-    tail,
-    imf = B_imf,
-    tail_z = B_tail_z,
-    image_pos,
-    r_mp = RMP,
-    d_mp = DMP,
-    r_bs = RBS,
-    a_bs = ABS,
-    b_bs = BBS,
-    d_bs = DBS,
-    r_c = RC
+    intrinsic_dipole,
+    shielding_dipole,
+    tail_field,
+    imf_field = B_IMF,
+    magnetosphere_background = B_BACKGROUND,
+    shielding_dipole_pos,
+    mp_standoff = R_MP,
+    mp_thickness = D_MP,
+    bs_standoff = R_BS,
+    bs_flaring = A_BS,
+    bs_hyperboloid = B_BS,
+    bs_thickness = D_BS,
+    ms_compression = RC
 )
 
 # Query at a point (e.g., 5 RE on the nightside)
@@ -211,7 +211,7 @@ streamlines!(ax, str; color = :gray, linewidth = 1.0)
 mesh!(ax, Sphere(Point3f(0), RE), color=:blue)
 
 # Add magnetopause standoff point for context
-scatter!(ax, [Point3f(RMP, 0, 0)], color=:red, markersize=10, label="Standoff")
+scatter!(ax, [Point3f(R_MP, 0, 0)], color=:red, markersize=10, label="Standoff")
 
 fig
 ```
