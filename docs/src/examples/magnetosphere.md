@@ -160,10 +160,7 @@ We visualize the magnetosphere in the X-Z plane (GSM coordinates), showing the c
 xs = range(-30, 20, length=100)
 zs = range(-20, 20, length=100)
 
-function get_B_xz(p)
-    B = mag_model(SVector(p[1], 0.0, p[2]))
-    return Point2f(B[1], B[3])
-end
+get_B_xz(x, z) = mag_model(SVector(x, 0.0, z))[SA[1, 3]]
 
 Bmag = [norm(mag_model(SVector(x, 0.0, z))) for x in xs, z in zs]
 
@@ -204,7 +201,7 @@ ys_3d = range(-15, 15, length=21)
 zs_3d = range(-15, 15, length=21)
 
 # Streamlines (sampling the field in 3D)
-str = evenstream(xs_3d, ys_3d, zs_3d, p -> mag_model(p); min_density=0.8, max_density=2.0)
+str = evenstream(xs_3d, ys_3d, zs_3d, mag_model; min_density=0.8, max_density=2.0)
 streamlines!(ax, str; color = :gray, linewidth = 1.0)
 
 # Add Earth

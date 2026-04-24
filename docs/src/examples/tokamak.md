@@ -45,13 +45,13 @@ Visualizing the poloidal field (xz-plane):
 xs = range(0.5, 4.5, length=51)
 zs = range(-2, 2, length=51)
 
-function field_xz_tokamak(x)
+function field_xz_tokamak(x, z)
     # Check if inside plasma
-    r_local = sqrt((x[1] - R_major)^2 + x[2]^2)
+    r_local = sqrt((x - R_major)^2 + z^2)
     if r_local > R_minor
         return Point2f(NaN, NaN)
     end
-    B = getB_tokamak_coil(x[1], 0.0, x[2], a, b, ICoils, IPlasma)
+    B = getB_tokamak_coil(x, 0.0, z, a, b, ICoils, IPlasma)
     return Point2f(B[1], B[3])
 end
 
@@ -93,8 +93,7 @@ xs_3d = range(-R_major - R_minor, R_major + R_minor, length=21)
 ys_3d = range(-R_major - R_minor, R_major + R_minor, length=21)
 zs_3d = range(-R_minor, R_minor, length=11)
 
-function field_3d(p)
-    x, y, z = p
+function field_3d(x, y, z)
     R = sqrt(x^2 + y^2)
     r_local = sqrt((R - R_major)^2 + z^2)
     if r_local > R_minor
@@ -166,7 +165,7 @@ ax = Axis(fig[1, 1];
 hm = heatmap!(ax, xs, zs, log10.(Bmag .+ 1e-9), colormap=:plasma)
 Colorbar(fig[1, 2], hm, label="log10(|B|)")
 
-str = evenstream(xs, zs, (x, z) -> field_xz_tokamak_q(x, z)[1], (x, z) -> field_xz_tokamak_q(x, z)[2])
+str = evenstream(xs, zs, field_xz_tokamak_q)
 streamlines!(ax, str; color = :white, linewidth = 1.5, with_arrows = true)
 fig
 ```
@@ -186,8 +185,7 @@ xs_3d = range(-R0 - a, R0 + a, length=21)
 ys_3d = range(-R0 - a, R0 + a, length=21)
 zs_3d = range(-a, a, length=11)
 
-function field_3d(p)
-    x, y, z = p
+function field_3d(x, y, z)
     R = sqrt(x^2 + y^2)
     r = sqrt((R - R0)^2 + z^2)
     if r > a
