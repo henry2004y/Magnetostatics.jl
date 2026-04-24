@@ -14,7 +14,9 @@ Magnetostatics.jl provides solvers and analytical models for computing magnetic 
 - **Biot-Savart solver** — numerical integration of the Biot-Savart law for arbitrary wire geometries.
 - **FFT solver** — spectral method for computing **B** from a volumetric current density **J** on a uniform grid with periodic boundaries.
 - **Vector Potential solver** — computes the magnetic vector potential **A** for wires, current loops, and dipoles.
-- **Analytical fields** — closed-form models for Harris current sheets, magnetic dipoles, and circular current loops.
+- **Magnetosphere models** — planetary dipoles, magnetopause shielding, magnetotail, and interplanetary magnetic field (IMF) components.
+- **Tokamaks** — analytical magnetic field models for toroidal/poloidal coils, central solenoids, and q-profile based configurations.
+- **Analytical fields** — closed-form models for Harris current sheets (asymmetric, force-free), magnetic dipoles, mirrors, pinches, and circular current loops.
 
 ## Installation
 
