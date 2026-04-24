@@ -30,7 +30,9 @@ The third term $\nabla w \times (\mathbf{A}_{\text{inner}} - \mathbf{A}_{\text{o
 The Earth's magnetotail is an elongated region where magnetic field lines are stretched far into the nightside. We model this complex structure using two primary components:
 
 1. **The Harris Current Sheet**: This provides the characteristic magnetic field reversal across the equatorial plane:
-   $$B_x(z) = B_0 \tanh(z/L)$$
+   ```math
+   B_x(z) = B_0 \tanh(z/L)
+   ```
    This component represents the effect of the cross-tail current and is responsible for the elongated "tail-like" appearance of the field lines.
 2. **The Inner Southward Field**: A realistic magnetosphere features a magnetic null point (X-line) where reconnection can occur. Since the Earth's intrinsic field is northward ($B_z > 0$) on the nightside equator, an X-line can only form if there is a competing southward field contribution. We introduce a background southward field $\mathbf{B}_{\text{tail}, z}$ to represent the combined effect of the tail current sheet and partial IMF penetration. The position of the X-line is determined by the balance between this component and the planetary dipole.
 
@@ -41,7 +43,9 @@ To implement a bow shock without breaking the $\nabla\cdot\mathbf{B}=0$ constrai
 ### Defining the Nested Boundaries
 
 We utilize two geometric surfaces. The magnetopause is a paraboloid $f(\mathbf{r})=0$. Upstream of the magnetopause lies the bow shock. Because the solar wind flow is deflected and expanded around the obstacle, empirical models typically represent the bow shock as a hyperboloid of revolution:
-$$g(x, y, z)=x-R_{\text{bs}}+\sqrt{A(y^2+z^2)+B^2}-B$$
+```math
+g(x, y, z)=x-R_{\text{bs}}+\sqrt{A(y^2+z^2)+B^2}-B
+```
 Here, $R_{\text{bs}}$ is the subsolar bow shock standoff distance (where $R_{\text{bs}} > R_{\text{mp}}$), and $A$ and $B$ control the flaring angle of the shock surface.
 From these two surfaces, we generate two independent, smooth step functions using a hyperbolic tangent to dictate the transitions:
 - $w_{\text{mp}}(\mathbf{r})$: Transitions from $1$ (inside the magnetosphere) to $0$ (in the magnetosheath).
@@ -55,16 +59,24 @@ To ensure strict divergence-free physics across multiple boundaries, we define v
 * $\mathbf{A}_{\text{sheath}}$: The compressed and draped magnetic field within the magnetosheath.
 
 We then nest the interpolations. First, construct the field completely external to the magnetopause:
-$$\mathbf{A}_{\text{outer}}=w_{\text{bs}}(\mathbf{r})\mathbf{A}_{\text{sheath}}+(1-w_{\text{bs}}(\mathbf{r}))\mathbf{A}_{\text{sw}}$$
+```math
+\mathbf{A}_{\text{outer}}=w_{\text{bs}}(\mathbf{r})\mathbf{A}_{\text{sheath}}+(1-w_{\text{bs}}(\mathbf{r}))\mathbf{A}_{\text{sw}}
+```
 Next, blend this outer field with the inner magnetosphere field:
-$$\mathbf{A}_{\text{total}}=w_{\text{mp}}(\mathbf{r})\mathbf{A}_{\text{inner}}+(1-w_{\text{mp}}(\mathbf{r}))\mathbf{A}_{\text{outer}}$$
+```math
+\mathbf{A}_{\text{total}}=w_{\text{mp}}(\mathbf{r})\mathbf{A}_{\text{inner}}+(1-w_{\text{mp}}(\mathbf{r}))\mathbf{A}_{\text{outer}}
+```
 
 ### Calculating the Total Field and Shock Currents
 
 When taking the curl to find $\mathbf{B}_{\text{total}}=\nabla\times\mathbf{A}_{\text{total}}$, the resulting field smoothly transitions through all three regions. The nested product rule automatically generates two distinct boundary current layers:
-$$\mathbf{B}_{\text{total}}=w_{\text{mp}}\mathbf{B}_{\text{inner}}+(1-w_{\text{mp}})[w_{\text{bs}}\mathbf{B}_{\text{sheath}}+(1-w_{\text{bs}})\mathbf{B}_{\text{sw}}]+\mathbf{B}_{\text{currents}}$$
+```math
+\mathbf{B}_{\text{total}}=w_{\text{mp}}\mathbf{B}_{\text{inner}}+(1-w_{\text{mp}})[w_{\text{bs}}\mathbf{B}_{\text{sheath}}+(1-w_{\text{bs}})\mathbf{B}_{\text{sw}}]+\mathbf{B}_{\text{currents}}
+```
 The $\mathbf{B}_{\text{currents}}$ term isolates the analytical currents generated at the boundaries:
-$$\mathbf{B}_{\text{currents}}=\nabla w_{\text{mp}}\times(\mathbf{A}_{\text{inner}}-\mathbf{A}_{\text{outer}})+(1-w_{\text{mp}})[\nabla w_{\text{bs}}\times(\mathbf{A}_{\text{sheath}}-\mathbf{A}_{\text{sw}})]$$
+```math
+\mathbf{B}_{\text{currents}}=\nabla w_{\text{mp}}\times(\mathbf{A}_{\text{inner}}-\mathbf{A}_{\text{outer}})+(1-w_{\text{mp}})[\nabla w_{\text{bs}}\times(\mathbf{A}_{\text{sheath}}-\mathbf{A}_{\text{sw}})]
+```
 The first cross product represents the Chapman-Ferraro magnetopause currents. The second cross product represents the shock currents flowing on the bow shock surface. By tuning the steepness of the $w_{\text{bs}}$ weighting function, you control the physical thickness of the shock ramp.
 
 ### Formulating the Magnetosheath Field
