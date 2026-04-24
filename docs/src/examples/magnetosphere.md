@@ -9,11 +9,11 @@ The total magnetic field is represented as the linear superposition of four dist
 
 ## 1. The Internal Field: The Planetary Dipole
 
-Earth's intrinsic magnetic field is primarily dipolar. We use the `Dipole` model from `Magnetostatics.jl` with Earth's magnetic moment. In normalized units (Earth radii $R_E$), the field at the magnetic equator on the surface is approximately 31,000 nT.
+Earth's intrinsic magnetic field is primarily dipolar. We use the `Dipole` model from `Magnetostatics.jl` with Earth's magnetic moment. In normalized units (Earth radii ``R_E``), the field at the magnetic equator on the surface is approximately 31,000 nT.
 
 ## 2. The Magnetopause: Image Dipole Method
 
-To model the shielding effect of the Chapman-Ferraro currents, we use a smooth scalar weighting function $w(\mathbf{r})$ that transitions from 1 inside the magnetosphere to 0 in the solar wind. Instead of applying this to the magnetic field directly, we apply it to the **magnetic vector potential** ``\mathbf{A}``.
+To model the shielding effect of the Chapman-Ferraro currents, we use a smooth scalar weighting function ``w(\mathbf{r})`` that transitions from 1 inside the magnetosphere to 0 in the solar wind. Instead of applying this to the magnetic field directly, we apply it to the **magnetic vector potential** ``\mathbf{A}``.
 
 The total vector potential is:
 ```math
