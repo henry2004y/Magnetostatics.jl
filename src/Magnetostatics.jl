@@ -20,17 +20,25 @@ include("solvers/fft.jl")
 include("solvers/potential.jl")
 include("utils.jl")
 
-export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, BiotSavart, FFTSolver,
-    VectorPotential, PoissonSolver, solve, vector_potential, Wire, CurrentLoop, TorusKnot, TrefoilKnot,
-    HarrisSheet, Dipole, CurrentLoopAnalytic, InfiniteWire, UniformField,
-    AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarrisSheet, FadeevIsland,
-    SurfaceCurrentMesh, compute_surface_current, current_density,
-    AbstractBoundary, OpenBoundary, PeriodicBoundary, ConductingWall, ConductingSphere,
-    PrescribedBoundary,
-    discretize_loop, discretize_knot, getB_loop, set_current_wire!, set_current_wire,
-    compute_curl!, compute_curl, getB_mirror, getB_bottle, getB_tokamak_coil,
-    getB_tokamak_profile, getB_zpinch, image_source, dipole_fieldline, sph2cart, sphere_mesh,
-    AnalyticalMagnetosphere, NullField
+# Core types
+export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, AbstractBoundary
+# Solvers
+export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, solve
+# Core methods
+export vector_potential, current_density, compute_curl!, compute_curl
+# Source geometries
+export Wire, CurrentLoop, TorusKnot, TrefoilKnot, InfiniteWire, SurfaceCurrentMesh
+# Analytical fields
+export HarrisSheet, AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarrisSheet,
+    FadeevIsland, Dipole, CurrentLoopAnalytic, UniformField, NullField
+# Boundary conditions
+export OpenBoundary, PeriodicBoundary, ConductingWall, ConductingSphere, PrescribedBoundary
+# Specialized models and configurations
+export AnalyticalMagnetosphere, draped_imf_field, getB_mirror, getB_bottle,
+    getB_tokamak_coil, getB_tokamak_profile, getB_zpinch
+# Utilities
+export discretize_loop, discretize_knot, getB_loop, set_current_wire!, set_current_wire,
+    compute_surface_current, image_source, dipole_fieldline, sph2cart, sphere_mesh
 
 include("precompile.jl")
 
