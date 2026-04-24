@@ -9,6 +9,14 @@
         @test isapprox(harris(SVector(0.0, 0.0, -100.0))[1], -B0, rtol = 1.0e-5)
     end
 
+    @testset "UniformField" begin
+        B0 = SVector(1.0, 2.0, 3.0)
+        field = UniformField(B0)
+        r = SVector(4.0, 5.0, 6.0)
+
+        @test field(r) == field(4.0, 5.0, 6.0) == field(Tuple(r)) == field(Vector(r)) == B0
+    end
+
     @testset "Asymmetric Harris Sheet" begin
         B1, B2, L = 2.0, 1.0, 2.0
         harris = AsymmetricHarrisSheet(B1, B2, L)
