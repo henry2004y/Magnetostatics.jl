@@ -317,6 +317,15 @@
         # Test field at some distance
         r_test = SVector(1.0, 0.0, 0.0)
         @test isapprox(mag_dip(r_test), dip(r_test), atol = 1.0e-5)
+
+        # Test draped_imf_field
+        imf = UniformField(SVector(1.0, 2.0, 3.0))
+        r = SVector(10.0, 4.0, 6.0)
+        mp_standoff = 10.0
+        @test draped_imf_field(imf, r, mp_standoff) ≈ [-0.3, 2.0, 3.0]
+        # Test fallback for non-UniformField
+        dip = Dipole(SVector(0.0, 0.0, 1.0))
+        @test draped_imf_field(dip, r, mp_standoff) == dip(r)
     end
 
     @testset "Struct Callables" begin
