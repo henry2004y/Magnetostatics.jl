@@ -14,10 +14,13 @@ ForceFreeHarrisSheet
 BifurcatedHarrisSheet
 FadeevIsland
 Dipole
+AnalyticalMagnetosphere
 TorusKnot
 TrefoilKnot
 InfiniteWire
 CurrentLoopAnalytic
+UniformField
+NullField
 ```
 
 ## Boundary Conditions
@@ -39,6 +42,7 @@ FFTSolver
 VectorPotential
 PoissonSolver
 solve
+vector_potential
 ```
 
 ## Surface Current (BEM)
@@ -59,9 +63,11 @@ set_current_wire!
 set_current_wire
 compute_curl!
 compute_curl
+current_density
 sph2cart
 dipole_fieldline
 image_source
+draped_imf_field
 ```
 
 ## Configurations
