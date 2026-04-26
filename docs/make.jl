@@ -21,6 +21,7 @@ makedocs(;
             "Tokamak" => "examples/tokamak.md",
             "Current Sheet" => "examples/current_sheet.md",
             "Magnetosphere" => "examples/magnetosphere.md",
+            "Empirical Magnetosphere" => "examples/empirical_magnetosphere.md",
             "Z-Pinch" => "examples/z_pinch.md",
             "Biot-Savart Solver" => "examples/biot_savart.md",
             "FFT Solver" => "examples/fft.md",
