@@ -62,9 +62,8 @@ function empirical_B_field(r_gsm::AbstractVector)
     r_geo = gsm2geo(r_gsm, t)
 
     # Evaluate the internal field using PlanetaryMagneticFields.jl
-    # The internal model uses Cartesian coordinates internally as normalized to Earth radii
-    # We pass the position as x, y, z in GEO
-    B_int_geo = igrf(r_geo[1], r_geo[2], r_geo[3]; in=:cartesian)
+    # The model takes a Cartesian position vector (in GEO) and returns Cartesian field
+    B_int_geo = igrf(r_geo; from=:cartesian, to=:cartesian)
 
     # Convert the internal magnetic field vector back from GEO to GSM
     B_int_gsm = geo2gsm(B_int_geo, t)
