@@ -23,7 +23,7 @@ function _build_center_bins(centers, domain, length_scale)
     for i in axes(centers, 1)
         cell = (
             floor(Int, (centers[i, 1] - Rmin) / length_scale),
-            floor(Int, (centers[i, 2] - Zmin) / length_scale)
+            floor(Int, (centers[i, 2] - Zmin) / length_scale),
         )
         push!(get!(bins, cell, Int[]), i)
     end
@@ -122,7 +122,7 @@ end
 
 function _fit_rbf(
         rows, targets, uncertainties, regularization, ncenters,
-    exact_rows, exact_targets, algorithm
+        exact_rows, exact_targets, algorithm
     )
     nrows = length(rows)
     T = promote_type(eltype(targets), eltype(uncertainties))
@@ -276,24 +276,32 @@ function reconstruct_axisymmetric_field(
             sigma = uncertainty_values[i, component]
             if component == 1
                 row = -dZ / R
-                _append_fit_row!(psi_rows, psi_targets, psi_uncertainties,
-                    row, target, sigma)
+                _append_fit_row!(
+                    psi_rows, psi_targets, psi_uncertainties,
+                    row, target, sigma
+                )
             elseif component == 2
-                _append_fit_row!(toroidal_rows, toroidal_targets,
-                    toroidal_uncertainty_values, values, target, sigma)
+                _append_fit_row!(
+                    toroidal_rows, toroidal_targets,
+                    toroidal_uncertainty_values, values, target, sigma
+                )
             else
                 row = dR / R
-                _append_fit_row!(psi_rows, psi_targets, psi_uncertainties,
-                    row, target, sigma)
+                _append_fit_row!(
+                    psi_rows, psi_targets, psi_uncertainties,
+                    row, target, sigma
+                )
             end
         end
     end
 
     if boundary_positions !== nothing || boundary_flux !== nothing
         boundary_positions !== nothing && boundary_flux !== nothing ||
-            throw(ArgumentError(
+            throw(
+            ArgumentError(
                 "boundary_positions and boundary_flux must be given together"
-            ))
+            )
+        )
         size(boundary_positions, 1) == length(boundary_flux) ||
             throw(ArgumentError("boundary_positions and boundary_flux lengths differ"))
         _validate_rz_positions(boundary_positions, domain_typed, "boundary_positions")
@@ -301,27 +309,33 @@ function reconstruct_axisymmetric_field(
         sigma === nothing || length(sigma) == length(boundary_flux) ||
             throw(ArgumentError("boundary_uncertainties length differs"))
         for i in eachindex(boundary_flux)
-            values = first(_rbf_terms(
-                boundary_positions[i, 1], boundary_positions[i, 2],
-                centers, T(length_scale), kernel, domain_typed, center_bins
-            ))
+            values = first(
+                _rbf_terms(
+                    boundary_positions[i, 1], boundary_positions[i, 2],
+                    centers, T(length_scale), kernel, domain_typed, center_bins
+                )
+            )
             if sigma === nothing
                 isfinite(boundary_flux[i]) ||
                     throw(ArgumentError("boundary_flux must be finite"))
                 push!(exact_boundary_rows, values)
                 push!(exact_boundary_targets, T(boundary_flux[i]))
             else
-                _append_fit_row!(psi_rows, psi_targets, psi_uncertainties,
-                    values, T(boundary_flux[i]), sigma[i])
+                _append_fit_row!(
+                    psi_rows, psi_targets, psi_uncertainties,
+                    values, T(boundary_flux[i]), sigma[i]
+                )
             end
         end
     end
 
     if current_positions !== nothing || current_density !== nothing
         current_positions !== nothing && current_density !== nothing ||
-            throw(ArgumentError(
+            throw(
+            ArgumentError(
                 "current_positions and current_density must be given together"
-            ))
+            )
+        )
         size(current_positions, 1) == length(current_density) ||
             throw(ArgumentError("current_positions and current_density lengths differ"))
         _validate_rz_positions(current_positions, domain_typed, "current_positions")
@@ -331,12 +345,16 @@ function reconstruct_axisymmetric_field(
             throw(ArgumentError("current_uncertainties length differs"))
         for i in eachindex(current_density)
             R, Z = current_positions[i, 1], current_positions[i, 2]
-            delta_star = last(_rbf_terms(
-                R, Z, centers, T(length_scale), kernel, domain_typed, center_bins
-            ))
+            delta_star = last(
+                _rbf_terms(
+                    R, Z, centers, T(length_scale), kernel, domain_typed, center_bins
+                )
+            )
             target = -T(μ₀) * R * T(current_density[i])
-            _append_fit_row!(psi_rows, psi_targets, psi_uncertainties,
-                delta_star, target, sigma[i])
+            _append_fit_row!(
+                psi_rows, psi_targets, psi_uncertainties,
+                delta_star, target, sigma[i]
+            )
         end
     end
 
@@ -347,8 +365,10 @@ function reconstruct_axisymmetric_field(
         exact_boundary_rows, exact_boundary_targets, algorithm
     )
     toroidal_coefficients = isempty(toroidal_rows) ? zeros(T, size(centers, 1)) :
-        _fit_rbf(toroidal_rows, toroidal_targets, toroidal_uncertainty_values,
-            T(regularization), size(centers, 1), SparseVector{T, Int}[], T[], algorithm)
+        _fit_rbf(
+            toroidal_rows, toroidal_targets, toroidal_uncertainty_values,
+            T(regularization), size(centers, 1), SparseVector{T, Int}[], T[], algorithm
+        )
 
     return AxisymmetricFieldReconstruction(
         centers, psi_coefficients, toroidal_coefficients,
@@ -362,10 +382,12 @@ function poloidal_flux(field::AxisymmetricFieldReconstruction, pos)
     Rmin, Rmax, Zmin, Zmax = field.domain
     Rmin <= R <= Rmax && Zmin <= Z <= Zmax ||
         throw(DomainError(pos, "position is outside the reconstruction domain"))
-    values = first(_rbf_terms(
-        R, Z, field.centers, field.length_scale, field.kernel,
-        field.domain, field.center_bins
-    ))
+    values = first(
+        _rbf_terms(
+            R, Z, field.centers, field.length_scale, field.kernel,
+            field.domain, field.center_bins
+        )
+    )
     return dot(values, field.psi_coefficients)
 end
 
