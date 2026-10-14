@@ -131,4 +131,3 @@ end
     )
     return MagneticBottle(distance, a, b, I1, I2; center, normal)(r)
 end
-

@@ -46,7 +46,6 @@ export AnalyticalMagnetosphere, draped_imf_field,
     ParkerSpiral, GuideFieldHarrisSheet, GoldHoyleFluxTube
 
 
-
 # Utilities
 export discretize_loop, discretize_knot, getB_loop, set_current_wire!, set_current_wire,
     compute_surface_current, image_source, dipole_fieldline, sph2cart, sphere_mesh

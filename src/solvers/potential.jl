@@ -290,4 +290,3 @@ function solve(solver::PoissonSolver, J::AbstractArray{T, 4}) where {T}
 
     return A
 end
-

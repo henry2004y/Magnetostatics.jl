@@ -139,4 +139,3 @@ end
 @inline function getB_tokamak_profile(pos, q_profile, a, R₀, Bζ0)
     return TokamakProfile(q_profile, a, R₀, Bζ0)(pos)
 end
-

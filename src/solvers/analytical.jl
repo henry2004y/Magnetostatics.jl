@@ -8,5 +8,3 @@ include("analytical/uniform.jl")
 include("analytical/magnetosphere.jl")
 include("analytical/equilibria.jl")
 include("analytical/astrophysical.jl")
-
-

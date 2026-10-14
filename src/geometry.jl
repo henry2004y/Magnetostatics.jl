@@ -78,7 +78,7 @@ function drift_velocities(
     B_mag < 1.0e-15 && return (;
         v_gradB = SVector(0.0, 0.0, 0.0),
         v_curv = SVector(0.0, 0.0, 0.0),
-        v_drift = SVector(0.0, 0.0, 0.0)
+        v_drift = SVector(0.0, 0.0, 0.0),
     )
 
     b = B_vec / B_mag

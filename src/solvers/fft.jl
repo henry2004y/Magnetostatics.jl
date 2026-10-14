@@ -109,4 +109,3 @@ function solve(::FFTSolver{OpenBoundary}, J::AbstractArray{T, 4}, dx::Real) wher
     B_full = real.(ifft(B_k, (2, 3, 4)))
     return B_full[:, 1:Nx, 1:Ny, 1:Nz]
 end
-

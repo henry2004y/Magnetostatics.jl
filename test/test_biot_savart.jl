@@ -50,4 +50,3 @@
     @test length(B_batch) == 3
     @test B_batch[2] ≈ B_loop
 end
-

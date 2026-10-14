@@ -380,4 +380,3 @@
         @test az_test[1] == 0.0 && az_test[2] == 0.0 && az_test[3] < 0.0
     end
 end
-

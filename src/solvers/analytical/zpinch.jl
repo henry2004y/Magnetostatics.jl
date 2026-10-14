@@ -71,4 +71,3 @@ end
 @inline function getB_zpinch(pos, I, a)
     return ZPinch(I, a)(pos)
 end
-

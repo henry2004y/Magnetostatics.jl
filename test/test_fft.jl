@@ -82,4 +82,3 @@
     @test abs(B_open[1, c_i, c_j, c_k]) < 1.0e-8
     @test abs(B_open[2, c_i, c_j, c_k]) < 1.0e-8
 end
-
