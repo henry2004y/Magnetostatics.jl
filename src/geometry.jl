@@ -61,13 +61,19 @@ function magnetic_curvature(field::AbstractMagneticField, r; h = 1.0e-5)
 end
 
 """
-    drift_velocities(field::AbstractMagneticField, r; q=1.0, m=1.0, v_perp=1.0, v_par=1.0, h=1.0e-5)
+    drift_velocities(
+        field::AbstractMagneticField, r;
+        q=1.0, m=1.0, v_perp=1.0, v_par=1.0, h=1.0e-5
+    )
 
 Compute the guiding center grad-B and curvature drift velocities:
 - `v_gradB = (m * v_perp^2) / (2 * q * B^2) * (b × ∇|B|)`
 - `v_curv  = (m * v_par^2)  / (q * B)       * (b × κ)`
 
 Returns a NamedTuple `(; v_gradB, v_curv, v_drift)`.
+
+See also [`TestParticle.jl`](https://github.com/henry2004y/TestParticle.jl) for
+charged particle trajectory tracing and orbit dynamics.
 """
 function drift_velocities(
         field::AbstractMagneticField, r;

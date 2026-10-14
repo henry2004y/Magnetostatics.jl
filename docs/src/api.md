@@ -59,6 +59,10 @@ vector_potential
 
 ## Magnetic Geometry and Plasma Drifts
 
+Differential geometry quantities and guiding-center drift velocity formulas. For full
+orbit trajectory integration and particle pushers, see
+[TestParticle.jl](https://github.com/henry2004y/TestParticle.jl).
+
 ```@docs
 b_unit
 field_magnitude
