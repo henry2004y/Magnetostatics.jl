@@ -18,7 +18,9 @@ makedocs(;
             "Current Loop" => "examples/current_loop.md",
             "Trefoil Knot" => "examples/trefoil_knot.md",
             "Magnetic Mirror" => "examples/magnetic_mirror.md",
+            "Magnetic Geometry" => "examples/magnetic_geometry.md",
             "Tokamak" => "examples/tokamak.md",
+
             "Current Sheet" => "examples/current_sheet.md",
             "Magnetosphere" => "examples/magnetosphere.md",
             "Empirical Magnetosphere" => "examples/empirical_magnetosphere.md",
