@@ -22,4 +22,5 @@ end
     @testset "knot" include("test_knot.jl")
     @testset "boundaries" include("test_boundaries.jl")
     @testset "Poisson" include("test_poisson.jl")
+    @testset "reconstruction" include("test_reconstruction.jl")
 end

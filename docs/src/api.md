@@ -33,6 +33,7 @@ ParkerSpiral
 GuideFieldHarrisSheet
 GoldHoyleFluxTube
 FLARECoils
+AxisymmetricFieldReconstruction
 ```
 
 ## Boundary Conditions
@@ -53,6 +54,7 @@ BiotSavart
 FFTSolver
 VectorPotential
 PoissonSolver
+reconstruct_axisymmetric_field
 solve
 vector_potential
 ```
