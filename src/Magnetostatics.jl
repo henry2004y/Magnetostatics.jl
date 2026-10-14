@@ -34,8 +34,11 @@ export HarrisSheet, AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarri
 # Boundary conditions
 export OpenBoundary, PeriodicBoundary, ConductingWall, ConductingSphere, PrescribedBoundary
 # Specialized models and configurations
-export AnalyticalMagnetosphere, draped_imf_field, getB_mirror, getB_bottle,
-    getB_tokamak_coil, getB_tokamak_profile, getB_zpinch
+export AnalyticalMagnetosphere, draped_imf_field,
+    MagneticMirror, MagneticBottle, getB_mirror, getB_bottle,
+    TokamakCoils, TokamakProfile, getB_tokamak_coil, getB_tokamak_profile,
+    ZPinch, getB_zpinch
+
 # Utilities
 export discretize_loop, discretize_knot, getB_loop, set_current_wire!, set_current_wire,
     compute_surface_current, image_source, dipole_fieldline, sph2cart, sphere_mesh

@@ -73,4 +73,13 @@
     # Being within 5-10% is usually expected for a naive test setup like this without padding
     @test isapprox(Bz_c, Bz_analytical, rtol = 0.1) &&
         abs(Bx_c) < 1.0e-8 && abs(By_c) < 1.0e-8
+
+    # Test OpenBoundary Hockney solver
+    open_solver = FFTSolver(OpenBoundary())
+    B_open = solve(open_solver, J_grid, dx)
+    Bz_open_c = B_open[3, c_i, c_j, c_k]
+    @test isapprox(Bz_open_c, Bz_analytical, rtol = 0.05)
+    @test abs(B_open[1, c_i, c_j, c_k]) < 1.0e-8
+    @test abs(B_open[2, c_i, c_j, c_k]) < 1.0e-8
 end
+

@@ -5,6 +5,17 @@ Abstract supertype for all magnetic field representations.
 """
 abstract type AbstractMagneticField end
 
+@inline (field::AbstractMagneticField)(x, y, z) = field(SVector(x, y, z))
+
+@inline function (field::AbstractMagneticField)(dr::AbstractVector, r)
+    B = field(r)
+    dr[1] = B[1]
+    dr[2] = B[2]
+    dr[3] = B[3]
+    return dr
+end
+
+
 """
     AbstractCurrentSource
 

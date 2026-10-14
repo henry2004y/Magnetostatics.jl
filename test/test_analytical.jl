@@ -344,5 +344,40 @@
         @test solver(wire, r) ≈ solve(solver, wire, r)
         @test solver(wire, Tuple(r)) ≈ solve(solver, wire, r)
         @test solver(wire, Vector(r)) ≈ solve(solver, wire, r)
+
+        # MagneticMirror struct check
+        mirror = MagneticMirror(1.0, 1.0, 1.0)
+        @test mirror(r) ≈ getB_mirror(r, 1.0, 1.0, 1.0)
+        @test mirror(1.0, 2.0, 3.0) ≈ mirror(r)
+        dr = zeros(3)
+        mirror(dr, r)
+        @test dr ≈ mirror(r)
+
+        # MagneticBottle struct check
+        bottle = MagneticBottle(1.0, 1.0, 0.5, 1.0, 2.0)
+        @test bottle(r) ≈ getB_bottle(r, 1.0, 1.0, 0.5, 1.0, 2.0)
+        @test bottle(1.0, 2.0, 3.0) ≈ bottle(r)
+
+        # TokamakCoils struct check
+        tok_coils = TokamakCoils(1.0, 1.0, 1.0, 1.0)
+        @test tok_coils(r) ≈ getB_tokamak_coil(r, 1.0, 1.0, 1.0, 1.0)
+
+        # TokamakProfile struct check
+        q_prof(nr) = nr^2 + 2 * nr + 0.5
+        tok_prof = TokamakProfile(q_prof, 0.5, 1.0, 1.0)
+        r_tok = SVector(1.1, 0.0, 0.1)
+        @test tok_prof(r_tok) ≈ getB_tokamak_profile(r_tok, q_prof, 0.5, 1.0, 1.0)
+
+        # ZPinch struct check
+        zpinch = ZPinch(1.0, 0.1)
+        @test zpinch(r) ≈ getB_zpinch(r, 1.0, 0.1)
+        @test zpinch(1.0, 2.0, 3.0) ≈ zpinch(r)
+        jz_inside = current_density(zpinch, SVector(0.05, 0.0, 0.0))
+        @test jz_inside ≈ SVector(0.0, 0.0, 1.0 / (π * 0.1^2))
+        jz_outside = current_density(zpinch, SVector(0.2, 0.0, 0.0))
+        @test jz_outside == SVector(0.0, 0.0, 0.0)
+        az_test = vector_potential(zpinch, SVector(0.05, 0.0, 0.0))
+        @test az_test[1] == 0.0 && az_test[2] == 0.0 && az_test[3] < 0.0
     end
 end
+

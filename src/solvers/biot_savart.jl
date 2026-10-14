@@ -69,6 +69,17 @@ function solve(solver::BiotSavart, source::Wire{T}, r) where {T}
     return solve(solver, source, SVector{3, T}(r))
 end
 
+function solve(
+        solver::BiotSavart, source::Wire{T},
+        positions::AbstractVector{<:AbstractVector}
+    ) where {T}
+    B_out = Vector{SVector{3, T}}(undef, length(positions))
+    Threads.@threads for i in eachindex(positions)
+        B_out[i] = solve(solver, source, positions[i])
+    end
+    return B_out
+end
+
 # ---------------------------------------------------------------------------
 # SurfaceCurrentMesh kernel (shared by all BC variants)
 # ---------------------------------------------------------------------------
@@ -100,6 +111,19 @@ function solve(solver::BiotSavart, mesh::SurfaceCurrentMesh{T}, r) where {T}
     return solve(solver, mesh, SVector{3, T}(r))
 end
 
+function solve(
+        solver::BiotSavart, mesh::SurfaceCurrentMesh{T},
+        positions::AbstractVector{<:AbstractVector}
+    ) where {T}
+    B_out = Vector{SVector{3, T}}(undef, length(positions))
+    Threads.@threads for i in eachindex(positions)
+        B_out[i] = solve(solver, mesh, positions[i])
+    end
+    return B_out
+end
+
+
+
 # ---------------------------------------------------------------------------
 # OpenBoundary (default) — no modification
 # ---------------------------------------------------------------------------
@@ -122,10 +146,6 @@ function solve(
     return B_direct + B_image
 end
 
-function solve(solver::BiotSavart{ConductingWall}, source::Wire{T}, r) where {T}
-    return solve(solver, source, SVector{3, T}(r))
-end
-
 # ---------------------------------------------------------------------------
 # PrescribedBoundary — add background field
 # ---------------------------------------------------------------------------
@@ -139,9 +159,6 @@ function solve(
     return B_source + B_bg
 end
 
-function solve(solver::BiotSavart{<:PrescribedBoundary}, source::Wire{T}, r) where {T}
-    return solve(solver, source, SVector{3, T}(r))
-end
 
 # ---------------------------------------------------------------------------
 # ConductingSphere — numerical BEM

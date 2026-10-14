@@ -195,14 +195,20 @@ solver_direct = PoissonSolver(xs, ys, zs; alg = KLUFactorization())
 A = solve(solver, J_grid)  # J_grid :: (3,nx,ny,nz)
 ```
 """
-struct PoissonSolver{ALG} <: AbstractSolver
+struct PoissonSolver{ALG, LMAT} <: AbstractSolver
     xs::AbstractRange
     ys::AbstractRange
     zs::AbstractRange
     alg::ALG
+    L::LMAT
 end
 
-PoissonSolver(xs, ys, zs; alg = KrylovJL_CG()) = PoissonSolver(xs, ys, zs, alg)
+function PoissonSolver(xs, ys, zs; alg = KrylovJL_CG())
+    nx, ny, nz = length(xs), length(ys), length(zs)
+    dx, dy, dz = step(xs), step(ys), step(zs)
+    L = _build_laplacian_3d(nx, ny, nz, dx, dy, dz)
+    return PoissonSolver(xs, ys, zs, alg, L)
+end
 
 # Build the (N×N) sparse matrix for -∇² with 7-point central differences.
 # Supports anisotropic spacing (dx, dy, dz). Boundary nodes carry identity
@@ -264,9 +270,8 @@ function solve(solver::PoissonSolver, J::AbstractArray{T, 4}) where {T}
     @assert size(J, 1) == 3 "First dimension of J must be 3"
     _, nx, ny, nz = size(J)
     n = nx * ny * nz
-    dx, dy, dz = step(solver.xs), step(solver.ys), step(solver.zs)
 
-    L = _build_laplacian_3d(nx, ny, nz, dx, dy, dz)
+    L = solver.L
     A = zeros(T, 3, nx, ny, nz)
 
     for c in 1:3
@@ -285,3 +290,4 @@ function solve(solver::PoissonSolver, J::AbstractArray{T, 4}) where {T}
 
     return A
 end
+
