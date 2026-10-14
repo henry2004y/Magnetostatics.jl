@@ -50,121 +50,269 @@ println("B at (0.75, 0, 0): ", flare(r_mid), " [T]")
 println("Poloidal flux ψ: ", poloidal_flux(flare, r_mid), " [Wb]")
 ```
 
-## Poloidal Flux Surfaces and X-Point Topology
+## In-Plane Field Lines and Reconnecting Field B_R
 
-In vacuum reconnection, the PF coils in the two flux cores produce an opposing radial
-field component across the midplane $z = 0$, forming a magnetic null (X-point) where
-$B_R = 0$ and $B_z = 0$.
+In the poloidal $(R, Z)$ plane, the reconnecting magnetic field is primarily the radial
+component $B_R(R, Z)$, which has opposite signs across the midplane $z = 0$.
+The poloidal magnetic flux function $\psi(R, Z) = R A_\phi(R, Z)$ defines the in-plane
+magnetic field lines as its contours, with the separatrix passing directly through the
+reconnection X-point null.
 
 ```@example flare
-Rs = range(0.3, 1.4, length=120)
-Zs = range(-0.7, 0.7, length=140)
+# Helper to locate the midplane X-point null
+function find_xpoint(fl; Rmin=0.5, Rmax=1.3, N=2000)
+    Rs = range(Rmin, Rmax, length=N)
+    Bzs = [fl(SVector(R, 0.0, 0.0))[3] for R in Rs]
+    for i in 1:(N-1)
+        if Bzs[i] * Bzs[i+1] <= 0
+            return Rs[i] - Bzs[i] * (Rs[i+1] - Rs[i]) / (Bzs[i+1] - Bzs[i])
+        end
+    end
+    return NaN
+end
 
-psi_vac = [poloidal_flux(flare, SVector(R, 0.0, Z)) for R in Rs, Z in Zs]
+Rs = range(0.35, 1.35, length=140)
+Zs = range(-0.65, 0.65, length=140)
 
-fig = Figure(size=(800, 650), fontsize=16)
-ax = Axis(
-    fig[1, 1],
-    xlabel="R [m]",
-    ylabel="Z [m]",
+BR_grid = zeros(length(Rs), length(Zs))
+psi_grid = zeros(length(Rs), length(Zs))
+
+for (j, Z) in enumerate(Zs), (i, R) in enumerate(Rs)
+    r = SVector(R, 0.0, Z)
+    B = flare(r)
+    BR_grid[i, j] = B[1]
+    psi_grid[i, j] = poloidal_flux(flare, r)
+end
+
+Rx = find_xpoint(flare)
+psi_X = poloidal_flux(flare, SVector(Rx, 0.0, 0.0))
+b_max = 0.045
+
+fig1 = Figure(size=(850, 720), fontsize=15)
+ax1 = Axis(
+    fig1[1, 1],
+    xlabel="Major Radius R [m]",
+    ylabel="Height Z [m]",
     aspect=DataAspect(),
-    title="FLARE: Poloidal Flux Surfaces ψ(R, z) with X-Line Separators"
+    title="FLARE: In-Plane Magnetic Field Lines with B_R Reconnecting Field"
 )
 
-co = contour!(ax, Rs, Zs, psi_vac, levels=25, colormap=:viridis, linewidth=1.8)
-Colorbar(fig[1, 2], colormap=:viridis, limits=extrema(psi_vac), label="ψ [Wb]")
+# Colormesh / heatmap of reconnecting radial field B_R
+hm1 = heatmap!(
+    ax1, Rs, Zs, BR_grid,
+    colormap=:balance,
+    colorrange=(-b_max, b_max)
+)
 
-# Mark flux cores (PF coils) and EF coils
-scatter!(
-    ax,
+# Poloidal magnetic field lines
+contour!(
+    ax1, Rs, Zs, psi_grid,
+    levels=32,
+    color=(:black, 0.75),
+    linewidth=1.2
+)
+
+# Separatrix passing through the X-point
+contour!(
+    ax1, Rs, Zs, psi_grid,
+    levels=[psi_X],
+    color=:crimson,
+    linewidth=2.8,
+    linestyle=:dash
+)
+
+# Coils and X-point
+p_pf = scatter!(
+    ax1,
     [Point2f(0.75, 0.40), Point2f(0.75, -0.40)],
     color=:crimson,
-    markersize=14,
-    label="PF Flux Cores"
+    strokecolor=:black,
+    strokewidth=1.5,
+    markersize=16
 )
-scatter!(
-    ax,
+p_ef = scatter!(
+    ax1,
     [Point2f(1.30, 0.70), Point2f(1.30, -0.70)],
-    color=:dodgerblue,
-    markersize=12,
-    label="EF Coils"
+    color=:deepskyblue,
+    strokecolor=:black,
+    strokewidth=1.5,
+    markersize=14
+)
+p_xp = scatter!(
+    ax1,
+    [Point2f(Rx, 0.0)],
+    marker=:xcross,
+    color=:gold,
+    strokecolor=:black,
+    strokewidth=2.5,
+    markersize=22
 )
 
-axislegend(ax, position=:rt)
-fig
+# Top banner legend completely avoiding any coil overlap
+Legend(
+    fig1[0, 1],
+    [p_pf, p_ef, p_xp, LineElement(color=:crimson, linestyle=:dash, linewidth=2.8)],
+    ["PF Flux Cores", "EF Coils", "X-Point (R=$(round(Rx, digits=2)) m)", "Separatrix"],
+    orientation = :horizontal,
+    framevisible = false,
+    tellwidth = false
+)
+
+Colorbar(
+    fig1[1, 2], hm1,
+    label="Radial Reconnecting Field B_R [T]"
+)
+
+fig1
 ```
 
-## Radial X-Line Positioning with EF Coils
+## Radial X-Line Steering with EF Coils
 
 By varying the external equilibrium coil current $I_{\text{ef}}$, experimentalists at
-FLARE can shift the radial position of the reconnection X-line along the midplane.
+FLARE can shift the radial position of the reconnection X-line and control the private
+flux volume:
+- $I_{\text{ef}} < 0$: Pulls the X-line inward toward the flux cores ($R_X \approx 0.88$ m).
+- $I_{\text{ef}} = 0$: Natural null position ($R_X \approx 0.97$ m).
+- $I_{\text{ef}} > 0$: Pushes the X-line outward toward the outer wall
+  ($R_X \approx 1.11$ m).
 
 ```@example flare
-# Scan radial profile of Bz along the midplane for different I_ef
-R_scan = range(0.4, 1.2, length=150)
-
-fig2 = Figure(size=(800, 450), fontsize=16)
-ax2 = Axis(
-    fig2[1, 1],
-    xlabel="R [m]",
-    ylabel="B_z(R, 0) [T]",
-    title="Midplane Vertical Magnetic Field vs. EF Coil Current"
-)
-hlines!(ax2, [0.0], color=:gray, linestyle=:dash)
-
-ef_cases = [
-    (0.0, "I_ef = 0 kA"),
-    (12.0e3, "I_ef = 12 kA"),
-    (24.0e3, "I_ef = 24 kA")
+cases = [
+    (-10.0e3, "Inward Shift (I_ef = -10 kA)"),
+    (0.0, "Natural Null (I_ef = 0 kA)"),
+    (10.0e3, "Outward Shift (I_ef = +10 kA)")
 ]
-for (ief, label_str) in ef_cases
-    fl = FLARECoils(;
+
+fig2 = Figure(size=(1250, 520), fontsize=14)
+
+p_pf2, p_ef2, p_xp2 = nothing, nothing, nothing
+
+for (idx, (ief, title_str)) in enumerate(cases)
+    fl_case = FLARECoils(;
         R_pf = 0.75, z_pf = 0.40, I_pf = 45.0e3,
         R_ef = 1.30, z_ef = 0.70, I_ef = ief
     )
-    Bz_vals = [fl(SVector(R, 0.0, 0.0))[3] for R in R_scan]
-    lines!(ax2, R_scan, Bz_vals, linewidth=2.2, label=label_str)
+    psi_case = [poloidal_flux(fl_case, SVector(R, 0.0, Z)) for R in Rs, Z in Zs]
+    rx_case = find_xpoint(fl_case)
+    psi_x_case = poloidal_flux(fl_case, SVector(rx_case, 0.0, 0.0))
+
+    ax = Axis(
+        fig2[1, idx],
+        xlabel="R [m]",
+        ylabel=idx == 1 ? "Z [m]" : "",
+        aspect=DataAspect(),
+        title="$(title_str)\nX-Point at R = $(round(rx_case, digits=2)) m"
+    )
+    contour!(ax, Rs, Zs, psi_case, levels=25, colormap=:viridis, linewidth=1.4)
+    contour!(
+        ax, Rs, Zs, psi_case,
+        levels=[psi_x_case],
+        color=:red,
+        linewidth=2.4,
+        linestyle=:dash
+    )
+
+    global p_pf2 = scatter!(
+        ax, [Point2f(0.75, 0.40), Point2f(0.75, -0.40)],
+        color=:crimson, markersize=14
+    )
+    global p_ef2 = scatter!(
+        ax, [Point2f(1.30, 0.70), Point2f(1.30, -0.70)],
+        color=:deepskyblue, markersize=12
+    )
+    global p_xp2 = scatter!(
+        ax, [Point2f(rx_case, 0.0)],
+        marker=:xcross, color=:red, markersize=18, strokewidth=2
+    )
 end
 
-axislegend(ax2, position=:rb)
+Legend(
+    fig2[0, 1:3],
+    [p_pf2, p_ef2, p_xp2, LineElement(color=:red, linestyle=:dash, linewidth=2.4)],
+    ["PF Coils", "EF Coils", "X-Point Null", "Separatrix"],
+    orientation = :horizontal,
+    framevisible = false,
+    tellwidth = false
+)
+
 fig2
 ```
 
-The zero-crossing $B_z(R, 0) = 0$ corresponds to the radial position of the X-line.
-Increasing the EF coil current pushes the magnetic null inward or outward depending
-on the polarity of $I_{\text{ef}}$.
+## Current Sheet Bifurcation & Y-Point Formation
 
-## Reconnection Current Sheet and Guide Field
-
-When plasma current $I_p$ is induced during a discharge, the X-point bifurcates into
-a pair of Y-points bounding a finite-width current sheet. Furthermore, applying an
-external toroidal field introduces a guide field $B_\phi$.
+When the reconnection drive induces a plasma current sheet ($I_p$) along the midplane,
+the isolated vacuum X-point splits into a macroscopic current layer bounded by two
+Y-points, squeezing the flux surfaces and creating a central magnetic island.
 
 ```@example flare
-# FLARE with induced sheet current I_p = 10 kA and toroidal guide field B_g = 0.02 T
-flare_reconn = FLARECoils(;
-    R_pf = 0.75,
-    z_pf = 0.40,
-    I_pf = 45.0e3,
-    R_ef = 1.30,
-    z_ef = 0.70,
-    I_ef = 12.0e3,
-    R_p = 0.75,
-    I_p = 10.0e3,
-    B_guide = 0.02
+fl_vac2 = FLARECoils(;
+    R_pf = 0.75, z_pf = 0.40, I_pf = 45.0e3,
+    R_ef = 1.30, z_ef = 0.70, I_ef = 10.0e3,
+    I_p = 0.0
+)
+fl_sheet2 = FLARECoils(;
+    R_pf = 0.75, z_pf = 0.40, I_pf = 45.0e3,
+    R_ef = 1.30, z_ef = 0.70, I_ef = 10.0e3,
+    R_p = 0.78, I_p = 15.0e3
 )
 
-# Total field magnitude along the midplane
-B_mid_tot = [norm(flare_reconn(SVector(R, 0.0, 0.0))) for R in R_scan]
+psi_vac2 = [poloidal_flux(fl_vac2, SVector(R, 0.0, Z)) for R in Rs, Z in Zs]
+psi_sheet2 = [poloidal_flux(fl_sheet2, SVector(R, 0.0, Z)) for R in Rs, Z in Zs]
 
-fig3 = Figure(size=(800, 450), fontsize=16)
-ax3 = Axis(
+fig3 = Figure(size=(1100, 540), fontsize=15)
+
+ax3a = Axis(
     fig3[1, 1],
     xlabel="R [m]",
-    ylabel="|B| [T]",
-    title="Total Magnetic Field Magnitude on Midplane with Guide Field"
+    ylabel="Z [m]",
+    aspect=DataAspect(),
+    title="Vacuum Magnetic Topology (I_p = 0)\nSingle Classical X-Point Null"
 )
-lines!(ax3, R_scan, B_mid_tot, color=:teal, linewidth=2.4, label="|B| (with guide field)")
-axislegend(ax3, position=:rt)
+contour!(ax3a, Rs, Zs, psi_vac2, levels=25, colormap=:magma, linewidth=1.5)
+p_pf3 = scatter!(
+    ax3a, [Point2f(0.75, 0.40), Point2f(0.75, -0.40)],
+    color=:crimson, markersize=14
+)
+p_ef3 = scatter!(
+    ax3a, [Point2f(1.30, 0.70), Point2f(1.30, -0.70)],
+    color=:deepskyblue, markersize=12
+)
+p_xp3 = scatter!(
+    ax3a, [Point2f(Rx, 0.0)],
+    marker=:xcross, color=:gold,
+    strokecolor=:black, strokewidth=2, markersize=20
+)
+
+ax3b = Axis(
+    fig3[1, 2],
+    xlabel="R [m]",
+    ylabel="Z [m]",
+    aspect=DataAspect(),
+    title="Driven Reconnection (I_p = 15 kA)\nInduced Current Layer & Y-Point Formation"
+)
+contour!(ax3b, Rs, Zs, psi_sheet2, levels=25, colormap=:magma, linewidth=1.5)
+scatter!(
+    ax3b, [Point2f(0.75, 0.40), Point2f(0.75, -0.40)],
+    color=:crimson, markersize=14
+)
+scatter!(
+    ax3b, [Point2f(1.30, 0.70), Point2f(1.30, -0.70)],
+    color=:deepskyblue, markersize=12
+)
+p_curr = scatter!(
+    ax3b, [Point2f(0.78, 0.0)],
+    marker=:star5, color=:gold,
+    strokecolor=:black, strokewidth=1.5, markersize=20
+)
+
+Legend(
+    fig3[0, 1:2],
+    [p_pf3, p_ef3, p_xp3, p_curr],
+    ["PF Coils", "EF Coils", "X-Point Null", "Reconnection Current Sheet (I_p)"],
+    orientation = :horizontal,
+    framevisible = false,
+    tellwidth = false
+)
+
 fig3
 ```
