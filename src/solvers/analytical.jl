@@ -6,3 +6,5 @@ include("analytical/tokamak.jl")
 include("analytical/zpinch.jl")
 include("analytical/uniform.jl")
 include("analytical/magnetosphere.jl")
+include("analytical/equilibria.jl")
+

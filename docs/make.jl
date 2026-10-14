@@ -20,8 +20,10 @@ makedocs(;
             "Magnetic Mirror" => "examples/magnetic_mirror.md",
             "Magnetic Geometry" => "examples/magnetic_geometry.md",
             "Tokamak" => "examples/tokamak.md",
-
+            "Solov'ev Equilibrium" => "examples/solovev.md",
+            "Taylor State" => "examples/taylor_state.md",
             "Current Sheet" => "examples/current_sheet.md",
+
             "Magnetosphere" => "examples/magnetosphere.md",
             "Empirical Magnetosphere" => "examples/empirical_magnetosphere.md",
             "Z-Pinch" => "examples/z_pinch.md",

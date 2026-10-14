@@ -41,7 +41,9 @@ export OpenBoundary, PeriodicBoundary, ConductingWall, ConductingSphere, Prescri
 export AnalyticalMagnetosphere, draped_imf_field,
     MagneticMirror, MagneticBottle, getB_mirror, getB_bottle,
     TokamakCoils, TokamakProfile, getB_tokamak_coil, getB_tokamak_profile,
-    ZPinch, getB_zpinch
+    ZPinch, getB_zpinch,
+    SolovevEquilibrium, poloidal_flux, TaylorState, ScrewPinch
+
 
 # Utilities
 export discretize_loop, discretize_knot, getB_loop, set_current_wire!, set_current_wire,
