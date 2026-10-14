@@ -43,8 +43,16 @@ B = solve(BiotSavart(), wire, SVector(0.0, 0.0, 0.5))
 B_exact = getB_loop(SVector(0.0, 0.0, 0.5), loop)
 ```
 
+## Related Packages
+
+- [TestParticle.jl](https://github.com/henry2004y/TestParticle.jl): Charged test particle
+  tracing and orbit dynamics (full-orbit and guiding-center pushers) in electromagnetic
+  fields. Magnetic field models and numerical solutions from `Magnetostatics.jl` can be
+  directly queried by `TestParticle.jl`.
+
 ## Contents
 
 ```@contents
 Pages = ["examples.md", "api.md"]
 ```
+

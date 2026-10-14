@@ -31,7 +31,7 @@ There are separate Project.toml files for different environments.
 Please make sure to test new code that you write.
 
 If explicit test file or code is provided, prioritize running that.
-Otherwise, you can run the entire test suite for the TestParticle project by activating
+Otherwise, you can run the entire test suite for the Magnetostatics project by activating
 the `test` workspace and running `test` in the Pkg REPL.
 
 # Test code structure

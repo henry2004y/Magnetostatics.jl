@@ -50,3 +50,10 @@ lines!(ax, zs ./ L, Bmag, label="|B|", linewidth=3, color=:black)
 axislegend(ax, position=:rt)
 fig
 ```
+
+## Particle Tracing
+
+For tracing charged particle orbits (such as Speiser motion and meandering orbits) in
+reconnecting current sheets with guide and normal magnetic fields, see
+[TestParticle.jl](https://github.com/henry2004y/TestParticle.jl).
+

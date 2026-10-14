@@ -92,3 +92,14 @@ arrows!(ax, pts, kappas; color=:white, arrowsize=8, lengthscale=0.15)
 
 fig
 ```
+
+## Orbit Tracing and Particle Dynamics
+
+While `Magnetostatics.jl` computes local field geometry invariants and instantaneous
+guiding-center drift velocities ($\mathbf{v}_{\nabla B}$, $\mathbf{v}_\kappa$), full
+numerical orbit integration and particle pushing (Boris pusher, relativistic pushers,
+and guiding-center algorithms) in electromagnetic fields are provided by
+[TestParticle.jl](https://github.com/henry2004y/TestParticle.jl). Magnetic fields from
+`Magnetostatics.jl` can be directly passed into `TestParticle.jl` for charged-particle
+simulations.
+

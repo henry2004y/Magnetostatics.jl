@@ -46,3 +46,9 @@ B_exact = getB_loop([0.0, 0.0, 0.5], loop)
 ## Documentation
 
 For more detailed information on the API and usage, please refer to the [documentation](https://henry2004y.github.io/Magnetostatics.jl/dev).
+
+## Related Packages
+
+- [TestParticle.jl](https://github.com/henry2004y/TestParticle.jl) — Charged test particle
+  tracing in electromagnetic fields, including guiding-center drifts and relativistic pushers.
+
