@@ -49,7 +49,8 @@ ax = Axis(fig[1, 1], xlabel="R [m]", ylabel="Z [m]", aspect=DataAspect(),
     title="Solov'ev Equilibrium: Poloidal Flux Surfaces ψ(R, Z)")
 
 co = contour!(ax, Rs, Zs, psi_grid, levels=15, colormap=:plasma, linewidth=2)
-Colorbar(fig[1, 2], co, label="ψ [Wb]")
+Colorbar(fig[1, 2], colormap=:plasma, limits=extrema(psi_grid), label="ψ [Wb]")
+
 
 # Mark magnetic axis
 scatter!(ax, [Point2f(R0, 0.0)], color=:red, markersize=14, label="Magnetic Axis")

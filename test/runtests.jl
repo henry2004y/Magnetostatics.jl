@@ -17,9 +17,10 @@ end
     include("test_current_density.jl")
     @testset "geometry" include("test_geometry.jl")
     @testset "equilibria" include("test_equilibria.jl")
+    @testset "astrophysical" include("test_astrophysical.jl")
     @testset "knot" include("test_knot.jl")
-
     @testset "boundaries" include("test_boundaries.jl")
     @testset "Poisson" include("test_poisson.jl")
 end
+
 
