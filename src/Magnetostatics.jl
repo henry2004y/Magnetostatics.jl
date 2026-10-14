@@ -18,6 +18,7 @@ include("solvers/biot_savart.jl")
 include("solvers/analytical.jl")
 include("solvers/fft.jl")
 include("solvers/potential.jl")
+include("geometry.jl")
 include("utils.jl")
 
 # Core types
@@ -26,6 +27,9 @@ export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, AbstractBou
 export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, solve
 # Core methods
 export vector_potential, current_density, compute_curl!, compute_curl
+# Magnetic geometry and plasma drifts
+export b_unit, field_magnitude, grad_b, magnetic_curvature, drift_velocities,
+    mirror_ratio, loss_cone_angle, magnetic_helicity
 # Source geometries
 export Wire, CurrentLoop, TorusKnot, TrefoilKnot, InfiniteWire, SurfaceCurrentMesh
 # Analytical fields
@@ -34,11 +38,19 @@ export HarrisSheet, AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarri
 # Boundary conditions
 export OpenBoundary, PeriodicBoundary, ConductingWall, ConductingSphere, PrescribedBoundary
 # Specialized models and configurations
-export AnalyticalMagnetosphere, draped_imf_field, getB_mirror, getB_bottle,
-    getB_tokamak_coil, getB_tokamak_profile, getB_zpinch
+export AnalyticalMagnetosphere, draped_imf_field,
+    MagneticMirror, MagneticBottle, getB_mirror, getB_bottle,
+    TokamakCoils, TokamakProfile, getB_tokamak_coil, getB_tokamak_profile,
+    ZPinch, getB_zpinch,
+    SolovevEquilibrium, poloidal_flux, TaylorState, ScrewPinch,
+    ParkerSpiral, GuideFieldHarrisSheet, GoldHoyleFluxTube,
+    FLARECoils
+
+
 # Utilities
 export discretize_loop, discretize_knot, getB_loop, set_current_wire!, set_current_wire,
     compute_surface_current, image_source, dipole_fieldline, sph2cart, sphere_mesh
+
 
 include("precompile.jl")
 

@@ -21,6 +21,18 @@ InfiniteWire
 CurrentLoopAnalytic
 UniformField
 NullField
+MagneticMirror
+MagneticBottle
+TokamakCoils
+TokamakProfile
+ZPinch
+SolovevEquilibrium
+TaylorState
+ScrewPinch
+ParkerSpiral
+GuideFieldHarrisSheet
+GoldHoyleFluxTube
+FLARECoils
 ```
 
 ## Boundary Conditions
@@ -43,6 +55,20 @@ VectorPotential
 PoissonSolver
 solve
 vector_potential
+```
+
+## Magnetic Geometry and Plasma Drifts
+
+```@docs
+b_unit
+field_magnitude
+grad_b
+magnetic_curvature
+drift_velocities
+mirror_ratio
+loss_cone_angle
+magnetic_helicity
+poloidal_flux
 ```
 
 ## Surface Current (BEM)
@@ -79,4 +105,3 @@ getB_tokamak_coil
 getB_tokamak_profile
 getB_zpinch
 ```
-

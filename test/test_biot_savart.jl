@@ -43,4 +43,10 @@
     @test isapprox(B_loop[3], B_analytical, rtol = 1.0e-2)
     @test abs(B_loop[1]) < 1.0e-10
     @test abs(B_loop[2]) < 1.0e-10
+
+    # Test 3: Batch evaluation
+    positions = [SVector(0.0, 0.0, 0.2), SVector(0.0, 0.0, 0.5), SVector(0.0, 0.0, 1.0)]
+    B_batch = solve(solver, loop_wire, positions)
+    @test length(B_batch) == 3
+    @test B_batch[2] ≈ B_loop
 end
