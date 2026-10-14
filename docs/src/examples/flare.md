@@ -316,3 +316,87 @@ Legend(
 
 fig3
 ```
+
+## Reconstructing from Sparse Probe Measurements
+
+An axisymmetric field can be reconstructed from sparse measurements of the
+cylindrical components $(B_R, B_\phi, B_Z)$ in the poloidal plane. The poloidal
+field is represented by the flux function $\psi(R,Z)$, so its divergence-free
+condition is satisfied by construction. Here, we sample the existing FLARE coil
+model at a small set of locations to create synthetic probe data. In an experiment,
+replace these samples with calibrated measurements and their uncertainties.
+
+The reconstruction also uses flux values around the edge of its bounded domain.
+These are generated from the known reference field here; experimental edge values
+should come from boundary diagnostics or an appropriate wall model. Boundary flux
+alone does not determine the interior field, so it must be combined with probe data
+and regularization. Because this finite basis cannot exactly represent the coil
+model's edge flux everywhere, the example treats these edge values as uncertain.
+
+```@example flare
+probe_rz = [(R, Z) for R in range(0.48, 1.22; length=6)
+                    for Z in range(-0.52, 0.52; length=5)]
+probe_positions = reduce(vcat, [reshape(collect(p), 1, 2) for p in probe_rz])
+probe_B = reduce(vcat, [
+    reshape(collect(flare(SVector(R, 0.0, Z))), 1, 3) for (R, Z) in probe_rz
+])
+for i in axes(probe_B, 1)
+    probe_B[i, 1] += 2.0e-4 * sin(i)
+    probe_B[i, 2] += 2.0e-4 * cos(i)
+    probe_B[i, 3] += 2.0e-4 * sin(2i)
+end
+probe_uncertainties = fill(5.0e-4, size(probe_B))
+
+Rmin, Rmax = 0.4, 1.3
+Zmin, Zmax = -0.6, 0.6
+boundary_rz = vcat(
+    [(Rmin, Z) for Z in range(Zmin, Zmax; length=9)],
+    [(Rmax, Z) for Z in range(Zmin, Zmax; length=9)],
+    [(R, Zmin) for R in range(Rmin, Rmax; length=9)],
+    [(R, Zmax) for R in range(Rmin, Rmax; length=9)]
+)
+boundary_positions = reduce(vcat, [reshape(collect(p), 1, 2) for p in boundary_rz])
+boundary_flux = [
+    poloidal_flux(flare, SVector(R, 0.0, Z)) for (R, Z) in boundary_rz
+]
+
+reconstructed = reconstruct_axisymmetric_field(
+    probe_positions, probe_B;
+    domain = (Rmin, Rmax, Zmin, Zmax),
+    length_scale = 0.3,
+    regularization = 1.0e-10,
+    uncertainties = probe_uncertainties,
+    boundary_positions,
+    boundary_flux,
+    boundary_uncertainties = fill(2.0e-5, length(boundary_flux))
+)
+```
+
+Compare the reconstructed flux contours with the reference field. The dots mark
+the sparse probe locations used in the fit.
+
+```@example flare
+R_view = range(Rmin, Rmax; length=100)
+Z_view = range(Zmin, Zmax; length=100)
+psi_reference = [
+    poloidal_flux(flare, SVector(R, 0.0, Z)) for R in R_view, Z in Z_view
+]
+psi_reconstructed = [
+    poloidal_flux(reconstructed, SVector(R, 0.0, Z)) for R in R_view, Z in Z_view
+]
+
+fig4 = Figure(size=(1000, 440), fontsize=14)
+ax4a = Axis(fig4[1, 1], xlabel="R [m]", ylabel="Z [m]",
+    aspect=DataAspect(), title="Reference flux")
+ax4b = Axis(fig4[1, 2], xlabel="R [m]", ylabel="Z [m]",
+    aspect=DataAspect(), title="Sparse-probe reconstruction")
+contour!(ax4a, R_view, Z_view, psi_reference, levels=24, colormap=:viridis)
+contour!(ax4b, R_view, Z_view, psi_reconstructed, levels=24, colormap=:viridis)
+scatter!(ax4b, first.(probe_rz), last.(probe_rz), color=:red, markersize=7)
+fig4
+```
+
+`B_\phi` is fit independently from its probe samples. Known toroidal current
+measurements can also be supplied with `current_positions` and `current_density`;
+the fit uses the Grad-Shafranov relation for the poloidal flux. Reconstruction is
+restricted to the specified domain and does not assume zero field at its boundary.
