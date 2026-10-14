@@ -72,7 +72,7 @@ ax = Axis(
 )
 
 co = contour!(ax, Rs, Zs, psi_vac, levels=25, colormap=:viridis, linewidth=1.8)
-Colorbar(fig[1, 2], co, label="ψ [Wb]")
+Colorbar(fig[1, 2], colormap=:viridis, limits=extrema(psi_vac), label="ψ [Wb]")
 
 # Mark flux cores (PF coils) and EF coils
 scatter!(
