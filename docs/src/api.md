@@ -104,5 +104,3 @@ getB_tokamak_coil
 getB_tokamak_profile
 getB_zpinch
 ```
-
-
