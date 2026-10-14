@@ -43,7 +43,8 @@ export AnalyticalMagnetosphere, draped_imf_field,
     TokamakCoils, TokamakProfile, getB_tokamak_coil, getB_tokamak_profile,
     ZPinch, getB_zpinch,
     SolovevEquilibrium, poloidal_flux, TaylorState, ScrewPinch,
-    ParkerSpiral, GuideFieldHarrisSheet, GoldHoyleFluxTube
+    ParkerSpiral, GuideFieldHarrisSheet, GoldHoyleFluxTube,
+    FLARECoils
 
 
 # Utilities

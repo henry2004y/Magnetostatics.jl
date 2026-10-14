@@ -32,6 +32,7 @@ ScrewPinch
 ParkerSpiral
 GuideFieldHarrisSheet
 GoldHoyleFluxTube
+FLARECoils
 ```
 
 ## Boundary Conditions
