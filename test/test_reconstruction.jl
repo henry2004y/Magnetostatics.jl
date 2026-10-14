@@ -14,7 +14,8 @@ using LinearAlgebra
         centers,
         1.0e-3 .* [1.0, -0.4, 0.8, 0.5, -1.2, 0.7, -0.6, 0.3, 1.1],
         0.02 .* [0.2, -0.3, 0.5, 0.7, 0.1, -0.4, 0.6, -0.2, 0.3],
-        length_scale, domain
+        length_scale, domain, :gaussian,
+        Magnetostatics._build_center_bins(centers, domain, length_scale)
     )
     positions = [(R, Z) for R in range(0.48, 1.22; length = 5)
                           for Z in range(-0.5, 0.5; length = 4)]
@@ -29,14 +30,16 @@ using LinearAlgebra
     ]
     current_positions = [0.6 -0.3; 0.9 0.2; 1.1 -0.1]
     current_values = [begin
-        delta_star = last(Magnetostatics._rbf_terms(R, Z, centers, length_scale))
+        delta_star = last(Magnetostatics._rbf_terms(
+            R, Z, centers, length_scale, :gaussian
+        ))
         -dot(delta_star, true_field.psi_coefficients) / (Magnetostatics.μ₀ * R)
     end for (R, Z) in eachrow(current_positions)]
 
     reconstructed = reconstruct_axisymmetric_field(
         position_matrix, field_matrix;
         domain, length_scale, regularization = 1.0e-16,
-        basis_centers = centers,
+        basis_centers = centers, kernel = :gaussian,
         boundary_positions, boundary_flux = boundary_values,
         current_positions, current_density = current_values,
         current_uncertainties = fill(1.0e3, length(current_values))
@@ -55,12 +58,14 @@ using LinearAlgebra
     weighted_fit = reconstruct_axisymmetric_field(
         position_matrix, noisy_fields;
         domain, length_scale, regularization = 1.0e-16,
-        basis_centers = centers, uncertainties = weighted_uncertainties
+        basis_centers = centers, kernel = :gaussian,
+        uncertainties = weighted_uncertainties
     )
     unweighted_fit = reconstruct_axisymmetric_field(
         position_matrix, noisy_fields;
         domain, length_scale, regularization = 1.0e-16,
-        basis_centers = centers, uncertainties = fill(1.0e-4, size(field_matrix))
+        basis_centers = centers, kernel = :gaussian,
+        uncertainties = fill(1.0e-4, size(field_matrix))
     )
     heldout = SVector(0.77, 0.0, 0.17)
     @test norm(weighted_fit(heldout) - true_field(heldout)) <
@@ -82,7 +87,7 @@ using LinearAlgebra
     boundary_only = reconstruct_axisymmetric_field(
         position_matrix, fill(NaN, size(field_matrix));
         domain, length_scale, regularization = 1.0e-16,
-        basis_centers = centers, boundary_positions,
+        basis_centers = centers, kernel = :gaussian, boundary_positions,
         boundary_flux = boundary_values
     )
     @test all(isapprox(
@@ -93,7 +98,7 @@ using LinearAlgebra
     soft_boundary = reconstruct_axisymmetric_field(
         position_matrix, field_matrix;
         domain, length_scale, regularization = 1.0e-16,
-        basis_centers = centers, boundary_positions,
+        basis_centers = centers, kernel = :gaussian, boundary_positions,
         boundary_flux = boundary_values,
         boundary_uncertainties = fill(1.0e-4, length(boundary_values))
     )
@@ -103,7 +108,7 @@ using LinearAlgebra
     @test_throws ArgumentError reconstruct_axisymmetric_field(
         position_matrix, fill(NaN, size(field_matrix));
         domain, length_scale, regularization = 1.0e-16,
-        basis_centers = centers,
+        basis_centers = centers, kernel = :gaussian,
         boundary_positions = conflicting_boundary,
         boundary_flux = [0.0, 1.0]
     )
@@ -122,6 +127,10 @@ end
         length_scale = 0.3,
         regularization = 1.0e-12
     )
+    support_values = first(Magnetostatics._rbf_terms(
+        0.45, -0.55, reconstructed.centers, 0.3, :wendland_c2
+    ))
+    @test count(!iszero, support_values) < length(support_values)
 
     sensor_errors = [
         norm(reconstructed(SVector(R, 0.0, Z)) - flare(SVector(R, 0.0, Z)))
@@ -129,6 +138,15 @@ end
     ]
     @test sqrt(sum(abs2, sensor_errors) / length(sensor_errors)) < 0.01
     @test maximum(sensor_errors) < 0.02
+
+    R, Z, h = 0.82, 0.13, 1.0e-5
+    Bp = reconstructed(SVector(R + h, 0.0, Z))
+    Bm = reconstructed(SVector(R - h, 0.0, Z))
+    Bz_p = reconstructed(SVector(R, 0.0, Z + h))[3]
+    Bz_m = reconstructed(SVector(R, 0.0, Z - h))[3]
+    div_B = ((R + h) * Bp[1] - (R - h) * Bm[1]) / (2h * R) +
+        (Bz_p - Bz_m) / (2h)
+    @test abs(div_B) < 1.0e-6
 end
 
 end # module test_reconstruction
