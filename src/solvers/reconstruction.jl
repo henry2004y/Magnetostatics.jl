@@ -41,52 +41,43 @@ end
 
 _n_vacuum_terms(degree::Int) = degree < 0 ? 0 : max(1, degree)
 
+# The basis is traversed term by term: `f(k, ψ, ∂ψ/∂R, ∂ψ/∂Z, Δ*ψ)` is called for
+# every column `k` that may be nonzero at `(R, Z)`, so that fitting and evaluation
+# share one non-allocating implementation.
+
 # Values and first derivatives of the constant and the degree `2:degree`
 # polynomial solutions of `Δ*ψ = ∂²ψ/∂R² - (1/R)∂ψ/∂R + ∂²ψ/∂Z² = 0`, evaluated in
 # coordinates normalized by `scale`. Each degree `n` contributes
 # `Σ_j a_j R^(n-j) Z^j` with `a_(j+2) = -a_j m (m - 2) / ((j + 1)(j + 2))`,
 # `m = n - j`, so even degrees are up-down symmetric and odd degrees antisymmetric.
-function _vacuum_terms(R, Z, degree::Int, scale)
+function _foreach_vacuum_term(f::F, R, Z, offset, degree::Int, scale) where {F}
+    degree < 0 && return nothing
     T = promote_type(typeof(R), typeof(Z), typeof(scale))
-    n_terms = _n_vacuum_terms(degree)
-    values = zeros(T, n_terms)
-    dR = zeros(T, n_terms)
-    dZ = zeros(T, n_terms)
-    n_terms == 0 && return values, dR, dZ
     x, z = R / scale, Z / scale
-    values[1] = one(T)
+    f(offset + 1, one(T), zero(T), zero(T), zero(T))
     for n in 2:degree
-        k = n
+        value, dR, dZ = zero(T), zero(T), zero(T)
         j = isodd(n) ? 1 : 0
         a = one(T)
         while n - j >= 2
             m = n - j
-            values[k] += a * x^m * z^j
-            dR[k] += a * m * x^(m - 1) * z^j / scale
-            j > 0 && (dZ[k] += a * j * x^m * z^(j - 1) / scale)
+            value += a * x^m * z^j
+            dR += a * m * x^(m - 1) * z^j / scale
+            j > 0 && (dZ += a * j * x^m * z^(j - 1) / scale)
             a = -a * m * (m - 2) / ((j + 1) * (j + 2))
             j += 2
         end
+        f(offset + n, value, dR, dZ, zero(T))
     end
-    return values, dR, dZ
+    return nothing
 end
 
-# Poloidal flux and its derivatives for coaxial filaments carrying `1/μ₀` amperes,
-# so that the fitted coefficients are `μ₀ I` and comparable in scale to the flux.
-function _filament_terms(R, Z, filaments)
-    T = promote_type(typeof(R), typeof(Z), eltype(filaments))
-    n = size(filaments, 1)
-    values, dR, dZ = zeros(T, n), zeros(T, n), zeros(T, n)
-    pos = SVector(R, zero(R), Z)
-    for k in 1:n
-        loop = CurrentLoop(
-            filaments[k, 1], inv(T(μ₀)), SVector(zero(T), zero(T), T(filaments[k, 2])),
-            SVector(zero(T), zero(T), one(T))
-        )
-        B = getB_loop(pos, loop)
-        values[k] = R * solve(VectorPotential(), loop, pos)[2]
-        dR[k] = R * B[3]
-        dZ[k] = -R * B[1]
+function _vacuum_terms(R, Z, degree::Int, scale)
+    T = promote_type(typeof(R), typeof(Z), typeof(scale))
+    n_terms = _n_vacuum_terms(degree)
+    values, dR, dZ = zeros(T, n_terms), zeros(T, n_terms), zeros(T, n_terms)
+    _foreach_vacuum_term(R, Z, 0, degree, scale) do k, v, d_r, d_z, _
+        values[k], dR[k], dZ[k] = v, d_r, d_z
     end
     return values, dR, dZ
 end
@@ -114,61 +105,45 @@ function _unit_loop_terms(a, ρ, z)
     return psi, B_ρ, B_z, dB_ρ
 end
 
+# Poloidal flux and its derivatives for coaxial filaments carrying `1/μ₀` amperes,
+# so that the fitted coefficients are `μ₀ I` and comparable in scale to the flux.
+# Filaments lie outside the domain, so `Δ*ψ = 0`.
+function _foreach_filament_term(f::F, R, Z, offset, filaments) where {F}
+    T = promote_type(typeof(R), typeof(Z), eltype(filaments))
+    for k in axes(filaments, 1)
+        psi, B_ρ, B_z, _ = _unit_loop_terms(filaments[k, 1], R, Z - filaments[k, 2])
+        f(offset + k, psi, R * B_z, -R * B_ρ, zero(T))
+    end
+    return nothing
+end
+
 # Flux, its first derivatives and `Δ*ψ` for softened toroidal current elements
 # carrying `1/μ₀` amperes. Each element is the loop flux evaluated at the shifted
 # height `Zₖ + √((Z - Zₖ)² + ε²)`, which is smooth everywhere, carries the full
 # current and reduces to the loop field far from the element. Near the element,
 # `J_ϕ ≈ (I/π) ε² / (d² + ε²)²`.
+function _foreach_element_term(f::F, R, Z, offset, elements, width) where {F}
+    ε2 = width^2
+    for k in axes(elements, 1)
+        ΔZ = Z - elements[k, 2]
+        u = sqrt(ΔZ^2 + ε2)
+        psi, B_ρ, B_z, dB_ρ = _unit_loop_terms(elements[k, 1], R, u)
+        f(
+            offset + k, psi, R * B_z, -R * B_ρ * ΔZ / u,
+            ε2 * R / u^2 * (dB_ρ - B_ρ / u)
+        )
+    end
+    return nothing
+end
+
 function _element_terms(R, Z, elements, width)
     T = promote_type(typeof(R), typeof(Z), eltype(elements), typeof(width))
     n = size(elements, 1)
     values, dR, dZ, delta = zeros(T, n), zeros(T, n), zeros(T, n), zeros(T, n)
-    ε2 = width^2
-    for k in 1:n
-        ΔZ = Z - elements[k, 2]
-        u = sqrt(ΔZ^2 + ε2)
-        psi, B_ρ, B_z, dB_ρ = _unit_loop_terms(elements[k, 1], R, u)
-        values[k] = psi
-        dR[k] = R * B_z
-        dZ[k] = -R * B_ρ * ΔZ / u
-        delta[k] = ε2 * R / u^2 * (dB_ρ - B_ρ / u)
+    _foreach_element_term(R, Z, 0, elements, width) do k, v, d_r, d_z, gs
+        values[k], dR[k], dZ[k], delta[k] = v, d_r, d_z, gs
     end
     return values, dR, dZ, delta
-end
-
-function _basis_terms(
-        R, Z, centers, length_scale, kernel, domain, center_bins,
-        vacuum_degree, vacuum_scale, filaments,
-        elements = zeros(eltype(centers), 0, 2), element_width = one(eltype(centers))
-    )
-    values, dR, dZ, delta = _rbf_terms(
-        R, Z, centers, length_scale, kernel, domain, center_bins
-    )
-    vacuum_degree < 0 && size(filaments, 1) == 0 && size(elements, 1) == 0 &&
-        return values, dR, dZ, delta
-    v_values, v_dR, v_dZ = _vacuum_terms(R, Z, vacuum_degree, vacuum_scale)
-    f_values, f_dR, f_dZ = _filament_terms(R, Z, filaments)
-    e_values, e_dR, e_dZ, e_delta = _element_terms(R, Z, elements, element_width)
-    n_vacuum_filaments = length(v_values) + length(f_values)
-    return vcat(values, sparse(vcat(v_values, f_values, e_values))),
-        vcat(dR, sparse(vcat(v_dR, f_dR, e_dR))),
-        vcat(dZ, sparse(vcat(v_dZ, f_dZ, e_dZ))),
-        vcat(delta, spzeros(eltype(delta), n_vacuum_filaments), sparse(e_delta))
-end
-
-function _basis_terms(field::AxisymmetricFieldReconstruction, R, Z)
-    return _basis_terms(
-        R, Z, field.centers, field.length_scale, field.kernel, field.domain,
-        field.center_bins, field.vacuum_degree, field.vacuum_scale,
-        field.filament_positions, field.element_positions, field.element_width
-    )
-end
-
-function _psi_coefficient_vector(field::AxisymmetricFieldReconstruction)
-    return vcat(
-        field.psi_coefficients, field.vacuum_coefficients,
-        μ₀ .* field.filament_currents, μ₀ .* field.element_currents
-    )
 end
 
 function _build_center_bins(centers, domain, length_scale)
@@ -184,84 +159,191 @@ function _build_center_bins(centers, domain, length_scale)
     return bins
 end
 
-function _center_candidates(R, Z, centers, length_scale, domain, center_bins)
-    center_bins === nothing && return axes(centers, 1)
-    Rmin, _, Zmin, _ = domain
-    cell_r = floor(Int, (R - Rmin) / length_scale)
-    cell_z = floor(Int, (Z - Zmin) / length_scale)
-    candidates = Int[]
-    for dr in -1:1, dz in -1:1
-        append!(candidates, get(center_bins, (cell_r + dr, cell_z + dz), Int[]))
+@inline function _rbf_kernel_terms(dr, dz, R, length_scale, inv_scale2, kernel::Symbol)
+    T = promote_type(typeof(dr), typeof(dz), typeof(R), typeof(inv_scale2))
+    distance = hypot(dr, dz)
+    if kernel === :gaussian
+        value = exp(-0.5 * distance^2 * inv_scale2)
+        d_r = -dr * inv_scale2 * value
+        d_z = -dz * inv_scale2 * value
+        dRR = (dr^2 * inv_scale2^2 - inv_scale2) * value
+        dZZ = (dz^2 * inv_scale2^2 - inv_scale2) * value
+        return true, T(value), T(d_r), T(d_z), T(dRR + dZZ - d_r / R)
+    elseif kernel === :wendland_c2
+        q = distance / length_scale
+        q >= 1 && return false, zero(T), zero(T), zero(T), zero(T)
+        one_minus_q = 1 - q
+        value = one_minus_q^4 * (4q + 1)
+        phi_prime_over_q = -20 * one_minus_q^3
+        d_r = phi_prime_over_q * dr * inv_scale2
+        d_z = phi_prime_over_q * dz * inv_scale2
+        radial_hessian = -20 * one_minus_q^2 * (1 - 4q) * inv_scale2
+        tangential_hessian = phi_prime_over_q * inv_scale2
+        delta = radial_hessian + tangential_hessian - d_r / R
+        return true, T(value), T(d_r), T(d_z), T(delta)
     end
-    return candidates
+    throw(ArgumentError("kernel must be :wendland_c2 or :gaussian"))
+end
+
+@inline function _rbf_term(
+        f::F, i, R, Z, centers, length_scale, inv_scale2, kernel
+    ) where {F}
+    supported, value, d_r, d_z, delta = _rbf_kernel_terms(
+        R - centers[i, 1], Z - centers[i, 2], R, length_scale, inv_scale2, kernel
+    )
+    supported && f(i, value, d_r, d_z, delta)
+    return nothing
+end
+
+function _foreach_rbf_term(
+        f::F, R, Z, centers, length_scale, kernel,
+        domain = nothing, center_bins = nothing
+    ) where {F}
+    inv_scale2 = inv(length_scale^2)
+    if kernel === :wendland_c2 && center_bins !== nothing
+        Rmin, _, Zmin, _ = domain
+        cell_r = floor(Int, (R - Rmin) / length_scale)
+        cell_z = floor(Int, (Z - Zmin) / length_scale)
+        for dr in -1:1, dz in -1:1
+            bin = get(center_bins, (cell_r + dr, cell_z + dz), nothing)
+            bin === nothing && continue
+            for i in bin
+                _rbf_term(f, i, R, Z, centers, length_scale, inv_scale2, kernel)
+            end
+        end
+    else
+        for i in axes(centers, 1)
+            _rbf_term(f, i, R, Z, centers, length_scale, inv_scale2, kernel)
+        end
+    end
+    return nothing
 end
 
 function _rbf_terms(
         R, Z, centers, length_scale, kernel, domain = nothing, center_bins = nothing
     )
+    buffer = _TermBuffer{
+        promote_type(typeof(R), typeof(Z), eltype(centers), typeof(length_scale)),
+    }()
+    _foreach_rbf_term(buffer, R, Z, centers, length_scale, kernel, domain, center_bins)
     n = size(centers, 1)
-    T = promote_type(typeof(R), typeof(Z), eltype(centers), typeof(length_scale))
-    value_indices, value_values = Int[], T[]
-    dR_indices, dR_values = Int[], T[]
-    dZ_indices, dZ_values = Int[], T[]
-    delta_indices, delta_values = Int[], T[]
-    inv_scale2 = inv(length_scale^2)
+    sparse_terms(values) = sparsevec(buffer.indices, values, n)
+    return sparse_terms(buffer.values), sparse_terms(buffer.dR),
+        sparse_terms(buffer.dZ), sparse_terms(buffer.delta)
+end
 
-    candidate_centers = if kernel === :wendland_c2
-        _center_candidates(R, Z, centers, length_scale, domain, center_bins)
-    else
-        axes(centers, 1)
+# `basis` is either an `AxisymmetricFieldReconstruction` or a named tuple with the
+# same basis property names. Columns are ordered as RBF centers, vacuum terms,
+# filaments and current elements. With `flux = false` only `Δ*ψ` is required, so
+# the current-free vacuum and filament terms are skipped.
+function _foreach_basis_term(f::F, basis, R, Z; flux::Bool = true) where {F}
+    centers = basis.centers
+    _foreach_rbf_term(
+        f, R, Z, centers, basis.length_scale, basis.kernel, basis.domain,
+        basis.center_bins
+    )
+    offset = size(centers, 1)
+    if flux
+        _foreach_vacuum_term(f, R, Z, offset, basis.vacuum_degree, basis.vacuum_scale)
     end
+    offset += _n_vacuum_terms(basis.vacuum_degree)
+    flux && _foreach_filament_term(f, R, Z, offset, basis.filament_positions)
+    offset += size(basis.filament_positions, 1)
+    _foreach_element_term(
+        f, R, Z, offset, basis.element_positions, basis.element_width
+    )
+    return nothing
+end
 
-    @inbounds for i in candidate_centers
-        dr = R - centers[i, 1]
-        dz = Z - centers[i, 2]
-        distance = hypot(dr, dz)
-        if kernel === :gaussian
-            value = exp(-0.5 * distance^2 * inv_scale2)
-            d_r = -dr * inv_scale2 * value
-            d_z = -dz * inv_scale2 * value
-            dRR = (dr^2 * inv_scale2^2 - inv_scale2) * value
-            dZZ = (dz^2 * inv_scale2^2 - inv_scale2) * value
-            delta = dRR + dZZ - d_r / R
-        elseif kernel === :wendland_c2
-            q = distance / length_scale
-            if q >= 1
-                continue
-            else
-                one_minus_q = 1 - q
-                value = one_minus_q^4 * (4q + 1)
-                phi_prime_over_q = -20 * one_minus_q^3
-                d_r = phi_prime_over_q * dr * inv_scale2
-                d_z = phi_prime_over_q * dz * inv_scale2
-                radial_hessian = -20 * one_minus_q^2 * (1 - 4q) * inv_scale2
-                tangential_hessian = phi_prime_over_q * inv_scale2
-                delta = radial_hessian + tangential_hessian - d_r / R
-            end
-        else
-            throw(ArgumentError("kernel must be :wendland_c2 or :gaussian"))
-        end
-        if !iszero(value)
-            push!(value_indices, i)
-            push!(value_values, value)
-        end
-        if !iszero(d_r)
-            push!(dR_indices, i)
-            push!(dR_values, d_r)
-        end
-        if !iszero(d_z)
-            push!(dZ_indices, i)
-            push!(dZ_values, d_z)
-        end
-        if !iszero(delta)
-            push!(delta_indices, i)
-            push!(delta_values, delta)
-        end
+struct _TermBuffer{T}
+    indices::Vector{Int}
+    values::Vector{T}
+    dR::Vector{T}
+    dZ::Vector{T}
+    delta::Vector{T}
+end
+
+_TermBuffer{T}() where {T} = _TermBuffer{T}(Int[], T[], T[], T[], T[])
+
+function (buffer::_TermBuffer)(k, value, dR, dZ, delta)
+    push!(buffer.indices, k)
+    push!(buffer.values, value)
+    push!(buffer.dR, dR)
+    push!(buffer.dZ, dZ)
+    push!(buffer.delta, delta)
+    return nothing
+end
+
+function _collect_basis_terms!(buffer::_TermBuffer, basis, R, Z; flux::Bool = true)
+    for v in (buffer.indices, buffer.values, buffer.dR, buffer.dZ, buffer.delta)
+        empty!(v)
     end
+    _foreach_basis_term(buffer, basis, R, Z; flux)
+    return buffer
+end
 
-    return sparsevec(value_indices, value_values, n),
-        sparsevec(dR_indices, dR_values, n), sparsevec(dZ_indices, dZ_values, n),
-        sparsevec(delta_indices, delta_values, n)
+@inline function _psi_coefficient(field::AxisymmetricFieldReconstruction, k)
+    n = length(field.psi_coefficients)
+    k <= n && return field.psi_coefficients[k]
+    k -= n
+    n = length(field.vacuum_coefficients)
+    k <= n && return field.vacuum_coefficients[k]
+    k -= n
+    n = length(field.filament_currents)
+    k <= n && return μ₀ * field.filament_currents[k]
+    return μ₀ * field.element_currents[k - n]
+end
+
+# Sums of `(ψ, ∂ψ/∂R, ∂ψ/∂Z, Δ*ψ)` with the poloidal coefficients and of
+# `(F, ∂F/∂R, ∂F/∂Z)` with the toroidal RBF coefficients, where `B_ϕ = F`.
+function _basis_sums(field::AxisymmetricFieldReconstruction, R, Z; flux::Bool = true)
+    T = promote_type(eltype(field.psi_coefficients), typeof(R), typeof(Z))
+    toroidal = field.toroidal_coefficients
+    ncenters = length(toroidal)
+    sums = Ref(zero(SVector{7, T}))
+    _foreach_basis_term(field, R, Z; flux) do k, value, dR, dZ, delta
+        c = _psi_coefficient(field, k)
+        t = k <= ncenters ? toroidal[k] : zero(eltype(toroidal))
+        sums[] += SVector(c * value, c * dR, c * dZ, c * delta, t * value, t * dR, t * dZ)
+    end
+    return sums[]
+end
+
+# Weighted least-squares rows `A[i, J] = V / σᵢ`, `b[i] = targetᵢ / σᵢ` in
+# coordinate format.
+struct _FitRows{T}
+    I::Vector{Int}
+    J::Vector{Int}
+    V::Vector{T}
+    b::Vector{T}
+end
+
+_FitRows{T}() where {T} = _FitRows{T}(Int[], Int[], T[], T[])
+
+function _push_row!(rows::_FitRows, indices, terms, factor, target, ncolumns)
+    row = length(rows.b) + 1
+    for (k, term) in zip(indices, terms)
+        k <= ncolumns || continue
+        value = factor * term
+        iszero(value) && continue
+        push!(rows.I, row)
+        push!(rows.J, k)
+        push!(rows.V, value)
+    end
+    push!(rows.b, target)
+    return nothing
+end
+
+function _append_weighted_row!(
+        rows::_FitRows, indices, terms, factor, target, uncertainty,
+        ncolumns = typemax(Int)
+    )
+    isfinite(target) || return nothing
+    isfinite(uncertainty) && uncertainty > 0 ||
+        throw(ArgumentError("uncertainties must be finite and positive"))
+    weight = inv(uncertainty)
+    _push_row!(rows, indices, terms, factor * weight, target * weight, ncolumns)
+    return nothing
 end
 
 function _append_fit_row!(rows, targets, uncertainties, row, target, uncertainty)
@@ -274,42 +356,33 @@ function _append_fit_row!(rows, targets, uncertainties, row, target, uncertainty
     return nothing
 end
 
+# Sparse QR is slower and uses more memory than dense QR once the design matrix is
+# mostly filled, e.g. for the global Gaussian kernel or many current elements.
+function _qr_design_matrix(A::SparseMatrixCSC, algorithm)
+    algorithm isa QRFactorization && 3 * nnz(A) > length(A) || return A
+    return Matrix(A)
+end
+
 function _fit_rbf(
-        rows, targets, uncertainties, regularization, ncenters,
-        exact_rows, exact_targets, algorithm
-    )
-    nrows = length(rows)
-    T = promote_type(eltype(targets), eltype(uncertainties))
-    row_indices = Int[]
-    column_indices = Int[]
-    matrix_values = T[]
-    b = zeros(T, nrows + ncenters)
+        rows::_FitRows{T}, regularization, ncoefficients, exact::_FitRows{T}, algorithm
+    ) where {T}
+    nrows = length(rows.b)
+    regularization_weight = sqrt(regularization)
+    I = append!(copy(rows.I), (nrows + 1):(nrows + ncoefficients))
+    J = append!(copy(rows.J), 1:ncoefficients)
+    V = append!(copy(rows.V), Iterators.repeated(regularization_weight, ncoefficients))
+    A = sparse(I, J, V, nrows + ncoefficients, ncoefficients)
+    A = _qr_design_matrix(A, algorithm)
+    b = vcat(rows.b, zeros(T, ncoefficients))
 
-    for i in 1:nrows
-        inv_uncertainty = inv(uncertainties[i])
-        indices, values = findnz(rows[i])
-        for j in eachindex(indices)
-            push!(row_indices, i)
-            push!(column_indices, indices[j])
-            push!(matrix_values, values[j] * inv_uncertainty)
-        end
-        b[i] = targets[i] * inv_uncertainty
-    end
-    for i in 1:ncenters
-        push!(row_indices, nrows + i)
-        push!(column_indices, i)
-        push!(matrix_values, sqrt(regularization))
-    end
-    A = sparse(row_indices, column_indices, matrix_values, nrows + ncenters, ncenters)
-
-    isempty(exact_rows) &&
+    isempty(exact.b) &&
         return LinearSolve.solve(LinearProblem(A, b), algorithm).u
 
-    C = zeros(T, length(exact_rows), ncenters)
-    for i in eachindex(exact_rows)
-        C[i, :] .= exact_rows[i]
+    C = zeros(T, length(exact.b), ncoefficients)
+    for (i, j, v) in zip(exact.I, exact.J, exact.V)
+        C[i, j] = v
     end
-    d = exact_targets
+    d = exact.b
     particular = pinv(C) * d
     residual = norm(C * particular - d, Inf)
     tolerance = 100 * eps(T) * max(norm(d, Inf), one(T))
@@ -488,42 +561,35 @@ function reconstruct_axisymmetric_field(
     ncenters = size(centers, 1)
     n_vacuum = _n_vacuum_terms(vacuum_degree_int)
     n_filaments = size(filaments, 1)
-    basis_terms(R, Z) = _basis_terms(
-        R, Z, centers, T(length_scale), kernel, domain_typed, center_bins,
-        vacuum_degree_int, vacuum_scale, filaments, elements, element_width
+    basis = (;
+        centers, length_scale = T(length_scale), kernel, domain = domain_typed,
+        center_bins, vacuum_degree = vacuum_degree_int, vacuum_scale,
+        filament_positions = filaments, element_positions = elements, element_width,
     )
-    psi_rows = SparseVector{T, Int}[]
-    psi_targets = T[]
-    psi_uncertainties = T[]
-    exact_boundary_rows = SparseVector{T, Int}[]
-    exact_boundary_targets = T[]
-    toroidal_rows = SparseVector{T, Int}[]
-    toroidal_targets = T[]
-    toroidal_uncertainty_values = T[]
+    terms = _TermBuffer{T}()
+    psi_rows = _FitRows{T}()
+    exact_boundary_rows = _FitRows{T}()
+    toroidal_rows = _FitRows{T}()
 
     for i in axes(sample_positions, 1)
         R, Z = sample_positions[i, 1], sample_positions[i, 2]
-        values, dR, dZ, _ = basis_terms(R, Z)
+        _collect_basis_terms!(terms, basis, R, Z)
         for component in 1:3
             target = observed[i, component]
             isfinite(target) || continue
             sigma = uncertainty_values[i, component]
             if component == 1
-                row = -dZ / R
-                _append_fit_row!(
-                    psi_rows, psi_targets, psi_uncertainties,
-                    row, target, sigma
+                _append_weighted_row!(
+                    psi_rows, terms.indices, terms.dZ, -inv(R), target, sigma
                 )
             elseif component == 2
-                _append_fit_row!(
-                    toroidal_rows, toroidal_targets,
-                    toroidal_uncertainty_values, values[1:ncenters], target, sigma
+                _append_weighted_row!(
+                    toroidal_rows, terms.indices, terms.values, one(T), target, sigma,
+                    ncenters
                 )
             else
-                row = dR / R
-                _append_fit_row!(
-                    psi_rows, psi_targets, psi_uncertainties,
-                    row, target, sigma
+                _append_weighted_row!(
+                    psi_rows, terms.indices, terms.dR, inv(R), target, sigma
                 )
             end
         end
@@ -543,16 +609,20 @@ function reconstruct_axisymmetric_field(
         sigma === nothing || length(sigma) == length(boundary_flux) ||
             throw(ArgumentError("boundary_uncertainties length differs"))
         for i in eachindex(boundary_flux)
-            values = first(basis_terms(boundary_positions[i, 1], boundary_positions[i, 2]))
+            _collect_basis_terms!(
+                terms, basis, T(boundary_positions[i, 1]), T(boundary_positions[i, 2])
+            )
             if sigma === nothing
                 isfinite(boundary_flux[i]) ||
                     throw(ArgumentError("boundary_flux must be finite"))
-                push!(exact_boundary_rows, values)
-                push!(exact_boundary_targets, T(boundary_flux[i]))
+                _push_row!(
+                    exact_boundary_rows, terms.indices, terms.values, one(T),
+                    T(boundary_flux[i]), typemax(Int)
+                )
             else
-                _append_fit_row!(
-                    psi_rows, psi_targets, psi_uncertainties,
-                    values, T(boundary_flux[i]), sigma[i]
+                _append_weighted_row!(
+                    psi_rows, terms.indices, terms.values, one(T),
+                    T(boundary_flux[i]), sigma[i]
                 )
             end
         end
@@ -573,22 +643,22 @@ function reconstruct_axisymmetric_field(
         length(sigma) == length(current_density) ||
             throw(ArgumentError("current_uncertainties length differs"))
         for i in eachindex(current_density)
-            R, Z = current_positions[i, 1], current_positions[i, 2]
-            delta_star = last(basis_terms(R, Z))
+            R, Z = T(current_positions[i, 1]), T(current_positions[i, 2])
+            _collect_basis_terms!(terms, basis, R, Z; flux = false)
             target = -T(μ₀) * R * T(current_density[i])
-            _append_fit_row!(
-                psi_rows, psi_targets, psi_uncertainties,
-                delta_star, target, T(μ₀) * R * sigma[i]
+            _append_weighted_row!(
+                psi_rows, terms.indices, terms.delta, one(T), target,
+                T(μ₀) * R * sigma[i]
             )
         end
     end
 
-    isempty(psi_rows) && isempty(exact_boundary_rows) &&
+    isempty(psi_rows.b) && isempty(exact_boundary_rows.b) &&
         throw(ArgumentError("poloidal or boundary constraints are required"))
     all_psi_coefficients = _fit_rbf(
-        psi_rows, psi_targets, psi_uncertainties, T(regularization),
+        psi_rows, T(regularization),
         ncenters + n_vacuum + n_filaments + size(elements, 1),
-        exact_boundary_rows, exact_boundary_targets, algorithm
+        exact_boundary_rows, algorithm
     )
     psi_coefficients = all_psi_coefficients[1:ncenters]
     vacuum_coefficients = all_psi_coefficients[(ncenters + 1):(ncenters + n_vacuum)]
@@ -596,11 +666,8 @@ function reconstruct_axisymmetric_field(
     filament_currents =
         all_psi_coefficients[(ncenters + n_vacuum + 1):n_external] ./ T(μ₀)
     element_currents = all_psi_coefficients[(n_external + 1):end] ./ T(μ₀)
-    toroidal_coefficients = isempty(toroidal_rows) ? zeros(T, ncenters) :
-        _fit_rbf(
-            toroidal_rows, toroidal_targets, toroidal_uncertainty_values,
-            T(regularization), ncenters, SparseVector{T, Int}[], T[], algorithm
-        )
+    toroidal_coefficients = isempty(toroidal_rows.b) ? zeros(T, ncenters) :
+        _fit_rbf(toroidal_rows, T(regularization), ncenters, _FitRows{T}(), algorithm)
 
     return AxisymmetricFieldReconstruction(
         centers, psi_coefficients, toroidal_coefficients,
@@ -616,17 +683,12 @@ function poloidal_flux(field::AxisymmetricFieldReconstruction, pos)
     Rmin, Rmax, Zmin, Zmax = field.domain
     Rmin <= R <= Rmax && Zmin <= Z <= Zmax ||
         throw(DomainError(pos, "position is outside the reconstruction domain"))
-    values = first(_basis_terms(field, R, Z))
-    return dot(values, _psi_coefficient_vector(field))
+    return _basis_sums(field, R, Z)[1]
 end
 
 function _cylindrical_field(field::AxisymmetricFieldReconstruction, R, Z)
-    values, dR, dZ, _ = _basis_terms(field, R, Z)
-    coefficients = _psi_coefficient_vector(field)
-    B_R = -dot(dZ, coefficients) / R
-    B_phi = dot(values[1:length(field.toroidal_coefficients)], field.toroidal_coefficients)
-    B_Z = dot(dR, coefficients) / R
-    return B_R, B_phi, B_Z
+    sums = _basis_sums(field, R, Z)
+    return -sums[3] / R, sums[5], sums[2] / R
 end
 
 function (field::AxisymmetricFieldReconstruction)(pos)
@@ -652,13 +714,11 @@ function current_density(field::AxisymmetricFieldReconstruction, pos)
     Rmin <= R <= Rmax && Zmin <= z <= Zmax ||
         throw(DomainError(pos, "position is outside the reconstruction domain"))
 
-    values, dR, dZ, gs = _basis_terms(field, R, z)
-    n = length(field.toroidal_coefficients)
-    c = field.toroidal_coefficients
-    B_phi = dot(values[1:n], c)
-    J_R = -dot(dZ[1:n], c) / μ₀
-    J_phi = -dot(gs, _psi_coefficient_vector(field)) / (μ₀ * R)
-    J_Z = (dot(dR[1:n], c) + B_phi / R) / μ₀
+    sums = _basis_sums(field, R, z; flux = false)
+    B_phi = sums[5]
+    J_R = -sums[7] / μ₀
+    J_phi = -sums[4] / (μ₀ * R)
+    J_Z = (sums[6] + B_phi / R) / μ₀
     cos_phi, sin_phi = x / R, y / R
     return SVector(
         J_R * cos_phi - J_phi * sin_phi,
