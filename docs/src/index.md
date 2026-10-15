@@ -54,6 +54,14 @@ B_exact = getB_loop(SVector(0.0, 0.0, 0.5), loop)
 
 ## Related Packages
 
+- [FieldTracer.jl](https://github.com/henry2004y/FieldTracer.jl): Field-line tracing
+  for analytical and reconstructed fields through a `(position, arc_length)` callback,
+  and for numerical fields through component arrays on grids. See the
+  [Parker spiral](@ref parker_spiral_example), [3D reconstruction](@ref reconstruction3d_example),
+  and [FFT solver](examples/fft.md) demos, which use v0.2.4 or later.
+  UniformStreamlines.jl is retained for automatic evenly spaced streamline
+  placement in the other visualizations. The closed-form `dipole_fieldline`
+  utility is an exact geometric construction, not a numerical tracer.
 - [TestParticle.jl](https://github.com/henry2004y/TestParticle.jl): Charged test particle
   tracing and orbit dynamics (full-orbit and guiding-center pushers) in electromagnetic
   fields. Magnetic field models and numerical solutions from `Magnetostatics.jl` can be

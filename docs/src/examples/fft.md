@@ -27,26 +27,40 @@ B = solve(solver, J, dx)
 println("Max B magnitude: ", maximum(sqrt.(sum(B.^2, dims=1))))
 ```
 
-Visualizing the 3D magnetic field:
+Visualizing the 3D magnetic field with FieldTracer.jl's structured-grid API:
+the component arrays are indexed as `(x, y, z)` (`gridtype = "ndgrid"`).
+FieldTracer interpolates the grid data internally, so no separate interpolants
+are needed. Unlike the callable-field API, this API returns three coordinate
+vectors, not a result with `points` and `status`.
+We select seeds explicitly on three planes and color each line by its seed radius.
+The physical step length is `dx / 20`; a finite point budget traces approximately
+one turn per seed, or stops earlier if the line leaves the grid.
 
 ```@example fft
-using CairoMakie, UniformStreamlines, FastInterpolations
+using CairoMakie, FieldTracer
 
-fig = Figure(size = (800, 750), fontsize=20)
+fig = Figure(; size = (800, 750), fontsize = 20)
 ax = Axis3(fig[1, 1];
-    xlabel="x", ylabel="y", zlabel="z", aspect=:data, title="FFT Solver Result (3D Streamlines)")
+    xlabel = "x [m]", ylabel = "y [m]", zlabel = "z [m]", aspect = :data,
+    title = "FFT Solver Result (FieldTracer Field Lines)")
 
-# Build interpolants with FillExtrap so that NaN separator points in the
-# streamline paths do not trigger a DomainError inside colorize.
 Bx, By, Bz = @view(B[1, :, :, :]), @view(B[2, :, :, :]), @view(B[3, :, :, :])
-Bx_itp = linear_interp((x, y, z), Bx; extrap = FillExtrap(0.0))
-By_itp = linear_interp((x, y, z), By; extrap = FillExtrap(0.0))
-Bz_itp = linear_interp((x, y, z), Bz; extrap = FillExtrap(0.0))
-
-# Use evenstream for uniform 3D field line placement using grid data directly
-str = evenstream(x, y, z, Bx_itp, By_itp, Bz_itp; min_density=0.5, max_density=1.0)
-c = colorize(str, :norm) 
-streamlines!(ax, str; color=c, colormap=:turbo, linewidth = 1.5, with_arrows=true, arrows_spacing=0.4)
+ds = dx / 20
+radii = (0.08, 0.16, 0.24)
+for seed_z in (-0.2, 0.0, 0.2), radius in radii
+    path = trace(
+        Bx, By, Bz, radius, 0.0, seed_z, x, y, z;
+        ds, maxstep = ceil(Int, 2π * radius / ds) + 1,
+        gridtype = "ndgrid", direction = "forward"
+    )
+    @assert length(first(path)) > 1
+    @assert all(all(isfinite, coordinates) for coordinates in path)
+    lines!(
+        ax, path...; color = fill(radius, length(first(path))),
+        colorrange = extrema(radii), colormap = :turbo, linewidth = 1.5
+    )
+end
+Colorbar(fig[1, 2]; limits = extrema(radii), colormap = :turbo, label = "Seed radius [m]")
 
 fig
 ```

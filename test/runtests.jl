@@ -24,4 +24,5 @@ end
     @testset "Poisson" include("test_poisson.jl")
     @testset "reconstruction" include("test_reconstruction.jl")
     @testset "3D reconstruction" include("test_reconstruction3d.jl")
+    @testset "FieldTracer integration" include("test_fieldtracer.jl")
 end

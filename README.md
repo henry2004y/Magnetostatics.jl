@@ -51,5 +51,9 @@ For more detailed information on the API and usage, please refer to the [documen
 
 ## Related Packages
 
+- [FieldTracer.jl](https://github.com/henry2004y/FieldTracer.jl) — Field-line tracing
+  for analytical and reconstructed fields, and numerical fields on grids. The
+  examples use v0.2.4 or later; UniformStreamlines.jl remains useful for automatically
+  placing evenly spaced streamlines.
 - [TestParticle.jl](https://github.com/henry2004y/TestParticle.jl) — Charged test particle
   tracing in electromagnetic fields, including guiding-center drifts and relativistic pushers.

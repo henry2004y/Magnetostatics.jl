@@ -20,7 +20,7 @@ Boundary measurements below are uncertain observations, not exact wall condition
 
 ```@example reconstruction3d
 using Magnetostatics, StaticArrays, LinearAlgebra
-using CairoMakie
+using CairoMakie, FieldTracer
 
 domain = (-0.5, 0.5, -0.5, 0.5, -0.5, 0.5)
 coil = CurrentLoop(
@@ -175,50 +175,24 @@ lines, not particle trajectories. Nearly overlapping curves indicate agreement,
 so a second panel explicitly shows the vector error at held-out volume locations
 in microtesla. Both panels use the same camera and box limits.
 
-Trace ``d\mathbf x/ds = \mathbf B/|\mathbf B|`` in both directions using midpoint
-steps, clipping the final segment to the box boundary. The helper never evaluates
-the reconstructed field outside its domain and rejects zero/non-finite fields.
+FieldTracer.jl traces ``d\mathbf x/ds = \mathbf B/|\mathbf B|`` in both directions
+with native fixed-step RK4. Its domain predicate is checked before every field
+evaluation, including intermediate stages, so the reconstruction is never evaluated
+outside its box. A step crossing the boundary is discarded: endpoints remain
+inside, within one step of the boundary, rather than being clipped onto it.
+We check termination explicitly so invalid fields or exhausted step limits cannot
+silently produce incomplete curves.
 
 ```@example reconstruction3d
-function field_direction(field, p)
-    B = field(p)
-    magnitude = norm(B)
-    isfinite(magnitude) && magnitude > 0 || error("Cannot trace an invalid or zero field")
-    return B / magnitude
-end
-
-function distance_to_box(p, direction, box)
-    return minimum(1:3) do k
-        direction[k] > 0 && return (box[2k] - p[k]) / direction[k]
-        direction[k] < 0 && return (box[2k - 1] - p[k]) / direction[k]
-        Inf
-    end
-end
-
-function trace_to_boundary(field, seed, box, sign; ds = 0.01, maxsteps = 400)
-    p = seed
-    path = [p]
-    for _ in 1:maxsteps
-        direction = sign * field_direction(field, p)
-        distance = distance_to_box(p, direction, box)
-        if distance <= ds
-            push!(path, p + max(distance, 0.0) * direction)
-            return path
-        end
-        midpoint = p + ds / 2 * direction
-        next_direction = sign * field_direction(field, midpoint)
-        distance = distance_to_box(p, next_direction, box)
-        p += min(ds, max(distance, 0.0)) * next_direction
-        push!(path, p)
-        distance <= ds && return path
-    end
-    error("Field line did not reach the boundary within maxsteps")
-end
-
 function trace_field_line(field, seed, box; ds = 0.01)
-    backward = trace_to_boundary(field, seed, box, -1; ds)
-    forward = trace_to_boundary(field, seed, box, 1; ds)
-    return vcat(reverse(backward), forward[2:end])
+    isoutside(p, s) = any(p[k] < box[2k - 1] || p[k] > box[2k] for k in 1:3)
+    result = trace(
+        (p, s) -> field(p), collect(seed); ds, max_length = 4.0, isoutside
+    )
+    for branch in (result.backward, result.forward)
+        branch.status == :outside || error("Unexpected tracing status: $(branch.status)")
+    end
+    return vcat(reverse(result.backward.points), result.forward.points[2:end])
 end
 
 seeds = vec([SVector(x, y, 0.0) for x in (-0.27, 0.0, 0.27), y in (-0.22, 0.22)])
@@ -242,7 +216,7 @@ for path in fit_paths
 end
 arrows3d!(
     geometry_axis, Point3f.(seeds),
-    Vec3f.([0.12 * field_direction(truth, p) for p in seeds]);
+    Vec3f.([0.12 * normalize(truth(p)) for p in seeds]);
     color = :steelblue, markerscale = 1, minshaftlength = 0,
     tiplength = 0.05, tipradius = 0.028, shaftradius = 0.003
 )
@@ -286,22 +260,27 @@ end
         for path in vcat(true_paths, fit_paths) for p in path
 )
 @assert all(
-    any(isapprox(p[k], domain[j]; atol = 1e-12) for k in 1:3 for j in (2k - 1, 2k))
+    minimum(abs(p[k] - domain[j]) for k in 1:3 for j in (2k - 1, 2k)) <= 0.01
         for path in vcat(true_paths, fit_paths) for p in (first(path), last(path))
 )
-refined_paths = [trace_field_line(reconstructed, seed, domain; ds = 0.005) for seed in seeds]
+refined_paths = [
+    trace_field_line(reconstructed, seed, domain; ds = 0.005) for seed in seeds
+]
 @assert maximum(
     norm(endpoint(coarse) - endpoint(fine))
         for (coarse, fine) in zip(fit_paths, refined_paths) for endpoint in (first, last)
-) < 1.0e-4
+) < 0.015
 fig_vectors
 ```
 
 The geometry panel intentionally does not amplify differences: the reconstructed
 curves should nearly coincide with the analytical ones. The error panel makes
 those small differences measurable without implying different field topology.
-Field-line endpoints are also checked for convergence when the tracing step is
-halved; tracing accuracy is separate from reconstruction accuracy.
+Field-line endpoints are also compared when the tracing step is halved. Since
+FieldTracer does not locate boundary intersections, their separation is checked
+against the sum of the coarse and fine step lengths (0.015 m), not a boundary-event
+tolerance. Reduce `ds` for finer endpoint resolution; tracing accuracy is separate
+from reconstruction accuracy.
 
 ## Magnitude and error on a slice
 
