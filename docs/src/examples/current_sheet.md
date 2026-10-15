@@ -102,6 +102,51 @@ axislegend(ax)
 fig
 ```
 
+## [Guide-Field Harris Sheet](@id guide_field_sheet_example)
+
+In magnetic reconnection studies (such as at the Earth's magnetopause, in tokamak tearing modes, and in laboratory experiments), the reconnecting current sheet often carries an out-of-plane guide field ``B_g`` and a normal field ``B_n``:
+```math
+B_x(z) = B_0 \tanh\left(\frac{z}{L}\right), \quad B_y(z) = B_g, \quad B_z(z) = B_n
+```
+The corresponding current density is directed along the ``y``-axis:
+```math
+J_y(z) = \frac{B_0}{\mu_0 L} \operatorname{sech}^2\left(\frac{z}{L}\right)
+```
+Unlike the force-free sheet above, the uniform guide field does not compensate the drop of ``|B_x|`` at the center, so the total field strength still has a minimum of ``\sqrt{B_g^2 + B_n^2}`` there.
+
+```@example currentsheet
+B0 = 20.0e-9   # Asymptotic reconnecting field [T] (20 nT)
+L = 500.0e3    # Sheet half-thickness [m] (500 km)
+Bg = 10.0e-9   # Guide field [T] (10 nT)
+Bn = 2.0e-9    # Normal field [T] (2 nT)
+
+sheet_guide = GuideFieldHarrisSheet(B0, L; Bg, Bn)
+
+r0 = SVector(0.0, 0.0, 0.0)
+println("B at sheet center: ", sheet_guide(r0), " [T]")
+println("J at sheet center: ", current_density(sheet_guide, r0), " [A/m²]")
+
+zs = range(-3 * L, 3 * L, length=100)
+Bs = [sheet_guide(SVector(0.0, 0.0, z)) .* 1e9 for z in zs]
+
+fig = Figure(size=(750, 500), fontsize=18)
+ax = Axis(fig[1, 1], xlabel="z / L", ylabel="Field Components [nT]",
+    title="Guide-Field Harris Current Sheet Profiles")
+
+lines!(ax, zs ./ L, getindex.(Bs, 1), label="Bx (reconnecting)", linewidth=3,
+    color=:blue)
+lines!(ax, zs ./ L, getindex.(Bs, 2), label="By (guide field)", linewidth=3,
+    color=:red, linestyle=:dash)
+lines!(ax, zs ./ L, getindex.(Bs, 3), label="Bz (normal)", linewidth=2,
+    color=:green, linestyle=:dot)
+lines!(ax, zs ./ L, norm.(Bs), label="|B|", linewidth=3, color=:black)
+
+axislegend(ax, position=:rb)
+fig
+```
+
+For tracing charged particle orbits (such as Speiser motion and meandering orbits) in reconnecting current sheets with guide and normal magnetic fields, see [TestParticle.jl](https://github.com/henry2004y/TestParticle.jl).
+
 ## [Bifurcated Harris Sheet](@id bifurcated_harris_sheet_example)
 
 A current sheet model with two peaks in the current density, often observed in the Earth's magnetotail:

@@ -23,7 +23,6 @@ makedocs(;
             "Solov'ev Equilibrium" => "examples/solovev.md",
             "Taylor State" => "examples/taylor_state.md",
             "Current Sheet" => "examples/current_sheet.md",
-            "Guide-Field Current Sheet" => "examples/guide_field_sheet.md",
             "FLARE Experiment" => "examples/flare.md",
             "Parker Spiral" => "examples/parker_spiral.md",
             "Magnetosphere" => "examples/magnetosphere.md",
