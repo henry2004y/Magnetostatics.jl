@@ -390,10 +390,13 @@ essential for an accurate reconstruction:
   the domain (`filament_positions`) give exact current-free solutions inside it and
   capture the steep field near the flux cores. Their currents are fit to the data,
   so neither the coil currents nor their positions are assumed.
-- **Represent the plasma current.** Gaussian radial basis functions with a length
-  scale comparable to the sheet thickness model the plasma current. Compactly
-  supported kernels such as the default `:wendland_c2` carry no net toroidal
-  current and cannot represent a sheet with a finite total current.
+- **Represent the plasma current.** Softened toroidal current elements
+  (`current_element_positions`) on a 5 cm grid carry the net plasma current.
+  Each element is a coaxial loop with a smooth core whose width defaults to the
+  grid spacing, so the reconstructed current density is smooth and its total is
+  the sum of the fitted element currents. The default compactly supported
+  `:wendland_c2` radial basis functions add local corrections, but carry no net
+  toroidal current and cannot represent the sheet on their own.
 - **Regularize the current.** Imposing $J_\phi = 0$ at collocation points with a
   loose uncertainty of $10^5$ A/m² (below the $\sim 10^6$ A/m² peak) selects the
   smallest current distribution consistent with the probes. A much tighter
@@ -433,26 +436,28 @@ function rectangle_points(r0, r1, z0, z1, n)
 end
 filament_rz = rectangle_points(Rmin - 0.1, Rmax + 0.1, Zmin - 0.1, Zmax + 0.1, 48)
 
-length_scale = 0.06
-center_rz = [(R, Z) for R in Rmin:(length_scale / 2):Rmax
-                     for Z in Zmin:(length_scale / 2):Zmax]
-collocation_rz = [(R, Z) for R in Rmin:(length_scale / 4):Rmax
-                          for Z in Zmin:(length_scale / 4):Zmax]
+grid_rz(h) = [(R, Z) for R in Rmin:h:Rmax for Z in Zmin:h:Zmax]
+length_scale = 0.12
+center_rz = grid_rz(length_scale / 2)
+element_rz = grid_rz(0.05)
+collocation_rz = grid_rz(0.015)
 
 reconstructed = reconstruct_axisymmetric_field(
     rz_matrix(probe_rz), probe_B;
     domain = (Rmin, Rmax, Zmin, Zmax),
-    kernel = :gaussian,
     length_scale,
     basis_centers = rz_matrix(center_rz),
     regularization = 1.0e2,
     uncertainties = probe_uncertainties,
     filament_positions = rz_matrix(filament_rz),
+    current_element_positions = rz_matrix(element_rz),
     current_positions = rz_matrix(collocation_rz),
     current_density = zeros(length(collocation_rz)),
     current_uncertainties = fill(1.0e5, length(collocation_rz)),
     algorithm = QRFactorization()
 )
+println("Sum of fitted element currents: ",
+    round(sum(reconstructed.element_currents) / 1e3, digits=2), " kA")
 ```
 
 Compare the in-plane magnetic field $\mathbf{B}_p = (B_R, B_Z)$ and the toroidal
@@ -515,6 +520,8 @@ for (col, (J, title)) in enumerate(((Jref, "Reference J_ϕ"), (Jrec, "Reconstruc
         aspect=DataAspect(), title)
     heatmap!(ax, R_view, Z_view, J ./ 1e6;
         colormap=:balance, colorrange=(-J_max, J_max))
+    col == 2 && scatter!(ax, first.(element_rz), last.(element_rz);
+        color=(:black, 0.3), markersize=3)
 end
 ax_mid = Axis(fig4[2, 3]; xlabel="R [m]", ylabel="J_ϕ [MA/m²]",
     title="Midplane profile (Z = 0)")
@@ -533,7 +540,11 @@ The magnetic field is recovered to about a percent. The largest errors lie insid
 the sheet, where $B_R$ reverses over a few centimeters between probe rows. The
 current density is never measured, yet its location, shape and total are recovered
 from the field alone; its peak is smoothed by the minimum-current regularization
-and the finite probe spacing. $B_\phi$ is
+and the finite probe spacing. The gray dots in the reconstructed $J_\phi$ panel
+mark the current elements. The `:gaussian` kernel without current elements gives
+similar accuracy here, because its wide tails can push the return currents of
+each bump outside the domain, but it produces a dense system that scales poorly
+with the number of centers. $B_\phi$ is
 fit independently from its probe samples. Known exact boundary flux values can be
 supplied with `boundary_positions` and `boundary_flux`, and measured toroidal
 currents with `current_positions` and `current_density`. For a smooth vacuum

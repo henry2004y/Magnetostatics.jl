@@ -4,7 +4,8 @@
 Continuous axisymmetric magnetic field reconstructed from sparse measurements
 using a compactly supported Wendland C2 radial-basis expansion of the poloidal
 flux `ψ(R, Z)` by default, optionally augmented with global vacuum
-(homogeneous Grad–Shafranov) polynomial solutions.
+(homogeneous Grad–Shafranov) polynomial solutions, virtual external filaments,
+and softened toroidal current elements that carry net plasma current.
 The poloidal field is divergence-free by construction. The toroidal field is
 fit independently when toroidal measurements are supplied.
 """
@@ -21,6 +22,9 @@ struct AxisymmetricFieldReconstruction{T} <: AbstractMagneticField
     vacuum_scale::T
     filament_positions::Matrix{T}
     filament_currents::Vector{T}
+    element_positions::Matrix{T}
+    element_currents::Vector{T}
+    element_width::T
 end
 
 function AxisymmetricFieldReconstruction(
@@ -30,7 +34,8 @@ function AxisymmetricFieldReconstruction(
     ) where {T}
     return AxisymmetricFieldReconstruction(
         centers, psi_coefficients, toroidal_coefficients, length_scale, domain,
-        kernel, center_bins, T[], -1, one(T), zeros(T, 0, 2), T[]
+        kernel, center_bins, T[], -1, one(T), zeros(T, 0, 2), T[],
+        zeros(T, 0, 2), T[], one(T)
     )
 end
 
@@ -86,34 +91,83 @@ function _filament_terms(R, Z, filaments)
     return values, dR, dZ
 end
 
+# Flux `ψ`, `B_ρ`, `B_z` and `∂B_ρ/∂z` of a coaxial loop of radius `a` carrying
+# `1/μ₀` amperes, at cylindrical radius `ρ` and height `z` above the loop plane.
+function _unit_loop_terms(a, ρ, z)
+    α2 = (a - ρ)^2 + z^2
+    β2 = (a + ρ)^2 + z^2
+    β = sqrt(β2)
+    m = 4 * a * ρ / β2
+    K, E = ellipk(m), ellipe(m)
+    s2 = a^2 + ρ^2 + z^2
+    psi = sqrt(a * ρ / m) * ((1 - m / 2) * K - E) / π
+    B_z = (K + (a^2 - ρ^2 - z^2) / α2 * E) / (2π * β)
+    P = z / (2π * ρ * β)
+    G = s2 / α2
+    B_ρ = P * (-K + G * E)
+    dK = (E - (1 - m) * K) / (2m * (1 - m))
+    dE = (E - K) / (2m)
+    dm = -8 * a * ρ * z / β2^2
+    dP = (1 / β - z^2 / (β * β2)) / (2π * ρ)
+    dG = 2z / α2 - 2z * s2 / α2^2
+    dB_ρ = dP * (-K + G * E) + P * (-dK * dm + dG * E + G * dE * dm)
+    return psi, B_ρ, B_z, dB_ρ
+end
+
+# Flux, its first derivatives and `Δ*ψ` for softened toroidal current elements
+# carrying `1/μ₀` amperes. Each element is the loop flux evaluated at the shifted
+# height `Zₖ + √((Z - Zₖ)² + ε²)`, which is smooth everywhere, carries the full
+# current and reduces to the loop field far from the element. Near the element,
+# `J_ϕ ≈ (I/π) ε² / (d² + ε²)²`.
+function _element_terms(R, Z, elements, width)
+    T = promote_type(typeof(R), typeof(Z), eltype(elements), typeof(width))
+    n = size(elements, 1)
+    values, dR, dZ, delta = zeros(T, n), zeros(T, n), zeros(T, n), zeros(T, n)
+    ε2 = width^2
+    for k in 1:n
+        ΔZ = Z - elements[k, 2]
+        u = sqrt(ΔZ^2 + ε2)
+        psi, B_ρ, B_z, dB_ρ = _unit_loop_terms(elements[k, 1], R, u)
+        values[k] = psi
+        dR[k] = R * B_z
+        dZ[k] = -R * B_ρ * ΔZ / u
+        delta[k] = ε2 * R / u^2 * (dB_ρ - B_ρ / u)
+    end
+    return values, dR, dZ, delta
+end
+
 function _basis_terms(
         R, Z, centers, length_scale, kernel, domain, center_bins,
-        vacuum_degree, vacuum_scale, filaments
+        vacuum_degree, vacuum_scale, filaments,
+        elements = zeros(eltype(centers), 0, 2), element_width = one(eltype(centers))
     )
     values, dR, dZ, delta = _rbf_terms(
         R, Z, centers, length_scale, kernel, domain, center_bins
     )
-    vacuum_degree < 0 && size(filaments, 1) == 0 && return values, dR, dZ, delta
+    vacuum_degree < 0 && size(filaments, 1) == 0 && size(elements, 1) == 0 &&
+        return values, dR, dZ, delta
     v_values, v_dR, v_dZ = _vacuum_terms(R, Z, vacuum_degree, vacuum_scale)
     f_values, f_dR, f_dZ = _filament_terms(R, Z, filaments)
-    n_global = length(v_values) + length(f_values)
-    return vcat(values, sparse(vcat(v_values, f_values))),
-        vcat(dR, sparse(vcat(v_dR, f_dR))), vcat(dZ, sparse(vcat(v_dZ, f_dZ))),
-        vcat(delta, spzeros(eltype(delta), n_global))
+    e_values, e_dR, e_dZ, e_delta = _element_terms(R, Z, elements, element_width)
+    n_vacuum_filaments = length(v_values) + length(f_values)
+    return vcat(values, sparse(vcat(v_values, f_values, e_values))),
+        vcat(dR, sparse(vcat(v_dR, f_dR, e_dR))),
+        vcat(dZ, sparse(vcat(v_dZ, f_dZ, e_dZ))),
+        vcat(delta, spzeros(eltype(delta), n_vacuum_filaments), sparse(e_delta))
 end
 
 function _basis_terms(field::AxisymmetricFieldReconstruction, R, Z)
     return _basis_terms(
         R, Z, field.centers, field.length_scale, field.kernel, field.domain,
         field.center_bins, field.vacuum_degree, field.vacuum_scale,
-        field.filament_positions
+        field.filament_positions, field.element_positions, field.element_width
     )
 end
 
 function _psi_coefficient_vector(field::AxisymmetricFieldReconstruction)
     return vcat(
         field.psi_coefficients, field.vacuum_coefficients,
-        μ₀ .* field.filament_currents
+        μ₀ .* field.filament_currents, μ₀ .* field.element_currents
     )
 end
 
@@ -283,6 +337,19 @@ function _validate_rz_positions(positions, domain, name)
     return nothing
 end
 
+function _median_spacing(points, fallback)
+    n = size(points, 1)
+    n < 2 && return fallback
+    nearest = map(1:n) do i
+        minimum(
+            hypot(points[i, 1] - points[j, 1], points[i, 2] - points[j, 2])
+                for j in 1:n if j != i
+        )
+    end
+    spacing = sort(nearest)[cld(n, 2)]
+    return spacing > 0 ? spacing : fallback
+end
+
 function _default_rbf_centers(domain, nsamples, ::Type{T}) where {T}
     Rmin, Rmax, Zmin, Zmax = domain
     nside = max(2, ceil(Int, sqrt(nsamples)))
@@ -316,6 +383,16 @@ domain, so they efficiently represent fields from nearby external coils; place
 them between the domain and the real sources, e.g. on a curve surrounding the
 domain. Fitted currents are stored in `filament_currents` [A].
 
+`current_element_positions` is an `m × 2` matrix of `(R, Z)` locations of
+softened toroidal current elements whose currents are fit and stored in
+`element_currents` [A]. Each element is a coaxial loop with a smooth core of
+width `current_element_width` (default: median nearest-neighbor spacing of the
+elements), with current density `J_ϕ ≈ (I/π) ε² / (d² + ε²)²` and the vacuum loop
+field far away. Unlike radial basis functions, elements carry net toroidal current,
+so `sum(field.element_currents)` estimates the plasma current. Place them on a
+grid covering the region where plasma current may flow, with spacing comparable
+to the smallest current structure.
+
 `boundary_positions` and `boundary_flux` impose exact poloidal-flux constraints.
 Supply `boundary_uncertainties` to treat them as weighted observations instead.
 `current_positions` and `current_density` add toroidal-current samples
@@ -324,8 +401,9 @@ same units as `current_density` (A/m²). Setting `current_density` to zero at
 collocation points imposes a vacuum prior; a loose uncertainty (comparable to the
 expected plasma current density) instead acts as a minimum-current regularization.
 Compactly supported `ψ` bumps carry no net toroidal current, so for fields with
-a distributed plasma current prefer the `:gaussian` kernel. The fitted current
-density is available through `current_density(field, pos)`. The domain is
+a distributed plasma current add current elements (or use the `:gaussian`
+kernel, whose wide tails can place return currents outside the domain). The fitted
+current density is available through `current_density(field, pos)`. The domain is
 `(Rmin, Rmax, Zmin, Zmax)`;
 evaluation outside it throws `DomainError`. Singular sources such as coil
 filaments cannot be represented and should lie outside the domain. The default
@@ -345,7 +423,9 @@ function reconstruct_axisymmetric_field(
         current_positions = nothing, current_density = nothing,
         current_uncertainties = nothing,
         vacuum_degree::Union{Nothing, Integer} = nothing,
-        filament_positions = nothing
+        filament_positions = nothing,
+        current_element_positions = nothing,
+        current_element_width = nothing
     )
     size(positions, 2) == 2 ||
         throw(ArgumentError("positions must have columns (R, Z)"))
@@ -394,11 +474,23 @@ function reconstruct_axisymmetric_field(
         Rmin <= filaments[k, 1] <= Rmax && Zmin <= filaments[k, 2] <= Zmax
             for k in axes(filaments, 1)
     ) && throw(ArgumentError("filament_positions must lie outside the domain"))
+    elements = current_element_positions === nothing ? zeros(T, 0, 2) :
+        Matrix{T}(current_element_positions)
+    size(elements, 2) == 2 ||
+        throw(ArgumentError("current_element_positions must have columns (R, Z)"))
+    all(isfinite, elements) && all(>(0), view(elements, :, 1)) ||
+        throw(ArgumentError("current_element_positions must be finite with R > 0"))
+    width = current_element_width === nothing ?
+        _median_spacing(elements, T(length_scale)) : current_element_width
+    isfinite(width) && width > 0 ||
+        throw(ArgumentError("current_element_width must be finite and positive"))
+    element_width = T(width)
     ncenters = size(centers, 1)
     n_vacuum = _n_vacuum_terms(vacuum_degree_int)
+    n_filaments = size(filaments, 1)
     basis_terms(R, Z) = _basis_terms(
         R, Z, centers, T(length_scale), kernel, domain_typed, center_bins,
-        vacuum_degree_int, vacuum_scale, filaments
+        vacuum_degree_int, vacuum_scale, filaments, elements, element_width
     )
     psi_rows = SparseVector{T, Int}[]
     psi_targets = T[]
@@ -495,12 +587,15 @@ function reconstruct_axisymmetric_field(
         throw(ArgumentError("poloidal or boundary constraints are required"))
     all_psi_coefficients = _fit_rbf(
         psi_rows, psi_targets, psi_uncertainties, T(regularization),
-        ncenters + n_vacuum + size(filaments, 1),
+        ncenters + n_vacuum + n_filaments + size(elements, 1),
         exact_boundary_rows, exact_boundary_targets, algorithm
     )
     psi_coefficients = all_psi_coefficients[1:ncenters]
     vacuum_coefficients = all_psi_coefficients[(ncenters + 1):(ncenters + n_vacuum)]
-    filament_currents = all_psi_coefficients[(ncenters + n_vacuum + 1):end] ./ T(μ₀)
+    n_external = ncenters + n_vacuum + n_filaments
+    filament_currents =
+        all_psi_coefficients[(ncenters + n_vacuum + 1):n_external] ./ T(μ₀)
+    element_currents = all_psi_coefficients[(n_external + 1):end] ./ T(μ₀)
     toroidal_coefficients = isempty(toroidal_rows) ? zeros(T, ncenters) :
         _fit_rbf(
             toroidal_rows, toroidal_targets, toroidal_uncertainty_values,
@@ -511,7 +606,7 @@ function reconstruct_axisymmetric_field(
         centers, psi_coefficients, toroidal_coefficients,
         T(length_scale), domain_typed, kernel, center_bins,
         vacuum_coefficients, vacuum_degree_int, vacuum_scale,
-        filaments, filament_currents
+        filaments, filament_currents, elements, element_currents, element_width
     )
 end
 

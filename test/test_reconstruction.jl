@@ -417,6 +417,73 @@ end
     dA = step(Rs) * step(Zs)
     @test sum(J_rec) * dA ≈ sum(J_ref) * dA rtol = 0.03
     @test norm(J_rec - J_ref) / norm(J_ref) < 0.25
+
+    with_elements = reconstruct_axisymmetric_field(
+        position_matrix, field_matrix;
+        domain, length_scale = 0.12, basis_centers = grid(0.06),
+        regularization = 1.0e2,
+        uncertainties = fill(5.0e-4, size(field_matrix)),
+        filament_positions = rectangle_points(domain, 0.1, 48),
+        current_element_positions = grid(0.05),
+        current_positions = collocation,
+        current_density = zeros(size(collocation, 1)),
+        current_uncertainties = fill(1.0e5, size(collocation, 1))
+    )
+    @test with_elements.kernel === :wendland_c2
+    @test with_elements.element_width ≈ 0.05
+    @test sqrt(
+        sum(p -> sum(abs2, (with_elements(p) - reference(p))[SA[1, 3]]), heldout) /
+            sum(p -> sum(abs2, reference(p)[SA[1, 3]]), heldout)
+    ) < 0.02
+    J_elements = [current_density(with_elements, p)[2] for p in heldout]
+    @test sum(J_elements) * dA ≈ sum(J_ref) * dA rtol = 0.03
+    @test sum(with_elements.element_currents) ≈ 15.0e3 rtol = 0.05
+    @test norm(J_elements - J_ref) / norm(J_ref) < 0.25
+end
+
+@testset "Current element kernel" begin
+    let a = 0.9, R = 1.05, z = 0.13, h = 1.0e-6
+        μ₀ = Magnetostatics.μ₀
+        loop = CurrentLoop(a, inv(μ₀), SVector(0.0, 0, 0), SVector(0.0, 0, 1))
+        psi, B_ρ, B_z, dB_ρ = Magnetostatics._unit_loop_terms(a, R, z)
+        @test psi ≈ R * solve(VectorPotential(), loop, SVector(R, 0, z))[2] rtol = 1.0e-10
+        @test SVector(B_ρ, 0, B_z) ≈ getB_loop(SVector(R, 0, z), loop) rtol = 1.0e-10
+        B(z) = getB_loop(SVector(R, 0, z), loop)[1]
+        @test dB_ρ ≈ (B(z + h) - B(z - h)) / 2h rtol = 1.0e-6
+    end
+
+    elements = [0.9 0.02]
+    width = 0.04
+    terms(R, Z) = first.(Magnetostatics._element_terms(R, Z, elements, width))
+    for (R, Z) in ((1.0, 0.1), (0.9, 0.02), (0.92, 0.021), (0.6, -0.2))
+        psi, dR, dZ, delta = terms(R, Z)
+        ψ(R, Z) = terms(R, Z)[1]
+        h = 1.0e-5
+        @test dR ≈ (ψ(R + h, Z) - ψ(R - h, Z)) / 2h rtol = 1.0e-6
+        @test dZ ≈ (ψ(R, Z + h) - ψ(R, Z - h)) / 2h atol = 1.0e-6
+        h = 1.0e-4
+        Δstar = (ψ(R + h, Z) - 2psi + ψ(R - h, Z)) / h^2 - dR / R +
+            (ψ(R, Z + h) - 2psi + ψ(R, Z - h)) / h^2
+        @test delta ≈ Δstar rtol = 1.0e-4
+    end
+
+    Rs = range(0.3, 1.5; length = 481)
+    Zs = range(-0.6, 0.6; length = 481)
+    μ₀J = [-terms(R, Z)[4] / R for R in Rs, Z in Zs]
+    @test sum(μ₀J) * step(Rs) * step(Zs) ≈ 1 rtol = 0.01
+    @test maximum(μ₀J) ≈ 1 / (π * width^2) rtol = 0.01
+
+    @test Magnetostatics._median_spacing([0.5 0.0; 0.6 0.0; 0.8 0.0], 1.0) ≈ 0.1
+    @test Magnetostatics._median_spacing([0.5 0.0], 1.0) == 1.0
+    positions = [0.6 0.0; 1.0 0.0; 0.8 0.3; 0.8 -0.3]
+    kw = (; domain = (0.4, 1.3, -0.6, 0.6), length_scale = 0.3)
+    @test_throws ArgumentError reconstruct_axisymmetric_field(
+        positions, zeros(4, 3); kw..., current_element_positions = [0.0 0.0]
+    )
+    @test_throws ArgumentError reconstruct_axisymmetric_field(
+        positions, zeros(4, 3); kw...,
+        current_element_positions = [0.8 0.0], current_element_width = -1.0
+    )
 end
 
 end # module test_reconstruction
