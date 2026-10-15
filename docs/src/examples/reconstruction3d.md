@@ -16,12 +16,86 @@ so the field is divergence-free by construction. Sparse observations still do
 not uniquely determine it: the basis and regularization select a smooth solution.
 Boundary measurements below are uncertain observations, not exact wall conditions.
 
-## Synthetic measurements
+## Selected magnetic field
 
 ```@example reconstruction3d
 using Magnetostatics, StaticArrays, LinearAlgebra
 using CairoMakie
 
+domain = (-0.5, 0.5, -0.5, 0.5, -0.5, 0.5)
+coil = CurrentLoop(
+    1.0, 1.0e4, SVector(0.2, -0.1, 2.0), normalize(SVector(0.3, 0.2, 1.0))
+)
+truth = CurrentLoopAnalytic(coil)
+```
+
+The source is a **1 m radius loop carrying 10 kA**, centered at
+``(0.2,-0.1,2.0)`` m with a tilted normal. The left panel locates it relative to
+the 1 m reconstruction box; the right panel zooms into that box. Arrows point
+along ``\mathbf B`` and use a common length scale, while their colors show
+``|\mathbf B|`` in mT. The coil lies outside the measurement volume.
+
+```@example reconstruction3d
+box_edges = Point3f[]
+for axis in 1:3, a in (-0.5, 0.5), b in (-0.5, 0.5)
+    other_axes = filter(!=(axis), 1:3)
+    for side in (-0.5, 0.5)
+        point = zeros(3)
+        point[axis] = side
+        point[other_axes] .= (a, b)
+        push!(box_edges, Point3f(point))
+    end
+end
+coil_wire = discretize_loop(coil, 150)
+field_points = vec([
+    SVector(x, y, z) for x in (-0.3, 0.0, 0.3),
+        y in (-0.3, 0.0, 0.3), z in (-0.3, 0.0, 0.3)
+])
+field_vectors = truth.(field_points)
+field_strength = 1.0e3 .* norm.(field_vectors)
+arrow_scale = 0.20 / maximum(norm.(field_vectors))
+
+fig_setup = Figure(; size = (1150, 550), fontsize = 22)
+source_axis = Axis3(
+    fig_setup[1, 1]; title = "External tilted coil",
+    xlabel = "x [m]", ylabel = "y [m]", zlabel = "z [m]",
+    aspect = :data, azimuth = 1.15pi, elevation = 0.18pi,
+    xticks = [-1, 0, 1], yticks = [-1, 0, 1]
+)
+lines!(
+    source_axis, Point3f.(coil_wire.points); color = :darkorange,
+    linewidth = 4, label = "Coil: 10 kA"
+)
+linesegments!(
+    source_axis, box_edges; color = :steelblue, linewidth = 2,
+    label = "Reconstruction box"
+)
+Legend(fig_setup[2, 1], source_axis; orientation = :horizontal, framevisible = false)
+
+field_axis = Axis3(
+    fig_setup[1, 2]; title = "Analytical field inside the box",
+    xlabel = "x [m]", ylabel = "y [m]", zlabel = "z [m]",
+    aspect = :data, azimuth = 1.15pi, elevation = 0.25pi
+)
+linesegments!(field_axis, box_edges; color = (:gray, 0.35), linewidth = 1)
+field_arrows = arrows3d!(
+    field_axis, Point3f.(field_points), Vec3f.(arrow_scale .* field_vectors);
+    color = field_strength, colormap = :viridis,
+    colorrange = extrema(field_strength), markerscale = 1,
+    minshaftlength = 0, tiplength = 0.04, tipradius = 0.022, shaftradius = 0.004
+)
+limits!(field_axis, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5)
+Colorbar(fig_setup[1, 3], field_arrows; label = "|B| [mT]", height = 300)
+Label(fig_setup[2, 2], "Arrow direction: +B; length proportional to |B|")
+fig_setup
+```
+
+Only this synthetic demonstration knows the source and analytical field. The
+inverse fit below receives probe and boundary observations, not the coil model.
+
+## Synthetic measurements
+
+```@example reconstruction3d
 points_to_matrix(points) =
     reduce(vcat, [reshape(collect(p), 1, 3) for p in points])
 sample_field(field, positions) =
@@ -41,11 +115,6 @@ function box_surface(coordinates)
     return points, normals
 end
 
-domain = (-0.5, 0.5, -0.5, 0.5, -0.5, 0.5)
-coil = CurrentLoop(
-    1.0, 1.0e4, SVector(0.2, -0.1, 2.0), normalize(SVector(0.3, 0.2, 1.0))
-)
-truth = CurrentLoopAnalytic(coil)
 probe_positions = points_to_matrix(Iterators.product(
     (-0.45, -0.15, 0.15, 0.45), (-0.4, 0.0, 0.4), (-0.4, 0.0, 0.4)
 ))
