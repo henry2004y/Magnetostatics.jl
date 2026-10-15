@@ -32,6 +32,8 @@ General-purpose solvers for arbitrary geometries:
   boundary samples, current measurements, and field-energy regularization.
   See the [API guide](api.md#Three-dimensional-reconstruction) for an example
   and the limitations of sparse-probe inference.
+  The [3D reconstruction demo](@ref reconstruction3d_example) includes noisy
+  probes, boundary measurements, visual comparisons, and held-out validation.
 
 ## Quick Start
 
