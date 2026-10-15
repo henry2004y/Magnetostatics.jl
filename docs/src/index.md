@@ -26,6 +26,13 @@ General-purpose solvers for arbitrary geometries:
 - **`VectorPotential`**: Computes the magnetic vector potential **A** for wires, current loops, and dipoles.
 - **`PoissonSolver`**: Finite-difference Poisson solver (∇²**A** = −μ₀**J**) on a Cartesian grid with Dirichlet boundary conditions, supporting anisotropic grid spacing via `LinearSolve.jl`.
 
+### Field Reconstruction
+- **[`reconstruct_field_3d`](@ref)**: Continuous divergence-free Cartesian field
+  fitting from sparse vector or directional probes, with exact/weighted normal
+  boundary samples, current measurements, and field-energy regularization.
+  See the [API guide](api.md#Three-dimensional-reconstruction) for an example
+  and the limitations of sparse-probe inference.
+
 ## Quick Start
 
 ```julia
@@ -55,4 +62,3 @@ B_exact = getB_loop(SVector(0.0, 0.0, 0.5), loop)
 ```@contents
 Pages = ["examples.md", "api.md"]
 ```
-
