@@ -34,6 +34,7 @@ GuideFieldHarrisSheet
 GoldHoyleFluxTube
 FLARECoils
 AxisymmetricFieldReconstruction
+FieldReconstruction3D
 ```
 
 ## Boundary Conditions
@@ -55,6 +56,7 @@ FFTSolver
 VectorPotential
 PoissonSolver
 reconstruct_axisymmetric_field
+reconstruct_field_3d
 solve
 vector_potential
 ```
