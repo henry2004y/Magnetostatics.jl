@@ -491,17 +491,22 @@ J_reference = [toroidal_current(sheet, R, Z) for R in R_view, Z in Z_view]
 Bp_max = maximum(norm, Bp_reference)
 J_max = maximum(J_reference) / 1e6
 
+Bp_label = rich("|B", subscript("p"), "| [T]")
+J_label = rich("J", subscript("ϕ"), " [MA/m²]")
+error_label = rich("|ΔB", subscript("p"), "| / max|B", subscript("p"), "|")
+
 function compare_reconstructions(probe_rz, fits)
-    fig = Figure(size=(1300, 1450), fontsize=14)
-    columns = [("Reference: coils + current sheet", reference, sheet);
-               [(title, fit, fit) for (title, fit) in fits]]
-    ax_R = Axis(fig[4, 1:2]; xlabel="R [m]", ylabel="J_ϕ [MA/m²]",
+    fig = Figure(size=(1600, 1900), fontsize=22)
+    columns = [("Reference", "coils + current sheet", reference, sheet);
+               [("Reconstruction", title, fit, fit) for (title, fit) in fits]]
+    ax_R = Axis(fig[5, 1:2]; xlabel="R [m]", ylabel=J_label,
         title="Midplane profile (Z = 0)")
-    ax_Z = Axis(fig[4, 3]; xlabel="Z [m]", ylabel="J_ϕ [MA/m²]",
+    ax_Z = Axis(fig[5, 3]; xlabel="Z [m]", ylabel=J_label,
         title="Vertical profile (R = 0.95 m)")
-    probe_style = (color=:red, strokecolor=:black, strokewidth=0.5, markersize=6)
+    probe_style = (color=:red, strokecolor=:black, strokewidth=0.8, markersize=9)
     profile_styles = [(:black, :solid), ("#0072B2", :dash), ("#D55E00", :dashdot)]
-    for (col, (title, field, source)) in enumerate(columns)
+    header_colors = [(:gray60, 0.35); fill((:steelblue, 0.25), length(fits))]
+    for (col, (kind, title, field, source)) in enumerate(columns)
         Bp = [inplane(field, R, Z) for R in R_view, Z in Z_view]
         J = [toroidal_current(source, R, Z) for R in R_view, Z in Z_view]
         Bp_error = norm.(Bp .- Bp_reference)
@@ -515,44 +520,51 @@ function compare_reconstructions(probe_rz, fits)
                 "I_p ", round(sum(J) * dA / 1e3, digits=2), " kA")
         end
 
-        ax = Axis(fig[1, col]; xlabel="R [m]", ylabel="Z [m]",
-            aspect=DataAspect(), title)
+        Box(fig[1, col]; color=header_colors[col], strokevisible=false)
+        Label(fig[1, col], rich(rich(kind; font=:bold, fontsize=26), "\n", title);
+            padding=(0, 0, 8, 8), justification=:center, tellwidth=false)
+
+        ax = Axis(fig[2, col]; xlabel="R [m]", ylabel=col == 1 ? "Z [m]" : "",
+            aspect=DataAspect(), title=rich("|B", subscript("p"), "| and field lines"))
         heatmap!(ax, R_view, Z_view, norm.(Bp);
             colormap=:cividis, colorrange=(0, Bp_max))
         str = evenstream(R_view, Z_view, (R, Z) -> inplane(field, R, Z);
             min_density=2.0, max_density=4.0)
-        streamlines!(ax, str; color=:white, linewidth=1.0, with_arrows=true)
+        streamlines!(ax, str; color=:white, linewidth=1.2, with_arrows=true)
         scatter!(ax, first.(probe_rz), last.(probe_rz); probe_style...)
 
-        ax = Axis(fig[2, col]; xlabel="R [m]", ylabel="Z [m]", aspect=DataAspect(),
+        ax = Axis(fig[3, col]; xlabel="R [m]", ylabel=col == 1 ? "Z [m]" : "",
+            aspect=DataAspect(),
             title=col == 1 ? "Probe layout ($(length(probe_rz)) probes)" :
-                "|ΔB_p| / max|B_p|")
+                rich("Field error ", error_label))
         heatmap!(ax, R_view, Z_view, Bp_error ./ Bp_max;
             colormap=:inferno, colorrange=(0, 0.05))
-        scatter!(ax, first.(probe_rz), last.(probe_rz); color=:white, markersize=4)
+        scatter!(ax, first.(probe_rz), last.(probe_rz); color=:white, markersize=6)
 
-        ax = Axis(fig[3, col]; xlabel="R [m]", ylabel="Z [m]",
-            aspect=DataAspect(), title="J_ϕ")
+        ax = Axis(fig[4, col]; xlabel="R [m]", ylabel=col == 1 ? "Z [m]" : "",
+            aspect=DataAspect(), title=rich("Toroidal current J", subscript("ϕ")))
         heatmap!(ax, R_view, Z_view, J ./ 1e6;
             colormap=:balance, colorrange=(-J_max, J_max))
         if field isa AxisymmetricFieldReconstruction &&
                 !isempty(field.element_currents)
             scatter!(ax, field.element_positions[:, 1], field.element_positions[:, 2];
-                color=(:black, 0.3), markersize=3)
+                color=(:black, 0.3), markersize=4)
         end
 
         color, linestyle = profile_styles[col]
         label = col == 1 ? "Reference" : title
         lines!(ax_R, R_view, toroidal_current.(Ref(source), R_view, 0.0) ./ 1e6;
-            color, linestyle, linewidth=2, label)
+            color, linestyle, linewidth=3, label)
         lines!(ax_Z, Z_view, toroidal_current.(Ref(source), 0.95, Z_view) ./ 1e6;
-            color, linestyle, linewidth=2)
+            color, linestyle, linewidth=3)
     end
-    axislegend(ax_R; position=:lt)
-    Colorbar(fig[1, 4]; limits=(0, Bp_max), colormap=:cividis, label="|B_p| [T]")
-    Colorbar(fig[2, 4]; limits=(0, 0.05), colormap=:inferno, label="Relative error")
-    Colorbar(fig[3, 4]; limits=(-J_max, J_max), colormap=:balance,
-        label="J_ϕ [MA/m²]")
+    Legend(fig[6, 1:3], ax_R; orientation=:horizontal, framevisible=false)
+    Colorbar(fig[2, 4]; limits=(0, Bp_max), colormap=:cividis, label=Bp_label)
+    Colorbar(fig[3, 4]; limits=(0, 0.05), colormap=:inferno, label="Relative error")
+    Colorbar(fig[4, 4]; limits=(-J_max, J_max), colormap=:balance, label=J_label)
+    colsize!(fig.layout, 1, Auto(1)); colsize!(fig.layout, 2, Auto(1))
+    colsize!(fig.layout, 3, Auto(1))
+    rowgap!(fig.layout, 1, 8)
     return fig
 end
 nothing # hide
