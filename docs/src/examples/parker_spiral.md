@@ -22,7 +22,7 @@ where ``r_0`` is the source-surface radius where the field is purely radial and 
 
 ```@example parker
 using Magnetostatics, StaticArrays, LinearAlgebra
-using CairoMakie
+using CairoMakie, FieldTracer
 
 AU = 1.496e11            # 1 AU in meters
 R_sun = 6.96e8           # Solar radius in meters
@@ -78,24 +78,17 @@ fig
 
 Since ``B_\theta = 0``, every field line stays on a cone of constant colatitude and winds into an Archimedean-like spiral as it moves outward.
 The spiral is tightest near the equator, where ``|B_\phi| / B_r \propto \sin\theta`` is largest, and opens up towards the poles.
-We trace field lines starting from the source surface at several latitudes and longitudes by integrating ``d\mathbf{x}/dr = \mathbf{B} / B_r`` with a fourth-order Runge–Kutta scheme.
+We use FieldTracer.jl v0.2.4 or later to trace
+``d\mathbf{x}/ds = \mathbf{B}/|\mathbf{B}|`` from the source surface at several
+latitudes and longitudes. The callback accepts position and signed arc length;
+the stationary field only needs position. Steps have a physical length in meters.
+Tracing stops just inside 5 AU, without evaluating the field beyond that radius.
+Pass an ordinary `Vector` seed (`collect(seed)` below), as v0.2.4's native
+tracer does not support `SVector` seeds internally.
 
 ```@example parker
-function trace_parker(field, r_start, r_end, θ, φ; n=400)
-    pos = r_start * SVector(sin(θ) * cos(φ), sin(θ) * sin(φ), cos(θ))
-    dr = (r_end - r_start) / n
-    rhs(p) = (B = field(p); B / dot(B, normalize(p)))
-    line = [pos]
-    for _ in 1:n
-        k1 = rhs(pos)
-        k2 = rhs(pos + dr / 2 * k1)
-        k3 = rhs(pos + dr / 2 * k2)
-        k4 = rhs(pos + dr * k3)
-        pos += dr / 6 * (k1 + 2k2 + 2k3 + k4)
-        push!(line, pos)
-    end
-    return line
-end
+parker_field(p, s) = spiral(p)
+outside_heliosphere(p, s) = norm(p) > 5.0 * AU
 
 fig3d = Figure(size=(900, 800), fontsize=16)
 ax3 = Axis3(fig3d[1, 1]; aspect=:data, xlabel="x [AU]", ylabel="y [AU]",
@@ -105,7 +98,14 @@ ax3 = Axis3(fig3d[1, 1]; aspect=:data, xlabel="x [AU]", ylabel="y [AU]",
 colormap = :coolwarm
 latitudes = (-60, -30, 0, 30, 60)
 for lat in latitudes, φ0 in range(0, 2π; length=7)[1:(end - 1)]
-    line = trace_parker(spiral, r0, 5.0 * AU, deg2rad(90 - lat), φ0)
+    θ = deg2rad(90 - lat)
+    seed = r0 * SVector(sin(θ) * cos(φ0), sin(θ) * sin(φ0), cos(θ))
+    result = trace(
+        parker_field, collect(seed); ds = 0.002 * AU, max_length = 20.0 * AU,
+        direction = "forward", isoutside = outside_heliosphere
+    )
+    @assert result.status == :outside
+    line = result.points
     lines!(ax3, [Point3f(p / AU) for p in line]; color=fill(lat, length(line)),
         colormap, colorrange=(-60, 60), linewidth=2)
 end
