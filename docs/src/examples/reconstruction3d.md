@@ -237,8 +237,9 @@ halved; tracing accuracy is separate from reconstruction accuracy.
 ## Magnitude and error on a slice
 
 Compare ``|\mathbf B|`` at ``z=0.13`` m, which does not coincide with a probe
-plane. The error panel measures the **vector difference**, not just the
-difference in field magnitudes.
+plane. All three panels use **millitesla (mT)**. The error panel measures
+``|\mathbf B_{\rm reconstructed}-\mathbf B_{\rm analytical}|``, not just the
+difference in field magnitudes. For scale, an error of 0.01 mT is 10 microtesla.
 
 ```@example reconstruction3d
 xs = range(-0.5, 0.5; length = 41)
@@ -249,24 +250,31 @@ fit_magnitude = [
     1.0e3 * norm(reconstructed(SVector(x, y, slice_z))) for x in xs, y in ys
 ]
 vector_error = [
-    1.0e6 * norm(reconstructed(SVector(x, y, slice_z)) - truth(SVector(x, y, slice_z)))
+    1.0e3 * norm(reconstructed(SVector(x, y, slice_z)) - truth(SVector(x, y, slice_z)))
         for x in xs, y in ys
 ]
 field_range = extrema(vcat(vec(true_magnitude), vec(fit_magnitude)))
-fig_slice = Figure(; size = (1150, 400), fontsize = 16)
+panel_size = 280
+fig_slice = Figure(; fontsize = 24)
 for (column, data, title) in (
         (1, true_magnitude, "Analytical |B|"),
         (2, fit_magnitude, "Reconstructed |B|"),
-        (3, vector_error, "Vector reconstruction error")
+        (3, vector_error, "Vector error")
     )
     ax = Axis(
         fig_slice[1, 2column - 1]; title, xlabel = "x [m]", ylabel = "y [m]",
-        aspect = DataAspect()
+        aspect = DataAspect(), width = panel_size, height = panel_size,
+        titlesize = 26
     )
     color_range = column == 3 ? (0.0, maximum(vector_error)) : field_range
     image = heatmap!(ax, xs, ys, data; colorrange = color_range, colormap = :viridis)
-    Colorbar(fig_slice[1, 2column], image; label = column == 3 ? "Error [uT]" : "|B| [mT]")
+    Colorbar(
+        fig_slice[1, 2column], image;
+        label = column == 3 ? "Vector error [mT]" : "|B| [mT]",
+        height = panel_size, valign = :center, width = 18
+    )
 end
+resize_to_layout!(fig_slice)
 fig_slice
 ```
 
