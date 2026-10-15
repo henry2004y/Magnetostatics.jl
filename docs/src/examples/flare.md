@@ -499,7 +499,7 @@ function compare_reconstructions(probe_rz, fits)
         title="Midplane profile (Z = 0)")
     ax_Z = Axis(fig[4, 3]; xlabel="Z [m]", ylabel="J_ϕ [MA/m²]",
         title="Vertical profile (R = 0.95 m)")
-    probe_style = (color=:black, strokecolor=:white, strokewidth=1, markersize=6)
+    probe_style = (color=:red, strokecolor=:black, strokewidth=0.5, markersize=6)
     profile_styles = [(:black, :solid), ("#0072B2", :dash), ("#D55E00", :dashdot)]
     for (col, (title, field, source)) in enumerate(columns)
         Bp = [inplane(field, R, Z) for R in R_view, Z in Z_view]
@@ -529,7 +529,7 @@ function compare_reconstructions(probe_rz, fits)
                 "|ΔB_p| / max|B_p|")
         heatmap!(ax, R_view, Z_view, Bp_error ./ Bp_max;
             colormap=:inferno, colorrange=(0, 0.05))
-        scatter!(ax, first.(probe_rz), last.(probe_rz); probe_style...)
+        scatter!(ax, first.(probe_rz), last.(probe_rz); color=:white, markersize=4)
 
         ax = Axis(fig[3, col]; xlabel="R [m]", ylabel="Z [m]",
             aspect=DataAspect(), title="J_ϕ")
