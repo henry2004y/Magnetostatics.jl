@@ -324,7 +324,7 @@ function reconstruct_field_3d(
         throw(ArgumentError("domain bounds must be finite and strictly increasing"))
     for (name, value) in (
             ("length_scale", length_scale), ("regularization", regularization),
-            ("abstol", abstol), ("reltol", reltol)
+            ("abstol", abstol), ("reltol", reltol),
         )
         isfinite(value) && value > 0 ||
             throw(ArgumentError("$name must be finite and positive"))
@@ -365,10 +365,14 @@ function reconstruct_field_3d(
         end
     end
     for (locations, directions, values, errors, group) in (
-            (directional_positions, directional_directions, directional_values,
-                directional_uncertainties, :directional),
-            (boundary_positions, boundary_normals, boundary_values,
-                boundary_uncertainties, :boundary)
+            (
+                directional_positions, directional_directions, directional_values,
+                directional_uncertainties, :directional,
+            ),
+            (
+                boundary_positions, boundary_normals, boundary_values,
+                boundary_uncertainties, :boundary,
+            ),
         )
         supplied = (locations !== nothing, directions !== nothing, values !== nothing)
         if !any(supplied)

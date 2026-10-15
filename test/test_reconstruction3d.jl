@@ -95,19 +95,21 @@ end
         for p in (SVector(0.13, -0.17, 0.29), SVector(-0.81, 0.41, 0.08))
             @test reconstructed(p) ≈ truth(p) atol = 1.0e-9
             @test abs(divergence(reconstructed, p)) < 1.0e-8
-            @test current_density(reconstructed, p) ≈ current_density(truth, p) rtol = 1e-7
+            @test current_density(reconstructed, p) ≈ current_density(truth, p) rtol = 1.0e-7
             h = 1.0e-5
-            gradient = hcat([
-                begin
-                    step = SVector{3}(ntuple(i -> i == k ? h : 0.0, 3))
-                    (reconstructed(p + step) - reconstructed(p - step)) / (2h)
-                end for k in 1:3
-            ]...)
+            gradient = hcat(
+                [
+                    begin
+                        step = SVector{3}(ntuple(i -> i == k ? h : 0.0, 3))
+                        (reconstructed(p + step) - reconstructed(p - step)) / (2h)
+                    end for k in 1:3
+                ]...
+            )
             curl = SVector(
                 gradient[3, 2] - gradient[2, 3],
                 gradient[1, 3] - gradient[3, 1], gradient[2, 1] - gradient[1, 2]
             )
-            @test current_density(reconstructed, p) ≈ curl / Magnetostatics.μ₀ rtol = 1e-7
+            @test current_density(reconstructed, p) ≈ curl / Magnetostatics.μ₀ rtol = 1.0e-7
         end
     end
 end
@@ -175,9 +177,11 @@ end
         Iterators.product((-0.7, 0.0, 0.7), (-0.6, 0.2, 0.6), (-0.5, 0.1, 0.7))
     )
     values = samples(truth, positions)
-    directions = point_matrix([
-        normalize(SVector(cos(i), sin(i), cos(2i))) for i in axes(positions, 1)
-    ])
+    directions = point_matrix(
+        [
+            normalize(SVector(cos(i), sin(i), cos(2i))) for i in axes(positions, 1)
+        ]
+    )
     directional_values = [
         dot(n, b) for (n, b) in zip(eachrow(directions), eachrow(values))
     ]
@@ -294,10 +298,10 @@ end
     @test size(covered.centers, 1) == 4^3
     for p in (
             SVector(0.19, -0.23, 0.31), SVector(0.99, 0.99, 0.99),
-            SVector(0.2 - 1e-4, 0.0, 0.0), SVector(0.2 + 1e-4, 0.0, 0.0)
+            SVector(0.2 - 1.0e-4, 0.0, 0.0), SVector(0.2 + 1.0e-4, 0.0, 0.0),
         )
         @test abs(divergence(covered, p)) < 1.0e-7
-        @test abs(divergence(fit, p; h = 1e-6)) < 1.0e-7
+        @test abs(divergence(fit, p; h = 1.0e-6)) < 1.0e-7
     end
     bins = Magnetostatics._bins_3d(zeros(1, 3), domain, 0.2)
     center_field = FieldReconstruction3D(
@@ -305,8 +309,8 @@ end
         0.2, domain, :wendland_c2, bins, NullField(), (;)
     )
     @test all(isfinite, current_density(center_field, zeros(3)))
-    @test abs(divergence(center_field, zeros(3); h = 1e-6)) < 1.0e-7
-    @test abs(divergence(center_field, SVector(0.2, 0.0, 0.0); h = 1e-6)) < 1.0e-7
+    @test abs(divergence(center_field, zeros(3); h = 1.0e-6)) < 1.0e-7
+    @test abs(divergence(center_field, SVector(0.2, 0.0, 0.0); h = 1.0e-6)) < 1.0e-7
 end
 
 @testset "Independent analytical field and sensitivity" begin
@@ -323,7 +327,7 @@ end
     )
     reference_values = samples(truth, heldout)
     errors = Float64[]
-    for (n, scale, penalty) in ((3, 1.6, 1e-10), (4, 1.2, 1e-10), (4, 1.6, 1e-8))
+    for (n, scale, penalty) in ((3, 1.6, 1.0e-10), (4, 1.2, 1.0e-10), (4, 1.6, 1.0e-8))
         centers = point_matrix(
             Iterators.product(ntuple(_ -> range(-0.5, 0.5; length = n), 3)...)
         )
@@ -348,10 +352,12 @@ end
     dipole_positions[:, 3] .+= 4.0
     dipole_heldout = copy(heldout)
     dipole_heldout[:, 3] .+= 4.0
-    dipole_centers = point_matrix(Iterators.product(
-        range(-0.5, 0.5; length = 4), range(-0.5, 0.5; length = 4),
-        range(3.5, 4.5; length = 4)
-    ))
+    dipole_centers = point_matrix(
+        Iterators.product(
+            range(-0.5, 0.5; length = 4), range(-0.5, 0.5; length = 4),
+            range(3.5, 4.5; length = 4)
+        )
+    )
     dipole_fit = reconstruct_field_3d(
         dipole_positions, samples(dipole, dipole_positions);
         domain = dipole_box, length_scale = 1.2, basis_centers = dipole_centers,
@@ -382,12 +388,18 @@ end
             (; directional_uncertainties = [1.0]), (; current_uncertainties = ones(1, 3)),
             (; current_positions = positions),
             (; current_positions = positions, current_density = zeros(1, 2)),
-            (; current_positions = positions, current_density = zeros(1, 3),
-                current_uncertainties = zeros(1, 3)),
-            (; directional_positions = positions, directional_directions = [0.0 0.0 0.0],
-                directional_values = [0.0]),
-            (; directional_positions = positions, directional_directions = [1.0 0.0 0.0],
-                directional_values = [Inf])
+            (;
+                current_positions = positions, current_density = zeros(1, 3),
+                current_uncertainties = zeros(1, 3),
+            ),
+            (;
+                directional_positions = positions, directional_directions = [0.0 0.0 0.0],
+                directional_values = [0.0],
+            ),
+            (;
+                directional_positions = positions, directional_directions = [1.0 0.0 0.0],
+                directional_values = [Inf],
+            ),
         )
         @test_throws ArgumentError fit(; kwargs...)
     end
@@ -399,9 +411,11 @@ end
             (; boundary_normals = [2.0 0.0 0.0], boundary_values = [0.0]),
             (; boundary_normals = [1.0 0.0 0.0], boundary_values = [NaN]),
             (; boundary_normals = [1.0 0.0 0.0], boundary_values = [0.0, 0.0]),
-            (; boundary_normals = [1.0 0.0 0.0], boundary_values = [0.0],
-                boundary_uncertainties = [-1.0]),
-            (; boundary_normals = [NaN 0.0 0.0], boundary_values = [0.0])
+            (;
+                boundary_normals = [1.0 0.0 0.0], boundary_values = [0.0],
+                boundary_uncertainties = [-1.0],
+            ),
+            (; boundary_normals = [NaN 0.0 0.0], boundary_values = [0.0]),
         )
         @test_throws ArgumentError fit(; boundary_positions = positions, kwargs...)
     end
