@@ -99,38 +99,140 @@ field and curl energy; it does **not** impose zero current exactly.
 
 ## Three-dimensional comparison
 
-Plot field vectors as centered line segments on a coarse 3D grid, with identical
-scaling in both panels. Orange points mark probe positions. Segment length is
-proportional to field magnitude; segments show orientation, not polarity.
+The left panel overlays analytical (solid blue) and reconstructed (dashed orange)
+field lines traced from the **same six seeds**. Arrows indicate the direction of
+the analytical field; gray markers locate the probes. These are magnetic field
+lines, not particle trajectories. Nearly overlapping curves indicate agreement,
+so a second panel explicitly shows the vector error at held-out volume locations
+in microtesla. Both panels use the same camera and box limits.
+
+Trace ``d\mathbf x/ds = \mathbf B/|\mathbf B|`` in both directions using midpoint
+steps, clipping the final segment to the box boundary. The helper never evaluates
+the reconstructed field outside its domain and rejects zero/non-finite fields.
 
 ```@example reconstruction3d
-vector_points = [
-    SVector(x, y, z) for x in (-0.35, 0.0, 0.35),
-        y in (-0.35, 0.0, 0.35), z in (-0.35, 0.0, 0.35)
-]
-vector_scale = 0.22 / maximum(norm(truth(p)) for p in vector_points)
-fig_vectors = Figure(; size = (1000, 480), fontsize = 16)
-for (column, field, title) in (
-        (1, truth, "Analytical coil field"),
-        (2, reconstructed, "Reconstructed from sparse probes")
-    )
-    ax = Axis3(
-        fig_vectors[1, column]; title, xlabel = "x [m]", ylabel = "y [m]",
-        zlabel = "z [m]", aspect = :data
-    )
-    segments = Point3f[]
-    for p in vector_points
-        half_vector = vector_scale * field(p) / 2
-        push!(segments, Point3f(p - half_vector), Point3f(p + half_vector))
+function field_direction(field, p)
+    B = field(p)
+    magnitude = norm(B)
+    isfinite(magnitude) && magnitude > 0 || error("Cannot trace an invalid or zero field")
+    return B / magnitude
+end
+
+function distance_to_box(p, direction, box)
+    return minimum(1:3) do k
+        direction[k] > 0 && return (box[2k] - p[k]) / direction[k]
+        direction[k] < 0 && return (box[2k - 1] - p[k]) / direction[k]
+        Inf
     end
-    linesegments!(ax, segments; color = :steelblue, linewidth = 3)
-    scatter!(
-        ax, Point3f.(eachrow(probe_positions)); color = :darkorange, markersize = 7
+end
+
+function trace_to_boundary(field, seed, box, sign; ds = 0.01, maxsteps = 400)
+    p = seed
+    path = [p]
+    for _ in 1:maxsteps
+        direction = sign * field_direction(field, p)
+        distance = distance_to_box(p, direction, box)
+        if distance <= ds
+            push!(path, p + max(distance, 0.0) * direction)
+            return path
+        end
+        midpoint = p + ds / 2 * direction
+        next_direction = sign * field_direction(field, midpoint)
+        distance = distance_to_box(p, next_direction, box)
+        p += min(ds, max(distance, 0.0)) * next_direction
+        push!(path, p)
+        distance <= ds && return path
+    end
+    error("Field line did not reach the boundary within maxsteps")
+end
+
+function trace_field_line(field, seed, box; ds = 0.01)
+    backward = trace_to_boundary(field, seed, box, -1; ds)
+    forward = trace_to_boundary(field, seed, box, 1; ds)
+    return vcat(reverse(backward), forward[2:end])
+end
+
+seeds = vec([SVector(x, y, 0.0) for x in (-0.27, 0.0, 0.27), y in (-0.22, 0.22)])
+true_paths = [trace_field_line(truth, seed, domain) for seed in seeds]
+fit_paths = [trace_field_line(reconstructed, seed, domain) for seed in seeds]
+
+fig_vectors = Figure(; size = (1150, 570), fontsize = 16)
+geometry_axis = Axis3(
+    fig_vectors[1, 1]; title = "Field geometry: identical seeds",
+    xlabel = "x [m]", ylabel = "y [m]", zlabel = "z [m]",
+    aspect = :data, azimuth = 1.15pi, elevation = 0.25pi
+)
+for path in true_paths
+    lines!(geometry_axis, Point3f.(path); color = :steelblue, linewidth = 3)
+end
+for path in fit_paths
+    lines!(
+        geometry_axis, Point3f.(path); color = :darkorange,
+        linewidth = 2, linestyle = :dash
     )
+end
+arrows3d!(
+    geometry_axis, Point3f.(seeds),
+    Vec3f.([0.12 * field_direction(truth, p) for p in seeds]);
+    color = :steelblue, markerscale = 1, minshaftlength = 0,
+    tiplength = 0.05, tipradius = 0.028, shaftradius = 0.003
+)
+scatter!(
+    geometry_axis, Point3f.(eachrow(probe_positions));
+    color = (:gray, 0.45), markersize = 5
+)
+Legend(
+    fig_vectors[2, 1],
+    [
+        LineElement(; color = :steelblue, linewidth = 3),
+        LineElement(; color = :darkorange, linewidth = 2, linestyle = :dash),
+        MarkerElement(; color = :gray, marker = :circle, markersize = 7)
+    ],
+    ["Analytical (+B arrows)", "Reconstructed", "Probes"];
+    orientation = :horizontal, framevisible = false
+)
+
+error_points = [
+    SVector(x, y, z) for x in (-0.37, -0.13, 0.11, 0.39),
+        y in (-0.31, -0.07, 0.17, 0.37), z in (-0.23, 0.03, 0.29)
+]
+volume_error = [1.0e6 * norm(reconstructed(p) - truth(p)) for p in error_points]
+error_axis = Axis3(
+    fig_vectors[1, 2]; title = "Held-out vector error",
+    xlabel = "x [m]", ylabel = "y [m]", zlabel = "z [m]",
+    aspect = :data, azimuth = 1.15pi, elevation = 0.25pi
+)
+error_plot = scatter!(
+    error_axis, Point3f.(vec(error_points)); color = vec(volume_error),
+    colormap = :inferno, colorrange = (0.0, maximum(volume_error)), markersize = 13
+)
+Colorbar(fig_vectors[1, 3], error_plot; label = "Vector error [uT]")
+Label(fig_vectors[2, 2], "Error = norm(B reconstructed - B analytical)")
+for ax in (geometry_axis, error_axis)
     limits!(ax, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5)
 end
+
+@assert all(
+    all(domain[2k - 1] - 1e-12 <= p[k] <= domain[2k] + 1e-12 for k in 1:3)
+        for path in vcat(true_paths, fit_paths) for p in path
+)
+@assert all(
+    any(isapprox(p[k], domain[j]; atol = 1e-12) for k in 1:3 for j in (2k - 1, 2k))
+        for path in vcat(true_paths, fit_paths) for p in (first(path), last(path))
+)
+refined_paths = [trace_field_line(reconstructed, seed, domain; ds = 0.005) for seed in seeds]
+@assert maximum(
+    norm(endpoint(coarse) - endpoint(fine))
+        for (coarse, fine) in zip(fit_paths, refined_paths) for endpoint in (first, last)
+) < 1.0e-4
 fig_vectors
 ```
+
+The geometry panel intentionally does not amplify differences: the reconstructed
+curves should nearly coincide with the analytical ones. The error panel makes
+those small differences measurable without implying different field topology.
+Field-line endpoints are also checked for convergence when the tracing step is
+halved; tracing accuracy is separate from reconstruction accuracy.
 
 ## Magnitude and error on a slice
 
