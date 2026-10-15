@@ -1,5 +1,6 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 Magnetostatics = "e551bd30-f216-4325-9989-532520624021"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
