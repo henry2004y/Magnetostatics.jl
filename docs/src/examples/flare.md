@@ -19,6 +19,22 @@ Magnetic Reconnection Experiment (MRX):
 - **Guide Field**: An optional out-of-plane toroidal field $B_{\text{guide}}$ can be
   applied for guide-field / component reconnection studies.
 
+## Instrument Geometry
+
+![FLARE coil geometry: toroidal PF flux cores and external EF coils surrounding
+an illustrative midplane plasma current layer, with a matching R-Z section
+and nominal coil coordinates.](../assets/flare_geometry.svg)
+
+*Idealized geometry used in this demo, not an engineering drawing of the device.*
+The left panel shows how the coils encircle the symmetry axis; the right panel
+cuts through those rings at fixed toroidal angle to give the $(R, Z)$ view used
+in the field plots below. The red rings represent the flux cores containing the
+PF coils, and the larger blue rings represent the external EF coils. The orange
+ring illustrates the optional midplane plasma current layer, not a hardware coil;
+it is absent from the vacuum-field basic setup (`I_p = 0`). Coil thicknesses and
+the plasma layer width are schematic; the vacuum vessel, supports, and diagnostics
+are omitted.
+
 The magnetic topology in the poloidal plane is characterized by the poloidal flux function:
 ```math
 \psi(R, z) = R \, A_\phi(R, z)
@@ -171,9 +187,12 @@ fig1
 By varying the external equilibrium coil current $I_{\text{ef}}$, experimentalists at
 FLARE can shift the radial position of the reconnection X-line and control the private
 flux volume:
-- $I_{\text{ef}} < 0$: Pulls the X-line inward toward the flux cores ($R_X \approx 0.88$ m).
-- $I_{\text{ef}} = 0$: Natural null position ($R_X \approx 0.97$ m).
-- $I_{\text{ef}} > 0$: Pushes the X-line outward toward the outer wall
+
+- **Negative EF current** ($I_{\text{ef}} < 0$): Pulls the X-line inward toward
+  the flux cores ($R_X \approx 0.88$ m).
+- **Zero EF current** ($I_{\text{ef}} = 0$): Natural null position
+  ($R_X \approx 0.97$ m).
+- **Positive EF current** ($I_{\text{ef}} > 0$): Pushes the X-line outward toward the outer wall
   ($R_X \approx 1.11$ m).
 
 ```@example flare
