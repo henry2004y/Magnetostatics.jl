@@ -379,9 +379,9 @@ reference(p) = flare(p) + sheet(p)
 nothing # hide
 ```
 
-We sample this field on a $12 \times 11$ probe array and add small deterministic
-errors to create synthetic measurements. In an experiment, replace these samples
-with calibrated measurements and their uncertainties. A few modeling choices are
+We sample this field with magnetic probes and add small deterministic errors to
+create synthetic measurements. In an experiment, replace these samples with
+calibrated measurements and their uncertainties. A few modeling choices are
 essential for an accurate reconstruction:
 - **Exclude the sources.** The PF filaments at $(0.75, \pm 0.40)$ m are singular,
   so the reconstruction domain covers only the plasma region between the flux
@@ -390,13 +390,17 @@ essential for an accurate reconstruction:
   the domain (`filament_positions`) give exact current-free solutions inside it and
   capture the steep field near the flux cores. Their currents are fit to the data,
   so neither the coil currents nor their positions are assumed.
-- **Represent the plasma current.** Softened toroidal current elements
-  (`current_element_positions`) on a 5 cm grid carry the net plasma current.
-  Each element is a coaxial loop with a smooth core whose width defaults to the
-  grid spacing, so the reconstructed current density is smooth and its total is
-  the sum of the fitted element currents. The default compactly supported
-  `:wendland_c2` radial basis functions add local corrections, but carry no net
-  toroidal current and cannot represent the sheet on their own.
+- **Represent the plasma current.** A bump in $\psi$ with compact support, such as
+  the default `:wendland_c2` radial basis function, carries no net toroidal current,
+  since $\oint \mathbf{B}\cdot d\mathbf{l} = 0$ around its support. We compare two
+  remedies:
+  1. *Gaussian kernel* (`kernel = :gaussian`) with a 6 cm length scale. Its wide
+     tails can place the return current of each bump outside the domain, but every
+     basis function touches every probe, so the linear system is dense.
+  2. *Current elements* (`current_element_positions`) on a 5 cm grid, combined with
+     the default sparse Wendland basis. Each element is a coaxial loop with a
+     smooth core, so it carries net current and the sum of the fitted element
+     currents estimates the plasma current.
 - **Regularize the current.** Imposing $J_\phi = 0$ at collocation points with a
   loose uncertainty of $10^5$ A/m² (below the $\sim 10^6$ A/m² peak) selects the
   smallest current distribution consistent with the probes. A much tighter
@@ -408,18 +412,19 @@ using LinearSolve: QRFactorization
 Rmin, Rmax = 0.45, 1.25
 Zmin, Zmax = -0.28, 0.28
 rz_matrix(points) = reduce(vcat, [[R Z] for (R, Z) in points])
+grid_rz(h) = [(R, Z) for R in Rmin:h:Rmax for Z in Zmin:h:Zmax]
 
-probe_rz = [(R, Z) for R in range(0.48, 1.22; length=12)
-                    for Z in range(-0.25, 0.25; length=11)]
-probe_B = reduce(vcat, [
-    permutedims(collect(reference(SVector(R, 0.0, Z)))) for (R, Z) in probe_rz
-])
-for i in axes(probe_B, 1)
-    probe_B[i, 1] += 2.0e-4 * sin(i)
-    probe_B[i, 2] += 2.0e-4 * cos(i)
-    probe_B[i, 3] += 2.0e-4 * sin(2i)
+function synthetic_probes(probe_rz)
+    B = reduce(vcat, [
+        permutedims(collect(reference(SVector(R, 0.0, Z)))) for (R, Z) in probe_rz
+    ])
+    for i in axes(B, 1)
+        B[i, 1] += 2.0e-4 * sin(i)
+        B[i, 2] += 2.0e-4 * cos(i)
+        B[i, 3] += 2.0e-4 * sin(2i)
+    end
+    return B
 end
-probe_uncertainties = fill(5.0e-4, size(probe_B))
 
 # Virtual filaments evenly spaced on a rectangle 0.1 m outside the domain
 function rectangle_points(r0, r1, z0, z1, n)
@@ -435,120 +440,184 @@ function rectangle_points(r0, r1, z0, z1, n)
     end
 end
 filament_rz = rectangle_points(Rmin - 0.1, Rmax + 0.1, Zmin - 0.1, Zmax + 0.1, 48)
-
-grid_rz(h) = [(R, Z) for R in Rmin:h:Rmax for Z in Zmin:h:Zmax]
-length_scale = 0.12
-center_rz = grid_rz(length_scale / 2)
 element_rz = grid_rz(0.05)
 collocation_rz = grid_rz(0.015)
 
-reconstructed = reconstruct_axisymmetric_field(
-    rz_matrix(probe_rz), probe_B;
-    domain = (Rmin, Rmax, Zmin, Zmax),
-    length_scale,
-    basis_centers = rz_matrix(center_rz),
-    regularization = 1.0e2,
-    uncertainties = probe_uncertainties,
-    filament_positions = rz_matrix(filament_rz),
-    current_element_positions = rz_matrix(element_rz),
-    current_positions = rz_matrix(collocation_rz),
-    current_density = zeros(length(collocation_rz)),
-    current_uncertainties = fill(1.0e5, length(collocation_rz)),
-    algorithm = QRFactorization()
-)
-println("Sum of fitted element currents: ",
-    round(sum(reconstructed.element_currents) / 1e3, digits=2), " kA")
+function reconstruct(probe_rz, method)
+    basis = if method === :gaussian
+        (; kernel=:gaussian, length_scale=0.06,
+            basis_centers=rz_matrix(grid_rz(0.03)))
+    else
+        (; length_scale=0.12, basis_centers=rz_matrix(grid_rz(0.06)),
+            current_element_positions=rz_matrix(element_rz))
+    end
+    probe_B = synthetic_probes(probe_rz)
+    return reconstruct_axisymmetric_field(
+        rz_matrix(probe_rz), probe_B;
+        domain = (Rmin, Rmax, Zmin, Zmax),
+        basis...,
+        regularization = 1.0e2,
+        uncertainties = fill(5.0e-4, size(probe_B)),
+        filament_positions = rz_matrix(filament_rz),
+        current_positions = rz_matrix(collocation_rz),
+        current_density = zeros(length(collocation_rz)),
+        current_uncertainties = fill(1.0e5, length(collocation_rz)),
+        algorithm = QRFactorization()
+    )
+end
+nothing # hide
 ```
 
-Compare the in-plane magnetic field $\mathbf{B}_p = (B_R, B_Z)$ and the toroidal
-current density of the reference model with the reconstruction. The top row shows
-$|\mathbf{B}_p|$ with field lines and the in-plane field error; the red dots mark
-the probe locations used in the fit. The bottom row compares $J_\phi$, which is
-never measured directly, and its midplane profile.
+The comparison helper evaluates the in-plane magnetic field
+$\mathbf{B}_p = (B_R, B_Z)$ and the toroidal current density on a fine grid, prints
+error metrics, and plots one column per field. The top row shows $|\mathbf{B}_p|$
+with field lines, where the red dots mark the probe locations used in the fit. The
+middle row shows the in-plane field error, or the probe layout for the reference.
+The third row compares $J_\phi$, which is never measured directly; gray dots mark
+the current elements. The bottom row shows radial and vertical cuts of $J_\phi$
+through the sheet.
 
 ```@example flare
 using UniformStreamlines
 
 R_view = range(Rmin, Rmax; length=81)
 Z_view = range(Zmin, Zmax; length=57)
-inplane(field, R, Z) = (B = field(SVector(R, 0.0, Z)); SVector(B[1], B[3]))
-J_reconstructed(R, Z) = current_density(reconstructed, SVector(R, 0.0, Z))[2]
-J_reference(R, Z) = toroidal_current(sheet, R, Z)
-
-Bp_reference = [inplane(reference, R, Z) for R in R_view, Z in Z_view]
-Bp_reconstructed = [inplane(reconstructed, R, Z) for R in R_view, Z in Z_view]
-Bp_error = norm.(Bp_reconstructed .- Bp_reference)
-Bp_max = maximum(norm, Bp_reference)
-Jref = [J_reference(R, Z) for R in R_view, Z in Z_view]
-Jrec = [J_reconstructed(R, Z) for R in R_view, Z in Z_view]
 dA = step(R_view) * step(Z_view)
+inplane(field, R, Z) = (B = field(SVector(R, 0.0, Z)); SVector(B[1], B[3]))
+toroidal_current(field::AxisymmetricFieldReconstruction, R, Z) =
+    current_density(field, SVector(R, 0.0, Z))[2]
+Bp_reference = [inplane(reference, R, Z) for R in R_view, Z in Z_view]
+J_reference = [toroidal_current(sheet, R, Z) for R in R_view, Z in Z_view]
+Bp_max = maximum(norm, Bp_reference)
+J_max = maximum(J_reference) / 1e6
 
-println("RMS relative error of B_p: ",
-    round(100 * norm(Bp_error) / norm(norm.(Bp_reference)), digits=2), " %")
-println("Maximum error / max|B_p|: ",
-    round(100 * maximum(Bp_error) / Bp_max, digits=2), " %")
-println("Relative L2 error of J_ϕ: ",
-    round(100 * norm(Jrec - Jref) / norm(Jref), digits=1), " %")
-println("Total toroidal current: ", round(sum(Jrec) * dA / 1e3, digits=2),
-    " kA (reference ", round(sum(Jref) * dA / 1e3, digits=2), " kA)")
+function compare_reconstructions(probe_rz, fits)
+    fig = Figure(size=(1300, 1450), fontsize=14)
+    columns = [("Reference: coils + current sheet", reference, sheet);
+               [(title, fit, fit) for (title, fit) in fits]]
+    ax_R = Axis(fig[4, 1:2]; xlabel="R [m]", ylabel="J_ϕ [MA/m²]",
+        title="Midplane profile (Z = 0)")
+    ax_Z = Axis(fig[4, 3]; xlabel="Z [m]", ylabel="J_ϕ [MA/m²]",
+        title="Vertical profile (R = 0.95 m)")
+    profile_styles = [(:black, :solid), (:steelblue, :dash), (:crimson, :dashdot)]
+    for (col, (title, field, source)) in enumerate(columns)
+        Bp = [inplane(field, R, Z) for R in R_view, Z in Z_view]
+        J = [toroidal_current(source, R, Z) for R in R_view, Z in Z_view]
+        Bp_error = norm.(Bp .- Bp_reference)
+        if col > 1
+            println(rpad(title, 34),
+                "B_p RMS ", round(100 * norm(Bp_error) / norm(norm.(Bp_reference)),
+                    digits=2), " %, ",
+                "max ", round(100 * maximum(Bp_error) / Bp_max, digits=2), " %; ",
+                "J_ϕ L2 ", round(100 * norm(J - J_reference) / norm(J_reference),
+                    digits=1), " %; ",
+                "I_p ", round(sum(J) * dA / 1e3, digits=2), " kA")
+        end
 
-fig4 = Figure(size=(1300, 820), fontsize=14)
-panels = [
-    (reference, Bp_reference, "Reference: coils + current sheet"),
-    (reconstructed, Bp_reconstructed, "Sparse-probe reconstruction")
-]
-for (col, (field, Bp, title)) in enumerate(panels)
-    ax = Axis(fig4[1, col]; xlabel="R [m]", ylabel="Z [m]",
-        aspect=DataAspect(), title)
-    heatmap!(ax, R_view, Z_view, norm.(Bp);
-        colormap=:viridis, colorrange=(0, Bp_max))
-    str = evenstream(R_view, Z_view, (R, Z) -> inplane(field, R, Z);
-        min_density=2.0, max_density=4.0)
-    streamlines!(ax, str; color=:white, linewidth=1.0, with_arrows=true)
-    scatter!(ax, first.(probe_rz), last.(probe_rz); color=:red, markersize=5)
+        ax = Axis(fig[1, col]; xlabel="R [m]", ylabel="Z [m]",
+            aspect=DataAspect(), title)
+        heatmap!(ax, R_view, Z_view, norm.(Bp);
+            colormap=:viridis, colorrange=(0, Bp_max))
+        str = evenstream(R_view, Z_view, (R, Z) -> inplane(field, R, Z);
+            min_density=2.0, max_density=4.0)
+        streamlines!(ax, str; color=:white, linewidth=1.0, with_arrows=true)
+        scatter!(ax, first.(probe_rz), last.(probe_rz); color=:red, markersize=5)
+
+        ax = Axis(fig[2, col]; xlabel="R [m]", ylabel="Z [m]", aspect=DataAspect(),
+            title=col == 1 ? "Probe layout ($(length(probe_rz)) probes)" :
+                "|ΔB_p| / max|B_p|")
+        heatmap!(ax, R_view, Z_view, Bp_error ./ Bp_max;
+            colormap=:inferno, colorrange=(0, 0.05))
+        scatter!(ax, first.(probe_rz), last.(probe_rz); color=:white, markersize=4)
+
+        ax = Axis(fig[3, col]; xlabel="R [m]", ylabel="Z [m]",
+            aspect=DataAspect(), title="J_ϕ")
+        heatmap!(ax, R_view, Z_view, J ./ 1e6;
+            colormap=:balance, colorrange=(-J_max, J_max))
+        if field isa AxisymmetricFieldReconstruction &&
+                !isempty(field.element_currents)
+            scatter!(ax, field.element_positions[:, 1], field.element_positions[:, 2];
+                color=(:black, 0.3), markersize=3)
+        end
+
+        color, linestyle = profile_styles[col]
+        label = col == 1 ? "Reference" : title
+        lines!(ax_R, R_view, toroidal_current.(Ref(source), R_view, 0.0) ./ 1e6;
+            color, linestyle, linewidth=2, label)
+        lines!(ax_Z, Z_view, toroidal_current.(Ref(source), 0.95, Z_view) ./ 1e6;
+            color, linestyle, linewidth=2)
+    end
+    axislegend(ax_R; position=:lt)
+    Colorbar(fig[1, 4]; limits=(0, Bp_max), colormap=:viridis, label="|B_p| [T]")
+    Colorbar(fig[2, 4]; limits=(0, 0.05), colormap=:inferno, label="Relative error")
+    Colorbar(fig[3, 4]; limits=(-J_max, J_max), colormap=:balance,
+        label="J_ϕ [MA/m²]")
+    return fig
 end
-ax_err = Axis(fig4[1, 3]; xlabel="R [m]", ylabel="Z [m]",
-    aspect=DataAspect(), title="|ΔB_p| / max|B_p|")
-hm_err = heatmap!(ax_err, R_view, Z_view, Bp_error ./ Bp_max;
-    colormap=:inferno, colorrange=(0, 0.03))
-scatter!(ax_err, first.(probe_rz), last.(probe_rz); color=:white, markersize=4)
-Colorbar(fig4[1, 4], hm_err; label="Relative error")
-
-J_max = maximum(abs, Jref) / 1e6
-for (col, (J, title)) in enumerate(((Jref, "Reference J_ϕ"), (Jrec, "Reconstructed J_ϕ")))
-    ax = Axis(fig4[2, col]; xlabel="R [m]", ylabel="Z [m]",
-        aspect=DataAspect(), title)
-    heatmap!(ax, R_view, Z_view, J ./ 1e6;
-        colormap=:balance, colorrange=(-J_max, J_max))
-    col == 2 && scatter!(ax, first.(element_rz), last.(element_rz);
-        color=(:black, 0.3), markersize=3)
-end
-ax_mid = Axis(fig4[2, 3]; xlabel="R [m]", ylabel="J_ϕ [MA/m²]",
-    title="Midplane profile (Z = 0)")
-lines!(ax_mid, R_view, J_reference.(R_view, 0.0) ./ 1e6;
-    color=:black, linewidth=2, label="Reference")
-lines!(ax_mid, R_view, J_reconstructed.(R_view, 0.0) ./ 1e6;
-    color=:crimson, linestyle=:dash, linewidth=2, label="Reconstruction")
-axislegend(ax_mid; position=:lt)
-Colorbar(fig4[2, 4]; limits=(-J_max, J_max), colormap=:balance,
-    label="J_ϕ [MA/m²]")
-
-fig4
+nothing # hide
 ```
 
-The magnetic field is recovered to about a percent. The largest errors lie inside
-the sheet, where $B_R$ reverses over a few centimeters between probe rows. The
-current density is never measured, yet its location, shape and total are recovered
-from the field alone; its peak is smoothed by the minimum-current regularization
-and the finite probe spacing. The gray dots in the reconstructed $J_\phi$ panel
-mark the current elements. The `:gaussian` kernel without current elements gives
-similar accuracy here, because its wide tails can push the return currents of
-each bump outside the domain, but it produces a dense system that scales poorly
-with the number of centers. $B_\phi$ is
-fit independently from its probe samples. Known exact boundary flux values can be
-supplied with `boundary_positions` and `boundary_flux`, and measured toroidal
-currents with `current_positions` and `current_density`. For a smooth vacuum
-background without nearby coils, `vacuum_degree` adds low-order polynomial
+### Uniform Probe Array
+
+We first sample the field on a uniform $12 \times 11$ probe array.
+
+```@example flare
+uniform_rz = [(R, Z) for R in range(0.48, 1.22; length=12)
+                      for Z in range(-0.25, 0.25; length=11)]
+gaussian_fit = reconstruct(uniform_rz, :gaussian)
+element_fit = reconstruct(uniform_rz, :elements)
+println("Sum of fitted element currents: ",
+    round(sum(element_fit.element_currents) / 1e3, digits=2), " kA")
+fig4 = compare_reconstructions(uniform_rz, [
+    "Gaussian RBF" => gaussian_fit,
+    "Wendland RBF + current elements" => element_fit
+])
+```
+
+Both methods recover the magnetic field to about a percent and the total current
+to within a few tenths of a kiloampere. The largest field errors lie inside the
+sheet, where $B_R$ reverses over a few centimeters between probe rows. The current
+density is never measured, yet its location, shape and total are recovered from
+the field alone; its peak is smoothed by the minimum-current regularization and
+the finite probe spacing. The Gaussian kernel gives a slightly smoother current,
+while current elements keep the default sparse Wendland basis and report the
+plasma current directly through `element_currents`.
+
+### Non-Uniform Probe Coverage
+
+Probe access is rarely uniform in an experiment. Here, the upper half of the
+domain keeps a dense $12 \times 8$ array, while the lower half has only three rows
+of six probes. The reconstruction does not assume the up-down symmetry of the
+reference field, so the poorly sampled half must be inferred from fewer data.
+
+```@example flare
+upper_rz = [(R, Z) for R in range(0.48, 1.22; length=12)
+                    for Z in range(0.0, 0.25; length=8)]
+lower_rz = [(R, Z) for R in range(0.48, 1.22; length=6)
+                    for Z in range(-0.25, -0.25 / 3; length=3)]
+nonuniform_rz = vcat(upper_rz, lower_rz)
+fig5 = compare_reconstructions(nonuniform_rz, [
+    "Gaussian RBF" => reconstruct(nonuniform_rz, :gaussian),
+    "Wendland RBF + current elements" => reconstruct(nonuniform_rz, :elements)
+])
+```
+
+The upper half is reconstructed as accurately as with the uniform array. The error
+grows to several percent in the sparsely sampled lower half, concentrated in the
+gap between the midplane and the first lower probe row, where the lower part of the
+current sheet is not bracketed by measurements, and along the bottom edge between
+the widely spaced probes. The vertical profile shows that the recovered current
+sheet becomes asymmetric: it stays sharp on the well-sampled side but is smeared
+toward the sparsely sampled side, and the total current drops by about 2%. Both
+methods degrade in the same way, so the probe coverage, not the basis, limits the
+accuracy here. When the configuration is known to be up-down symmetric, mirroring
+the measurements, $B_R(R, -Z) = -B_R(R, Z)$ and $B_Z(R, -Z) = B_Z(R, Z)$, restores
+the missing coverage.
+
+$B_\phi$ is fit independently from its probe samples. Known exact boundary flux
+values can be supplied with `boundary_positions` and `boundary_flux`, and measured
+toroidal currents with `current_positions` and `current_density`. For a smooth
+vacuum background without nearby coils, `vacuum_degree` adds low-order polynomial
 solutions of $\Delta^*\psi = 0$ as an alternative to virtual filaments.
 Reconstruction is restricted to the specified domain and does not assume zero
 field at its boundary.
