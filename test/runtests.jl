@@ -23,4 +23,5 @@ end
     @testset "boundaries" include("test_boundaries.jl")
     @testset "Poisson" include("test_poisson.jl")
     @testset "reconstruction" include("test_reconstruction.jl")
+    @testset "3D reconstruction" include("test_reconstruction3d.jl")
 end

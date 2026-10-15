@@ -19,6 +19,7 @@ include("solvers/analytical.jl")
 include("solvers/fft.jl")
 include("solvers/potential.jl")
 include("solvers/reconstruction.jl")
+include("solvers/reconstruction3d.jl")
 include("geometry.jl")
 include("utils.jl")
 
@@ -27,6 +28,7 @@ export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, AbstractBou
 # Solvers
 export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, solve
 export AxisymmetricFieldReconstruction, reconstruct_axisymmetric_field
+export FieldReconstruction3D, reconstruct_field_3d
 # Core methods
 export vector_potential, current_density, compute_curl!, compute_curl
 # Magnetic geometry and plasma drifts
