@@ -84,12 +84,18 @@ SUITE["reconstruction"] = BenchmarkGroup()
 recon_problem = let
     flare = FLARECoils(; I_pf = 45.0e3, I_ef = 12.0e3, B_guide = 0.0)
     domain = (0.45, 1.25, -0.28, 0.28)
-    probes = [(R, Z) for R in range(0.48, 1.22; length = 12)
-                  for Z in range(-0.25, 0.25; length = 11)]
+    probes = [
+        (R, Z) for R in range(0.48, 1.22; length = 12)
+            for Z in range(-0.25, 0.25; length = 11)
+    ]
     positions = [p[i] for p in probes, i in 1:2]
     B = reduce(vcat, [flare(SVector(R, 0.0, Z))' for (R, Z) in probes])
-    grid(h) = [p[i] for p in [(R, Z) for R in domain[1]:h:domain[2]
-                                  for Z in domain[3]:h:domain[4]], i in 1:2]
+    grid(h) = [
+        p[i] for p in [
+                (R, Z) for R in domain[1]:h:domain[2]
+                for Z in domain[3]:h:domain[4]
+            ], i in 1:2
+    ]
     Rmin, Rmax, Zmin, Zmax = domain .+ (-0.1, 0.1, -0.1, 0.1)
     perimeter = 2 * (Rmax - Rmin + Zmax - Zmin)
     filaments = map(range(0, perimeter; length = 49)[1:(end - 1)]) do s
