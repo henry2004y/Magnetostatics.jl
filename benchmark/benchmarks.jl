@@ -156,3 +156,63 @@ SUITE["reconstruction"]["evaluate"]["poloidal_flux"] =
     @benchmarkable poloidal_flux($recon_field, $recon_r)
 SUITE["reconstruction"]["evaluate"]["current_density"] =
     @benchmarkable current_density($recon_field, $recon_r)
+
+# 3D field reconstruction of a tilted external coil from a 4 × 4 × 4 probe array
+# and soft normal-field samples on the box surface.
+SUITE["reconstruction3d"] = BenchmarkGroup()
+recon3d_problem = let
+    domain = (-0.5, 0.5, -0.5, 0.5, -0.5, 0.5)
+    normal = SVector(0.3, 0.2, 1.0) / sqrt(1.13)
+    coil = CurrentLoop(1.0, 1.0e4, SVector(0.2, -0.1, 2.0), normal)
+    truth = CurrentLoopAnalytic(coil)
+    to_matrix(points) = [p[i] for p in points, i in 1:3]
+    lattice(r) = vec([SVector(x, y, z) for x in r, y in r, z in r])
+    probes = lattice(range(-0.45, 0.45; length = 4))
+    positions = to_matrix(probes)
+    B = to_matrix(truth.(probes))
+    surface_points, surface_normals = SVector{3, Float64}[], SVector{3, Float64}[]
+    for axis in 1:3, side in (-0.5, 0.5), a in (-0.35, 0.0, 0.35), b in (-0.35, 0.0, 0.35)
+        tangential = (a, b)
+        push!(
+            surface_points,
+            SVector(ntuple(k -> k == axis ? side : tangential[k - (k > axis)], 3))
+        )
+        push!(surface_normals, SVector(ntuple(k -> k == axis ? sign(side) : 0.0, 3)))
+    end
+    boundary_values = map(zip(surface_points, surface_normals)) do (p, n)
+        sum(n .* truth(p))
+    end
+    common = (;
+        domain, uncertainties = fill(1.0e-5, size(B)),
+        boundary_positions = to_matrix(surface_points),
+        boundary_normals = to_matrix(surface_normals), boundary_values,
+        boundary_uncertainties = fill(2.0e-5, length(boundary_values)),
+        regularization = 1.0e-8,
+    )
+    centers = to_matrix(lattice(range(-0.5, 0.5; length = 4)))
+    (; positions, B, common, centers)
+end
+
+SUITE["reconstruction3d"]["fit"] = BenchmarkGroup()
+SUITE["reconstruction3d"]["fit"]["wendland_lsmr"] = @benchmarkable(
+    reconstruct_field_3d(p.positions, p.B; length_scale = 0.5, p.common...),
+    setup = (p = $recon3d_problem)
+)
+SUITE["reconstruction3d"]["fit"]["gaussian_lsmr"] = @benchmarkable(
+    reconstruct_field_3d(
+        p.positions, p.B; kernel = :gaussian, length_scale = 1.2,
+        basis_centers = p.centers, regularization_grid = (7, 7, 7), p.common...
+    ),
+    setup = (p = $recon3d_problem)
+)
+
+recon3d_field = reconstruct_field_3d(
+    recon3d_problem.positions, recon3d_problem.B; length_scale = 0.5,
+    recon3d_problem.common...
+)
+recon3d_r = SVector(0.1, -0.2, 0.3)
+
+SUITE["reconstruction3d"]["evaluate"] = BenchmarkGroup()
+SUITE["reconstruction3d"]["evaluate"]["field"] = @benchmarkable ($recon3d_field)($recon3d_r)
+SUITE["reconstruction3d"]["evaluate"]["current_density"] =
+    @benchmarkable current_density($recon3d_field, $recon3d_r)
