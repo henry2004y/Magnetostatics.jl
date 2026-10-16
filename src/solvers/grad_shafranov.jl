@@ -277,7 +277,7 @@ function reconstruct_grad_shafranov(
     scale > 0 && isfinite(scale) ||
         throw(ArgumentError("crossing must sample a nonconstant finite flux function"))
     source_coordinates = (A .- offset) ./ scale
-    Pt = T.(pressure) + local_B[:, 3].^2 / (2T(μ₀))
+    Pt = T.(pressure) + local_B[:, 3] .^ 2 / (2T(μ₀))
     all(isfinite, Pt) || throw(ArgumentError("transverse pressure must be finite"))
     P, _ = _chebyshev_matrices(source_coordinates, pressure_degree)
     Z, _ = _chebyshev_matrices(source_coordinates, axial_degree)
@@ -307,10 +307,12 @@ function reconstruct_grad_shafranov(
         pressure_coefficients, axial_coefficients,
     )
     provisional = GradShafranovReconstruction(arguments..., (;))
-    predicted = reduce(hcat, [
-        frame' * provisional(provisional.origin + frame * SVector(xi, zero(T), zero(T)))
-            for xi in x
-    ])'
+    predicted = reduce(
+        hcat, [
+            frame' * provisional(provisional.origin + frame * SVector(xi, zero(T), zero(T)))
+                for xi in x
+        ]
+    )'
     residuals = T[]
     continued = T[]
     pressure_samples = T[]

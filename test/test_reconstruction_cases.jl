@@ -10,11 +10,15 @@ point_matrix(points) = [p[k] for p in vec(collect(points)), k in 1:3]
 samples(field, positions) = point_matrix(field(SVector{3}(p)) for p in eachrow(positions))
 
 function lattice(box, coordinates)
-    return point_matrix(Iterators.product(
-        ntuple(k -> [
-            box[2k - 1] + t * (box[2k] - box[2k - 1]) for t in coordinates
-        ], 3)...
-    ))
+    return point_matrix(
+        Iterators.product(
+            ntuple(
+                k -> [
+                    box[2k - 1] + t * (box[2k] - box[2k - 1]) for t in coordinates
+                ], 3
+            )...
+        )
+    )
 end
 
 function relative_error(field, truth, positions)
@@ -38,9 +42,11 @@ end
     box = (-0.5, 0.5, -0.5, 0.5, -0.5, 0.5)
     wall_box = (-0.5, 0.5, -0.5, 0.5, 0.0, 0.6)
     sphere_box = (-0.25, 0.25, -0.25, 0.25, 0.9, 1.4)
-    loop = discretize_loop(CurrentLoop(
-        1.0, 1.0e4, SVector(0.2, -0.1, 2.0), normalize(SVector(0.3, 0.2, 1.0))
-    ), 150)
+    loop = discretize_loop(
+        CurrentLoop(
+            1.0, 1.0e4, SVector(0.2, -0.1, 2.0), normalize(SVector(0.3, 0.2, 1.0))
+        ), 150
+    )
     wire = Wire([SVector(0.0, -10.0, 1.5), SVector(0.0, 10.0, 1.5)], 1.0e4)
     background = UniformField(SVector(0.0, 0.0, 0.01))
     image = Dipole(SVector(0.0, 0.0, -2π * 0.01 / Magnetostatics.μ₀))
@@ -104,9 +110,9 @@ end
             elseif name == "Conducting sphere exterior"
                 @test maximum(
                     abs(dot(p, fitted(p))) for p in (
-                        SVector(x, y, sqrt(1 - x^2 - y^2))
+                            SVector(x, y, sqrt(1 - x^2 - y^2))
                             for x in (-0.13, 0.17), y in (-0.11, 0.15)
-                    )
+                        )
                 ) < 1.0e-4
                 @test all(abs(dot(p, truth(p))) < 1.0e-16 for p in eachrow(sphere_points))
             end

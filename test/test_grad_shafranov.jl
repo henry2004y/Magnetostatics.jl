@@ -42,8 +42,11 @@ end
 
 @testset "Planar equilibrium, frame and analytic currents" begin
     problem = manufactured_problem()
-    field = reconstruct_grad_shafranov(
-        problem.times, problem.observed, problem.pressures; problem.kwargs...
+    field = @test_logs(
+        (:warn, r"GSR source functions extrapolate"),
+        reconstruct_grad_shafranov(
+            problem.times, problem.observed, problem.pressures; problem.kwargs...
+        )
     )
     @test field isa GradShafranovReconstruction
     @test field.diagnostics.track_field_rms < 1.0e-12
@@ -65,44 +68,61 @@ end
     end
     point = problem.origin + problem.frame * SVector(0.13, 0.071, 0.0)
     h = 1.0e-5
-    gradient = hcat([
-        (field(point + h * SVector{3}(ntuple(i -> i == k, 3))) -
-            field(point - h * SVector{3}(ntuple(i -> i == k, 3)))) / (2h)
-            for k in 1:3
-    ]...)
+    gradient = hcat(
+        [
+            (
+                field(point + h * SVector{3}(ntuple(i -> i == k, 3))) -
+                    field(point - h * SVector{3}(ntuple(i -> i == k, 3)))
+            ) / (2h)
+                for k in 1:3
+        ]...
+    )
     curl = SVector(
         gradient[3, 2] - gradient[2, 3], gradient[1, 3] - gradient[3, 1],
         gradient[2, 1] - gradient[1, 2]
     )
     @test abs(tr(gradient)) < 1.0e-9
     @test current_density(field, point) ≈ curl / Magnetostatics.μ₀ atol = 1.0e-5
-    pressure_gradient = SVector{3}(ntuple(3) do k
-        step = h * SVector{3}(ntuple(i -> i == k, 3))
-        plus, minus = thermal_pressure(field, point + step),
-            thermal_pressure(field, point - step)
-        (plus - minus) / (2h)
-    end)
+    pressure_gradient = SVector{3}(
+        ntuple(3) do k
+            step = h * SVector{3}(ntuple(i -> i == k, 3))
+            plus, minus = thermal_pressure(field, point + step),
+                thermal_pressure(field, point - step)
+            (plus - minus) / (2h)
+        end
+    )
     force = cross(current_density(field, point), field(point))
     @test force ≈ pressure_gradient atol = 1.0e-6
     @test_throws DomainError field(problem.origin + 1.01problem.frame[:, 1])
     @test_throws DomainError thermal_pressure(field, problem.origin + problem.frame[:, 2])
     @test_throws ArgumentError field(SVector(NaN, 0.0, 0.0))
-    reversed = reconstruct_grad_shafranov(
-        problem.times, reverse(problem.observed; dims = 1), reverse(problem.pressures);
-        merge(problem.kwargs, (;
-            crossing_velocity = -2problem.frame[:, 1] + 3problem.frame[:, 3],
-        ))...
+    reversed = @test_logs(
+        (:warn, r"GSR source functions extrapolate"),
+        reconstruct_grad_shafranov(
+            problem.times, reverse(problem.observed; dims = 1), reverse(problem.pressures);
+            merge(
+                problem.kwargs, (;
+                    crossing_velocity = -2problem.frame[:, 1] + 3problem.frame[:, 3],
+                )
+            )...
+        )
     )
     @test reversed(point) ≈ field(point) atol = 1.0e-10
-    shifted = reconstruct_grad_shafranov(
-        problem.times .+ 1.0e6, problem.observed, problem.pressures; problem.kwargs...
+    shifted = @test_logs(
+        (:warn, r"GSR source functions extrapolate"),
+        reconstruct_grad_shafranov(
+            problem.times .+ 1.0e6, problem.observed, problem.pressures; problem.kwargs...
+        )
     )
     @test shifted(point) ≈ field(point) atol = 1.0e-10
-    times = collect(range(0.0, 1.0; length = 31)).^1.3
+    times = collect(range(0.0, 1.0; length = 31)) .^ 1.3
     xs = 2 .* (times .- 0.5)
     observed = point_matrix(problem.frame * problem.local_field(x, 0.0) for x in xs)
     pressures = [problem.p(x, 0.0) for x in xs]
-    nonuniform = reconstruct_grad_shafranov(times, observed, pressures; problem.kwargs...)
+    nonuniform = @test_logs(
+        (:warn, r"GSR source functions extrapolate"),
+        reconstruct_grad_shafranov(times, observed, pressures; problem.kwargs...)
+    )
     @test nonuniform(point) ≈ field(point) atol = 1.0e-10
 end
 
@@ -134,8 +154,11 @@ end
 @testset "Mock satellite crossing a Fadeev island" begin
     for noise in (0.0, 0.02e-9)
         problem = island_problem(; noise)
-        field = reconstruct_grad_shafranov(
-            problem.times, problem.observed, problem.pressures; problem.kwargs...
+        field = @test_logs(
+            (:warn, r"GSR source functions extrapolate"),
+            reconstruct_grad_shafranov(
+                problem.times, problem.observed, problem.pressures; problem.kwargs...
+            )
         )
         heldout = [
             SVector(x, y, 0.0) for x in range(-1.7e6, 1.7e6; length = 17),
@@ -150,15 +173,20 @@ end
         expected_J = point_matrix(
             SVector(
                 0.0, 0.0, 20.0e-9 * (1 - 0.3^2) /
-                    (Magnetostatics.μ₀ * 1.0e6 *
-                    (cosh((p[2] + 0.2e6) / 1.0e6) - 0.3cos(p[1] / 1.0e6))^2)
+                    (
+                    Magnetostatics.μ₀ * 1.0e6 *
+                        (cosh((p[2] + 0.2e6) / 1.0e6) - 0.3cos(p[1] / 1.0e6))^2
+                )
             ) for p in heldout
         )
         predicted_J = point_matrix(current_density(field, p) for p in heldout)
         @test norm(predicted_J - expected_J) / norm(expected_J) < 0.03
-        refined = reconstruct_grad_shafranov(
-            problem.times, problem.observed, problem.pressures;
-            problem.kwargs..., max_step = 2000.0
+        refined = @test_logs(
+            (:warn, r"GSR source functions extrapolate"),
+            reconstruct_grad_shafranov(
+                problem.times, problem.observed, problem.pressures;
+                problem.kwargs..., max_step = 2000.0
+            )
         )
         @test norm(point_matrix(refined(p) for p in heldout) - predicted) / norm(expected) <
             0.005
@@ -198,16 +226,22 @@ end
     )
     @test_throws ArgumentError reconstruct_grad_shafranov(
         problem.times, repeat([0.0 0.0 1.0], length(problem.times)), problem.pressures;
-        merge(problem.kwargs, (;
-            crossing_velocity = SVector(1.0, 0.0, 0.0),
-            invariant_axis = SVector(0.0, 0.0, 1.0),
-        ))...
+        merge(
+            problem.kwargs, (;
+                crossing_velocity = SVector(1.0, 0.0, 0.0),
+                invariant_axis = SVector(0.0, 0.0, 1.0),
+            )
+        )...
     )
     noisy_pressure = problem.pressures + sin.(1:length(problem.pressures))
-    field = reconstruct_grad_shafranov(
-        problem.times, problem.observed, noisy_pressure; problem.kwargs...
+    field = @test_logs(
+        (:warn, r"GSR source functions extrapolate"),
+        reconstruct_grad_shafranov(
+            problem.times, problem.observed, noisy_pressure; problem.kwargs...
+        )
     )
     @test field.diagnostics.transverse_pressure_rms > 0.1
+    @test_logs fit(; y = [-0.001, 0.0, 0.001])
     @test_logs(
         (:warn, r"GSR strip exceeds"), (:warn, r"GSR source functions extrapolate"),
         fit(; y = [-0.5, 0.0, 0.5])
