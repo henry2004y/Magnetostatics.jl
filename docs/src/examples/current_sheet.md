@@ -154,7 +154,18 @@ A current sheet model with two peaks in the current density, often observed in t
 B_x(z) = \frac{B_0}{2} \left[ \tanh\left(\frac{z - d}{L}\right) + \tanh\left(\frac{z + d}{L}\right) \right]
 ```
 
-The bifurcation is most clearly seen in the current density profile, which exhibits two distinct peaks at ``z = \pm d`` when ``d`` is sufficiently large compared to ``L``.
+The bifurcation is most clearly seen in the current density profile, which exhibits two distinct peaks near ``z = \pm d`` when ``d`` is sufficiently large compared to ``L``.
+
+Parker Solar Probe observations of the near-Sun heliospheric current sheet show
+reconnection exhausts with compound boundaries and mirror-mode structures
+([Sun et al., 2026](https://arxiv.org/abs/2604.26137)). These observations
+illustrate the dynamic plasma environment in which current-sheet structure
+evolves, although that study does not identify this idealized profile as a
+direct fit to its measurements. Particle-in-cell simulations provide a
+candidate explanation for bifurcation: externally driven thinning can produce
+electron pressure anisotropy (``p_{e\perp} > p_{e\parallel}``) that suppresses
+the central current and shifts the peaks off-center
+([Jiang and Lu, 2021](https://doi.org/10.1063/5.0037770)).
 
 ```@example currentsheet
 B0, L, d = 1.0, 1.0, 2.0
