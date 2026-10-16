@@ -5,9 +5,11 @@ using Magnetostatics
 using StaticArrays
 using LinearAlgebra
 
-include(joinpath(
-    @__DIR__, "..", "docs", "src", "examples", "reconstruction_uncertainty.jl"
-))
+include(
+    joinpath(
+        @__DIR__, "..", "docs", "src", "examples", "reconstruction_uncertainty.jl"
+    )
+)
 using .ReconstructionUncertaintyDemo
 const Demo = ReconstructionUncertaintyDemo
 
@@ -102,8 +104,8 @@ end
     @test norm(case.alternative(point) - data.truth(point)) > 10sqrt(tr(conditional))
     @test norm(current_density(case.hidden, point)) > 1.0
     for field in (data.truth, case.alternative), p in (
-            SVector(0.07, -0.03, 0.02), SVector(0.18, 0.05, -0.06),
-        )
+                SVector(0.07, -0.03, 0.02), SVector(0.18, 0.05, -0.06),
+            )
         @test abs(tr(Demo.jacobian(field, p))) < 1.0e-8
     end
 end

@@ -57,10 +57,10 @@ end
 
 function fit(data, observed, boundary; sigma, constrained)
     constraints = constrained ? (
-        boundary_positions = data.surface, boundary_normals = data.normals,
-        boundary_values = boundary,
-        boundary_uncertainties = fill(sigma / 2, length(boundary)),
-    ) : (;)
+            boundary_positions = data.surface, boundary_normals = data.normals,
+            boundary_values = boundary,
+            boundary_uncertainties = fill(sigma / 2, length(boundary)),
+        ) : (;)
     return reconstruct_field_3d(
         data.positions, observed; domain = box, basis_centers = data.truth.centers,
         length_scale = data.truth.length_scale, kernel = :gaussian,
@@ -75,7 +75,7 @@ function jacobian(field, point; h = 1.0e-5)
     return hcat(
         (
             let step = SVector{3}(ntuple(j -> j == k ? h : 0.0, 3))
-                (field(point + step) - field(point - step)) / (2h)
+                    (field(point + step) - field(point - step)) / (2h)
             end for k in 1:3
         )...
     )
@@ -127,8 +127,8 @@ function prediction_covariance(data, point; sigma, constrained)
     if constrained
         boundary_operator = [
             dot(n, field(p)) for (p, n) in zip(
-                eachrow(data.surface), eachrow(data.normals)
-            ), field in basis
+                    eachrow(data.surface), eachrow(data.normals)
+                ), field in basis
         ] / (sigma / 2)
         operator = vcat(operator, boundary_operator)
     end
