@@ -75,7 +75,7 @@ function jacobian(field, point; h = 1.0e-5)
     return hcat(
         (
             let step = SVector{3}(ntuple(j -> j == k ? h : 0.0, 3))
-                    (field(point + step) - field(point - step)) / (2h)
+                (field(point + step) - field(point - step)) / (2h)
             end for k in 1:3
         )...
     )
@@ -158,9 +158,9 @@ function run_ensemble(; pairs = 64, sigma = 1.0e-5, seed = 20261016)
         nominal = fit(data, observed, boundary; sigma, constrained)
         fields = [
             fit(
-                    data, observed + side * sigma * noise,
-                    boundary + side * (sigma / 2) * boundary_noise; sigma, constrained
-                )
+                data, observed + side * sigma * noise,
+                boundary + side * (sigma / 2) * boundary_noise; sigma, constrained
+            )
                 for (noise, boundary_noise) in perturbations for side in (-1, 1)
         ]
         summary = prediction_summary(fields, data.heldout)
