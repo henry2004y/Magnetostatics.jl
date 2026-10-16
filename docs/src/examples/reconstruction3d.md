@@ -18,7 +18,7 @@ Boundary measurements below are uncertain observations, not exact wall condition
 
 For other source terms and physical boundaries, see
 [Reconstruction Across Sources and Boundaries](@ref reconstruction_cases_example).
-The [API comparison](../api.md#Choosing-a-reconstruction-model) explains how this
+The [inverse-method comparison](@ref inverse_methods) explains how this
 general 3D model differs from axisymmetric flux reconstruction.
 
 ## Selected magnetic field

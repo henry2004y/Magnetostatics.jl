@@ -1,5 +1,10 @@
 # [FLARE Experiment Reconnection Coils](@id flare_example)
 
+This example combines [forward coil fields](@ref forward_methods) with
+[axisymmetric probe reconstruction](@ref inverse_axisymmetric). The forward model
+provides synthetic truth; the inverse fits use only the specified measurements
+and basis assumptions.
+
 The **Facility for Laboratory Reconnection Experiments (FLARE)** at the Princeton
 Plasma Physics Laboratory (PPPL) is a user facility designed to study magnetic
 reconnection in the high-Lundquist-number ($S \sim 10^5$), multi-island regime
