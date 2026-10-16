@@ -137,5 +137,8 @@ fields at surface locations not supplied to the reconstruction.
   uncertain boundary samples, field-line tracing, and held-out validation.
 - [Reconstruction across sources and boundaries](@ref reconstruction_cases_example):
   open loops, conducting walls, a conducting sphere, and distributed volume current.
+- [Uncertainty and hidden topology](@ref reconstruction_uncertainty_example):
+  noise ensembles, covariance validation, null stability, and a hidden-current
+  counterexample to topology identification from sparse probes.
 - [`reconstruct_field_3d`](@ref) and [`FieldReconstruction3D`](@ref):
   keyword arguments and the returned field type.

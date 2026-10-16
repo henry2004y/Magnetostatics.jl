@@ -49,6 +49,7 @@ makedocs(;
         "Inverse Examples" => [
             "3D Field Reconstruction" => "examples/reconstruction3d.md",
             "Reconstruction Cases" => "examples/reconstruction_cases.md",
+            "Uncertainty and Hidden Topology" => "examples/reconstruction_uncertainty.md",
             "Spacecraft GSR" => "examples/grad_shafranov.md",
         ],
         "Field Geometry and Diagnostics" => "examples/magnetic_geometry.md",

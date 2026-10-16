@@ -65,18 +65,121 @@ the entire boundary. Neither infers a wall condition from the reconstruction box
 See [reconstruction performance](@ref reconstruction_performance) for 3D
 accuracy/cost measurements, and [physical reconstruction cases](@ref reconstruction_cases_example)
 for validation across sources and boundaries.
+The [uncertainty and hidden-topology benchmark](@ref reconstruction_uncertainty_example)
+checks conditional noise propagation and demonstrates why it cannot establish
+topological uniqueness outside the fitted model.
 
-## Adding inverse methods
+## Reconstructing topology from sparse measurements
 
-New inverse methods should have their own method guide rather than being presented
-as interchangeable options of an existing solver. Document:
+The scientific target is often not just the field at unmeasured points, but its
+**topology**: magnetic nulls, separatrices, flux surfaces, and connections between
+regions or boundaries. A smooth divergence-free fit is a starting point, not
+evidence that these structures have been recovered.
 
-1. Required measurements, units, coordinate frames, and missing-data support.
-2. Physical assumptions, representation, domain, and identifiable quantities.
-3. Boundary/current constraints, priors, regularization, and numerical controls.
-4. Returned field evaluation, supported derived quantities, and diagnostics.
-5. A reproducible example with independent validation and stated failure modes.
+In an axisymmetric field, critical points of poloidal flux identify poloidal
+O-points and X-points. With a nonzero toroidal field, these are not full magnetic
+nulls. In general 3D fields, connectivity requires field-line analysis; a contour
+plot or small vector-field residual is not a substitute. Near nulls and
+separatrices, small field errors can change inferred connections substantially.
 
-Add each method to the comparison above, the inverse-method navigation, and the
-inverse API reference. Keep method explanations separate from worked examples
-and API docstrings so the documentation can grow without a single solver catalogue.
+### What the present methods establish
+
+The existing methods cover flexible divergence-free spatial fitting,
+source-informed axisymmetric fitting, and planar equilibrium continuation.
+They can generate candidate topologies under their respective assumptions.
+They do not currently quantify how uniquely sparse measurements determine
+those topologies.
+
+Even complete normal-field data on a closed boundary do not determine an
+arbitrary current-carrying interior field. A divergence-free perturbation
+localized away from that boundary and the probes can preserve those observations
+while changing the interior field. Finite current samples reduce this freedom
+but do not remove it everywhere. Regularization chooses among admissible fields;
+it does not demonstrate that their topologies agree.
+
+The useful question is therefore: **which additional, independently justified
+information rules out topologically different fields that fit the data?**
+
+### Which additional inverse approaches would help?
+
+The following are candidate capabilities, not currently available solver options.
+Some are extensions to existing fits rather than separate reconstruction methods.
+
+| Candidate | When it adds information | Gap relative to current methods | Main limitation |
+|:--|:--|:--|:--|
+| Known-source or reduced-order parameter inference | Coil geometry, possible current paths, or a credible family of fields is known | Fit a small set of physically meaningful currents or parameters instead of a flexible field; the axisymmetric filament/current-element bases already provide part of this approach | Unmodeled plasma currents or incorrect source geometry can bias the inferred topology |
+| Current-free, boundary-adapted reconstruction | The reconstruction region is independently known to contain no current | Enforce `curl(B) = 0` throughout the region, rather than penalizing current or sampling zero current at selected points | Cannot represent current sheets or plasma currents inside that region; holes and linked external currents require circulation modes |
+| Force-free reconstruction | Current is approximately parallel to the field and pressure forces are negligible | Enforce `curl(B) = alpha B` together with zero divergence; this couples field and current in a way the current spatial fits do not | Sparse probes and normal boundary data alone generally do not determine `alpha`; low pressure alone does not establish force-free balance |
+| Axisymmetric equilibrium or magnetohydrostatic reconstruction | Static force balance and pressure/current-profile information are credible | Enforce force balance rather than only interpolate flux; cylindrical equilibrium reconstruction is distinct from the existing planar spacecraft GSR | Requires additional pressure/profile and boundary information; equilibrium assumptions can fail in a driven reconnection layer |
+| Uncertainty-aware reconstruction and experimental design | Measurement errors and model assumptions can be characterized | Explore alternative fields consistent with the data, assess topology stability, and identify informative additional probes | Uncertainty is conditional on the chosen model and priors; a narrow posterior in an inadequate basis can be misleading |
+
+For a current-free, simply connected region, write `B = -grad(Phi)` with
+`laplacian(Phi) = 0`. Compatible normal-field data over the **entire** closed
+boundary determine the field, with the potential fixed only up to a constant.
+Sparse boundary samples do not provide that uniqueness. In multiply connected
+regions, a single-valued scalar potential may omit fields with nonzero circulation;
+the relevant global modes or linked-current information must also be supplied.
+
+A conducting boundary is likewise not automatically a zero-normal-field boundary.
+Its magnetic condition depends on the assumed flux history and material model.
+Specify what is physically known, including external or far-field conditions,
+rather than treating the numerical box as a measured wall.
+
+Force-free and magnetohydrostatic approaches should be conditional additions,
+not default upgrades. An equilibrium constraint is useful only where its
+neglected forces and time dependence are demonstrably small. The
+[force-free review by Wiegelmann and Sakurai](https://arxiv.org/abs/1208.4693)
+discusses the assumptions and boundary-data issues of that class of models.
+
+### How to decide whether another method is needed
+
+Before adding a solver, compare the existing fits on synthetic problems designed
+to challenge **topology**, not only pointwise accuracy:
+
+1. Choose target observables: poloidal X/O-point locations, 3D null locations
+   and types, separatrix geometry, or boundary-to-boundary connection classes.
+   Define the domain and tracing termination rules for connectivity comparisons.
+2. Use known forward fields with and without the target structures. Include
+   cases where probes miss a localized current region or a separatrix, and cases
+   that deliberately violate an assumed symmetry or equilibrium.
+3. Hold out field, current, and boundary samples. Vary noise, probe placement,
+   basis resolution, regularization, and plausible boundary assumptions.
+4. Search for alternative fits that agree with the measurements within their
+   errors but have different target structures. Parameter sweeps or bootstrap
+   fits are useful sensitivity checks, not by themselves calibrated posterior
+   probabilities.
+5. Repeat with an independently justified source, vacuum, or equilibrium
+   constraint. Check whether it improves topology recovery without hiding
+   model mismatch or degrading held-out agreement.
+
+The [existing reconstruction cases](@ref reconstruction_cases_example) provide
+forward truths and held-out validation. The
+[uncertainty benchmark](@ref reconstruction_uncertainty_example) additionally checks
+null stability and an explicit topological ambiguity, but these controlled tests
+do not establish identifiability for a general experiment. A topology can be considered
+supported
+only to the extent that it persists across the admissible models, measurement
+errors, and numerical resolutions examined. If incompatible topologies remain,
+report the ambiguity rather than selecting one from its fit residual alone.
+
+### Recommended priorities
+
+For sparse-measurement topology inference, the first priority is **topology
+diagnostics and uncertainty/sensitivity analysis around the existing methods**.
+This establishes whether the missing ingredient is information, representation,
+or physics; another flexible interpolator does not resolve a data null space.
+
+The next method should follow the experimental regime:
+
+- **Known coils and uncertain source strengths:** extend source-informed inference,
+  including general 3D configurations where axisymmetry is inappropriate.
+- **Verified current-free measurement volume:** prioritize a harmonic,
+  geometry-aware reconstruction with explicit global circulation constraints
+  where needed.
+- **Current-carrying plasma:** retain the divergence-free fit as a baseline, then
+  assess force-free or pressure-balanced reconstruction only with supporting
+  physical measurements.
+
+Thus additional methods are warranted where they encode defensible information
+that the existing representations do not enforce. No method can guarantee a
+unique topology from arbitrary sparse probes and boundary samples alone.
