@@ -5,7 +5,7 @@ given sources and boundaries, compute the field. Here those configurations
 generate synthetic observations for the **inverse** problem. The reconstruction
 receives positions, field samples and explicitly supplied boundary/current data,
 not the source geometry. All fits below use the general Cartesian 3D model;
-see [Choosing a reconstruction model](../api.md#Choosing-a-reconstruction-model)
+see [Choosing an inverse method](@ref inverse_methods)
 for the distinction from axisymmetric flux reconstruction.
 
 | Case | Synthetic truth | Information given to the fit |
@@ -224,7 +224,7 @@ fig_cases
 
 The standalone sweep `benchmark/reconstruction_scaling.jl` varies kernel, center
 count, probe count, length scale and regularization, reporting accuracy alongside
-fit/evaluation time and allocations. See [performance guidance](../api.md#Reconstruction-performance).
+fit/evaluation time and allocations. See [performance guidance](@ref reconstruction_performance).
 
 On the external-coil sweep with deterministic 10 microtesla noise, increasing
 Gaussian centers from 64 to 125 at 125 probes and scale 1.2 m changed held-out

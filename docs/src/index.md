@@ -1,51 +1,21 @@
 # Magnetostatics.jl
 
-Magnetostatics.jl provides solvers and analytical models for computing magnetic fields produced by steady-state current distributions or potentials.
+Magnetostatics.jl provides **forward construction** of magnetic fields from
+specified sources or potentials, and **inverse reconstruction** from measurements.
 
-## Methods
+## Start here
 
-### Analytical Models
-Exact solutions for specific geometries:
-- **`HarrisSheet`**: Harris current sheet model ($B_x(z) = B_0 \tanh(z/L)$).
-- **`AsymmetricHarrisSheet`**: Asymmetric current sheet ($B_x(z) = \frac{B_1+B_2}{2} + \frac{B_1-B_2}{2} \tanh(z/L)$).
-- **`ForceFreeHarrisSheet`**: Force-free sheet ($B_x(z) = B_0 \tanh(z/L)$, $B_y(z) = B_0 \text{sech}(z/L)$).
-- **`BifurcatedHarrisSheet`**: Double-peaked current sheet ($B_x(z) = \frac{B_0}{2} [\tanh((z-d)/L) + \tanh((z+d)/L)]$).
-- **`FadeevIsland`**: 2D magnetic island equilibrium ($A_y(x, z) = -B_0 L \ln[\cosh(z/L) + \epsilon \cos(x/L_x)]$).
-- **`Dipole`**: Magnetic dipole field.
-- **`CurrentLoop`**: Analytics for circular current loops using elliptic integrals.
-- **`getB_mirror`**: Two-coil magnetic mirror configuration.
-- **`getB_bottle`**: Magnetic bottle configuration (mirror + central coil).
-- **`getB_tokamak_coil`**: Tokamak field from 16 toroidal coils + plasma current.
-- **`getB_tokamak_profile`**: Tokamak field from safety factor $q$-profile.
-- **`getB_zpinch`**: Z-pinch wire field.
+| Goal | Start with |
+|:--|:--|
+| Compute a field from known sources, currents, or model parameters | [Forward methods](@ref forward_methods) |
+| Reconstruct a field from spatial probes or a spacecraft crossing | [Inverse methods](@ref inverse_methods) |
+| Compare axisymmetric, general 3D, and spacecraft GSR assumptions | [Choosing an inverse method](@ref inverse_methods) |
+| Compute field geometry or guiding-center drift diagnostics | [Magnetic geometry](examples/magnetic_geometry.md) |
+| Look up types, keyword arguments, or supported operations | [API reference](api.md) |
 
-### Numerical Solvers
-General-purpose solvers for arbitrary geometries:
-- **`BiotSavart`**: Numerical integration of the Biot-Savart law for arbitrary wire geometries.
-- **`FFTSolver`**: Spectral method for computing **B** from a volumetric current density **J** on a uniform grid with periodic boundaries.
-- **`VectorPotential`**: Computes the magnetic vector potential **A** for wires, current loops, and dipoles.
-- **`PoissonSolver`**: Finite-difference Poisson solver (∇²**A** = −μ₀**J**) on a Cartesian grid with Dirichlet boundary conditions, supporting anisotropic grid spacing via `LinearSolve.jl`.
-
-### Field Reconstruction
-- **[`reconstruct_grad_shafranov`](@ref)**: Planar spacecraft GSR with supplied
-  frame and crossing velocity, using magnetic and isotropic-pressure time series.
-  The [mock satellite demo](@ref grad_shafranov_example) reconstructs a Fadeev island
-  and examines the stability of off-track continuation.
-- **[`reconstruct_axisymmetric_field`](@ref)**: Cylindrical probe fitting under
-  azimuthal symmetry, using poloidal flux plus an independent toroidal fit.
-  The [FLARE example](@ref flare_example) demonstrates coil and plasma-current bases.
-- **[`reconstruct_field_3d`](@ref)**: Continuous divergence-free Cartesian field
-  fitting from sparse vector or directional probes, with exact/weighted normal
-  boundary samples, current measurements, and field-energy regularization.
-  See the [API guide](api.md#Three-dimensional-reconstruction) for an example
-  and the limitations of sparse-probe inference.
-  The [3D reconstruction demo](@ref reconstruction3d_example) includes noisy
-  probes, boundary measurements, visual comparisons, and held-out validation.
-  [Additional reconstruction cases](@ref reconstruction_cases_example) cover open
-  loops, conducting walls, a conducting sphere and distributed volume current.
-  The [model comparison](api.md#Choosing-a-reconstruction-model) explains which
-  API to use, and the [performance guide](api.md#Reconstruction-performance)
-  describes accuracy/cost benchmarking.
+Method guides explain assumptions, inputs, constraints, and validation.
+Worked examples demonstrate complete physical configurations; the API reference
+documents individual functions and types.
 
 ## Quick Start
 
@@ -82,5 +52,13 @@ B_exact = getB_loop(SVector(0.0, 0.0, 0.5), loop)
 ## Contents
 
 ```@contents
-Pages = ["examples.md", "api.md"]
+Pages = [
+    "forward.md",
+    "inverse/index.md",
+    "inverse/axisymmetric.md",
+    "inverse/three_dimensional.md",
+    "inverse/grad_shafranov.md",
+    "api.md",
+]
+Depth = 2
 ```

@@ -5,11 +5,14 @@
 [![Aqua](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/refs/heads/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Julia package for computing magnetostatic fields from current sources or potentials.
+A Julia package for forward construction of magnetostatic fields from sources
+or potentials, and inverse reconstruction from measurements.
 
 ## Overview
 
-Magnetostatics.jl provides solvers and analytical models for computing magnetic fields produced by steady-state current distributions or potentials. The package includes:
+Magnetostatics.jl provides analytical models and numerical solvers for fields
+produced by steady-state currents or potentials, alongside methods for
+reconstructing fields from sparse measurements. The package includes:
 
 - **Biot-Savart solver** — numerical integration of the Biot-Savart law for arbitrary wire geometries.
 - **FFT solver** — spectral method for computing **B** from a volumetric current density **J** on a uniform grid with periodic boundaries.
@@ -52,6 +55,14 @@ B_exact = getB_loop([0.0, 0.0, 0.5], loop)
 ## Documentation
 
 For more detailed information on the API and usage, please refer to the [documentation](https://henry2004y.github.io/Magnetostatics.jl/dev).
+
+- [Forward methods](https://henry2004y.github.io/Magnetostatics.jl/dev/forward):
+  choose analytical models and numerical solvers from known sources and boundaries.
+- [Inverse methods](https://henry2004y.github.io/Magnetostatics.jl/dev/inverse/):
+  compare reconstruction assumptions, measurement formats, constraints, and validation.
+- [API reference](https://henry2004y.github.io/Magnetostatics.jl/dev/api):
+  public interfaces grouped by forward construction, inverse reconstruction,
+  and shared field diagnostics.
 
 ## Related Packages
 
