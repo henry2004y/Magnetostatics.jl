@@ -24,5 +24,7 @@ end
     @testset "Poisson" include("test_poisson.jl")
     @testset "reconstruction" include("test_reconstruction.jl")
     @testset "3D reconstruction" include("test_reconstruction3d.jl")
+    @testset "Physical reconstruction cases" include("test_reconstruction_cases.jl")
+    @testset "Spacecraft Grad-Shafranov reconstruction" include("test_grad_shafranov.jl")
     @testset "FieldTracer integration" include("test_fieldtracer.jl")
 end

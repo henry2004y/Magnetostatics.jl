@@ -5,6 +5,8 @@ Continuous Cartesian field represented as a uniform field plus the analytic curl
 of a radial-basis vector potential. The fitted field is divergence-free by
 construction. Coordinates are in metres and field components in tesla.
 Evaluation outside `domain` throws `DomainError`.
+Unlike [`AxisymmetricFieldReconstruction`](@ref), this model makes no symmetry
+assumption and fits Cartesian probes in a three-dimensional box.
 """
 struct FieldReconstruction3D{T, F <: AbstractMagneticField, D} <: AbstractMagneticField
     centers::Matrix{T}
@@ -60,13 +62,34 @@ function _bins_3d(centers, domain, scale)
     return bins
 end
 
-function _candidates_3d(pos, domain, scale, bins)
-    cell = ntuple(k -> floor(Int, (pos[k] - domain[2k - 1]) / scale), 3)
-    candidates = Int[]
-    for offset in Iterators.product(-1:1, -1:1, -1:1)
-        append!(candidates, get(bins, cell .+ offset, Int[]))
+function _foreach_kernel_3d(
+        f::F, pos, centers, scale, kernel, domain, bins
+    ) where {F}
+    if kernel === :gaussian
+        for j in axes(centers, 1)
+            _kernel_term_3d(f, j, pos, centers, scale, kernel)
+        end
+        return nothing
     end
-    return candidates
+    cell = ntuple(k -> floor(Int, (pos[k] - domain[2k - 1]) / scale), 3)
+    for offset in Iterators.product(-1:1, -1:1, -1:1)
+        bin = get(bins, cell .+ offset, nothing)
+        bin === nothing && continue
+        for j in bin
+            _kernel_term_3d(f, j, pos, centers, scale, kernel)
+        end
+    end
+    return nothing
+end
+
+@inline function _kernel_term_3d(f::F, j, pos, centers, scale, kernel) where {F}
+    T = promote_type(eltype(pos), eltype(centers), typeof(scale))
+    displacement = SVector{3, T}(pos) -
+        SVector{3, T}(ntuple(k -> centers[j, k], 3))
+    kernel === :wendland_c2 && norm(displacement) >= scale && return nothing
+    gradient, hessian = _kernel_derivatives_3d(displacement, scale, kernel)
+    f(j, gradient, hessian)
+    return nothing
 end
 
 function _kernel_derivatives_3d(displacement, scale, kernel)
@@ -97,19 +120,13 @@ end
 function _operators_3d(pos, centers, scale, kernel, domain, bins)
     T = promote_type(eltype(pos), eltype(centers), typeof(scale))
     ncoefficients = 3 + 3size(centers, 1)
-    field_rows = [spzeros(T, ncoefficients) for _ in 1:3]
-    curl_rows = [spzeros(T, ncoefficients) for _ in 1:3]
-    for k in 1:3
-        field_rows[k][k] = one(T)
-    end
-    candidates = kernel === :gaussian ? axes(centers, 1) :
-        _candidates_3d(pos, domain, scale, bins)
-    support_count = 0
-    for j in candidates
-        displacement = SVector{3, T}(pos) - SVector{3, T}(centers[j, :])
-        kernel === :wendland_c2 && norm(displacement) >= scale && continue
-        support_count += 1
-        gradient, hessian = _kernel_derivatives_3d(displacement, scale, kernel)
+    field_indices = ntuple(k -> [k], 3)
+    field_values = ntuple(_ -> T[1], 3)
+    curl_indices = ntuple(_ -> Int[], 3)
+    curl_values = ntuple(_ -> T[], 3)
+    support_count = Ref(0)
+    _foreach_kernel_3d(pos, centers, scale, kernel, domain, bins) do j, gradient, hessian
+        support_count[] += 1
         # Scaling A by the support radius gives all coefficients field units.
         curl_block = scale * (hessian - tr(hessian) * one(hessian))
         for k in 1:3
@@ -117,12 +134,20 @@ function _operators_3d(pos, centers, scale, kernel, domain, bins)
             field_column = scale * cross(gradient, direction)
             column = 3 + 3(j - 1) + k
             for i in 1:3
-                field_rows[i][column] = field_column[i]
-                curl_rows[i][column] = curl_block[i, k]
+                if !iszero(field_column[i])
+                    push!(field_indices[i], column)
+                    push!(field_values[i], field_column[i])
+                end
+                if !iszero(curl_block[i, k])
+                    push!(curl_indices[i], column)
+                    push!(curl_values[i], curl_block[i, k])
+                end
             end
         end
     end
-    return field_rows, curl_rows, support_count
+    field_rows = [sparsevec(field_indices[k], field_values[k], ncoefficients) for k in 1:3]
+    curl_rows = [sparsevec(curl_indices[k], curl_values[k], ncoefficients) for k in 1:3]
+    return field_rows, curl_rows, support_count[]
 end
 
 function _operators_3d(field::FieldReconstruction3D, pos)
@@ -134,9 +159,28 @@ end
 
 function (field::FieldReconstruction3D)(pos)
     point = _check_3d_position(field, pos)
-    rows, _, _ = _operators_3d(field, point)
     return _reference_value_3d(field.reference_field, point) +
-        SVector{3}(map(row -> dot(row, field.coefficients), rows))
+        _correction_3d(field, point, Val(false))
+end
+
+function _correction_3d(field::FieldReconstruction3D, point, ::Val{current}) where {current}
+    T = promote_type(eltype(point), eltype(field.coefficients))
+    coefficients = field.coefficients
+    value = Ref(
+        current ? zero(SVector{3, T}) : SVector{3, T}(ntuple(k -> coefficients[k], 3))
+    )
+    scale = field.length_scale
+    _foreach_kernel_3d(
+        point, field.centers, scale, field.kernel, field.domain, field.center_bins
+    ) do j, gradient, hessian
+        a = SVector{3, T}(ntuple(k -> coefficients[3 + 3(j - 1) + k], 3))
+        value[] += if current
+            scale * (hessian * a - tr(hessian) * a)
+        else
+            scale * cross(gradient, a)
+        end
+    end
+    return current ? value[] / μ₀ : value[]
 end
 
 _reference_current(::NullField, pos) = zero(SVector{3, eltype(pos)})
@@ -145,14 +189,23 @@ _reference_current(field::AbstractMagneticField, pos) = current_density(field, p
 
 function current_density(field::FieldReconstruction3D, pos)
     point = _check_3d_position(field, pos)
-    _, rows, _ = _operators_3d(field, point)
     return _reference_value_3d(field.reference_field, point; current = true) +
-        SVector{3}(map(row -> dot(row, field.coefficients) / μ₀, rows))
+        _correction_3d(field, point, Val(true))
 end
 
 function _matrix_3d(rows, ncoefficients, ::Type{T}) where {T}
-    isempty(rows) && return spzeros(T, 0, ncoefficients)
-    return sparse(reduce(hcat, rows)')
+    nentries = sum(nnz, rows; init = 0)
+    I, J, V = Vector{Int}(undef, nentries), Vector{Int}(undef, nentries),
+        Vector{T}(undef, nentries)
+    entry = 0
+    for (i, row) in enumerate(rows)
+        indices, values = findnz(row)
+        for k in eachindex(indices)
+            entry += 1
+            I[entry], J[entry], V[entry] = i, indices[k], values[k]
+        end
+    end
+    return sparse(I, J, V, length(rows), ncoefficients)
 end
 
 function _reference_value_3d(field, point; current = false)
@@ -165,7 +218,11 @@ end
 function _add_observation_3d!(rows, targets, sigmas, groups, row, target, sigma, group)
     isnan(target) && return nothing
     isfinite(target) || throw(ArgumentError("observations cannot be infinite"))
-    _append_fit_row!(rows, targets, sigmas, row, target, sigma)
+    isfinite(sigma) && sigma > 0 ||
+        throw(ArgumentError("uncertainties must be finite and positive"))
+    push!(rows, row)
+    push!(targets, target)
+    push!(sigmas, sigma)
     push!(groups, group)
     return nothing
 end

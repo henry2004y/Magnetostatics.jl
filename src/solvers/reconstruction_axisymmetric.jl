@@ -8,6 +8,8 @@ flux `ψ(R, Z)` by default, optionally augmented with global vacuum
 and softened toroidal current elements that carry net plasma current.
 The poloidal field is divergence-free by construction. The toroidal field is
 fit independently when toroidal measurements are supplied.
+Unlike [`FieldReconstruction3D`](@ref), this model assumes azimuthal symmetry
+about the z axis and fits cylindrical probe components on an `(R, Z)` domain.
 """
 struct AxisymmetricFieldReconstruction{T} <: AbstractMagneticField
     centers::Matrix{T}
@@ -343,16 +345,6 @@ function _append_weighted_row!(
         throw(ArgumentError("uncertainties must be finite and positive"))
     weight = inv(uncertainty)
     _push_row!(rows, indices, terms, factor * weight, target * weight, ncolumns)
-    return nothing
-end
-
-function _append_fit_row!(rows, targets, uncertainties, row, target, uncertainty)
-    isfinite(target) || return nothing
-    isfinite(uncertainty) && uncertainty > 0 ||
-        throw(ArgumentError("uncertainties must be finite and positive"))
-    push!(rows, sparsevec(row))
-    push!(targets, target)
-    push!(uncertainties, uncertainty)
     return nothing
 end
 

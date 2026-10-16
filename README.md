@@ -16,6 +16,10 @@ Magnetostatics.jl provides solvers and analytical models for computing magnetic 
 - **Vector Potential solver** — computes the magnetic vector potential **A** for wires, current loops, and dipoles.
 - **3D reconstruction** — divergence-free field fitting from sparse Cartesian or
   directional probes, with normal-boundary constraints and current measurements.
+- **Axisymmetric reconstruction** — poloidal-flux fitting from cylindrical probes,
+  with vacuum, external-filament and plasma-current bases for axisymmetric systems.
+- **Spacecraft Grad-Shafranov reconstruction** — planar magnetohydrostatic
+  reconstruction from a magnetic/pressure time series in a supplied crossing frame.
 - **Magnetosphere models** — planetary dipoles, magnetopause shielding, magnetotail, and interplanetary magnetic field (IMF) components.
 - **Tokamaks** — analytical magnetic field models for toroidal/poloidal coils, central solenoids, and q-profile based configurations.
 - **Analytical fields** — closed-form models for Harris current sheets (asymmetric, force-free), magnetic dipoles, mirrors, pinches, and circular current loops.

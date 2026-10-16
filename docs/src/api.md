@@ -35,6 +35,7 @@ GoldHoyleFluxTube
 FLARECoils
 AxisymmetricFieldReconstruction
 FieldReconstruction3D
+GradShafranovReconstruction
 ```
 
 ## Boundary Conditions
@@ -57,9 +58,46 @@ VectorPotential
 PoissonSolver
 reconstruct_axisymmetric_field
 reconstruct_field_3d
+reconstruct_grad_shafranov
 solve
 vector_potential
 ```
+
+### Choosing a reconstruction model
+
+The two spatial-probe APIs use distinct inverse models, not interchangeable
+versions of one solver:
+
+| | Axisymmetric | General three-dimensional |
+|:--|:--|:--|
+| Entry point | [`reconstruct_axisymmetric_field`](@ref) | [`reconstruct_field_3d`](@ref) |
+| Implementation | `src/solvers/reconstruction_axisymmetric.jl` | `src/solvers/reconstruction3d.jl` |
+| Assumption | No azimuthal dependence about the **z axis** | No spatial symmetry |
+| Probe coordinates | Rows of `(R, Z)` | Rows of `(x, y, z)` |
+| Observed components | `(B_R, B_phi, B_Z)` | `(B_x, B_y, B_z)` |
+| Domain | `(Rmin, Rmax, Zmin, Zmax)`, `Rmin > 0` | `(xmin, xmax, ymin, ymax, zmin, zmax)` |
+| Representation | Poloidal flux RBFs plus optional vacuum, filament and current-element modes; independent toroidal RBF fit | Uniform field plus curl of a vector-potential RBF expansion |
+| Boundary data | Poloidal **flux** `boundary_flux` | Normal **field** `boundary_values = n dot B` |
+| Current data | Scalar toroidal `J_phi` | Cartesian `(J_x, J_y, J_z)` |
+| Pressure balance | Not enforced | Not enforced |
+| Known background | Vacuum/filament modes fitted from data | Optional fixed `reference_field` |
+| Example | [FLARE reconstruction](@ref flare_example) | [Tilted coil](@ref reconstruction3d_example), [physical cases](@ref reconstruction_cases_example) |
+
+Both return callable fields evaluated at **Cartesian** positions, with Cartesian
+field components in tesla; both support `current_density`. The axisymmetric model
+also supports `poloidal_flux`. Its poloidal field is divergence-free by construction,
+as is the full 3D curl representation. Fitting an axisymmetric model to a tilted
+coil or a non-axisymmetric wall configuration discards genuine spatial structure;
+do not treat the cheaper axisymmetric fit as a general 3D approximation.
+
+**Spacecraft GSR is a third, physically distinct model.**
+[`reconstruct_grad_shafranov`](@ref) assumes planar translational invariance and
+isotropic magnetohydrostatic balance, fits `P_t(A)` and `B_z(A)` from a time series,
+and continues the planar GS equation away from the crossing. It requires thermal
+pressure and a supplied crossing frame/velocity, unlike the two spatial-probe
+interpolators above. Its equation uses `laplacian(A)`, not the cylindrical
+`Delta-star` operator. See the [mock satellite demo](@ref grad_shafranov_example)
+for field/pressure/current maps, validation and regularization sensitivity.
 
 ### Three-dimensional reconstruction
 
@@ -152,6 +190,37 @@ uncertainty estimates. Exact constraints currently use a dense null-space
 reduction; use uncertainty-weighted boundary data for the sparse iterative path.
 Small length scales increase default center and quadrature counts cubically.
 
+### Reconstruction performance
+
+Fitting and evaluation have different costs. Fitting assembles sparse observation
+and regularization operators; evaluating a fitted 3D field sums analytic basis
+contributions directly without constructing those operators. Compact Wendland
+evaluation visits neighboring spatial bins; Gaussian evaluation visits all centers.
+For a compact basis at fixed center density and support radius, adding remote
+centers should not increase the local summation cost. Larger support radii can
+make even a compact design matrix effectively dense.
+
+Run the accuracy/cost sweep from the repository root:
+
+```powershell
+julia --project=benchmark benchmark\reconstruction_scaling.jl
+```
+
+This prints CSV rows with basis/probe counts, kernel, support radius, regularization,
+held-out vector error, a dimensionless spurious-current measure, fit time and
+allocation, and field/current evaluation time and allocation. Compilation is
+excluded by warming each configuration. Noise and held-out points are deterministic.
+The existing `SUITE["reconstruction3d"]` benchmark group additionally separates
+operator construction, matrix assembly, fitting and evaluation.
+
+Increasing center count is not guaranteed to improve accuracy: sparse probes,
+potential gauge modes and ill-conditioning can dominate. Compare held-out error
+**and** derivative/current error before selecting the fastest acceptable model.
+Refine probe coverage and physical priors, not just the basis. Exact boundary
+constraints introduce a dense null-space solve and can dominate larger fits.
+The [physical cases](@ref reconstruction_cases_example) also validate normal
+fields at surface locations not supplied to the reconstruction.
+
 ## Magnetic Geometry and Plasma Drifts
 
 Differential geometry quantities and guiding-center drift velocity formulas. For full
@@ -168,6 +237,8 @@ mirror_ratio
 loss_cone_angle
 magnetic_helicity
 poloidal_flux
+flux_function
+thermal_pressure
 ```
 
 ## Surface Current (BEM)
