@@ -216,3 +216,54 @@ SUITE["reconstruction3d"]["evaluate"] = BenchmarkGroup()
 SUITE["reconstruction3d"]["evaluate"]["field"] = @benchmarkable ($recon3d_field)($recon3d_r)
 SUITE["reconstruction3d"]["evaluate"]["current_density"] =
     @benchmarkable current_density($recon3d_field, $recon3d_r)
+
+SUITE["reconstruction3d"]["assembly"] = BenchmarkGroup()
+SUITE["reconstruction3d"]["assembly"]["operators"] =
+    @benchmarkable Magnetostatics._operators_3d($recon3d_field, $recon3d_r)
+recon3d_rows = reduce(
+    vcat, [
+        first(Magnetostatics._operators_3d(recon3d_field, SVector{3}(p)))
+            for p in eachrow(recon3d_problem.positions)
+    ]
+)
+recon3d_ncoefficients = length(recon3d_field.coefficients)
+SUITE["reconstruction3d"]["assembly"]["matrix"] = @benchmarkable(
+    Magnetostatics._matrix_3d($recon3d_rows, $recon3d_ncoefficients, Float64)
+)
+
+SUITE["grad_shafranov"] = BenchmarkGroup()
+gsr_problem = let
+    B0, L, epsilon, offset = 20.0e-9, 1.0e6, 0.3, 0.2e6
+    island = FadeevIsland(B0, L, L, epsilon)
+    times = collect(range(-40.0, 40.0; length = 121))
+    xs = 50.0e3 .* times
+    B = map(xs) do x
+        field = island(SVector(x + π * L, 0.0, offset))
+        SVector(field[1], field[3], 5.0e-9)
+    end
+    pressure = [
+        0.1e-9 + B0^2 * (1 - epsilon^2) /
+            (2Magnetostatics.μ₀ * (cosh(offset / L) - epsilon * cos(x / L))^2)
+            for x in xs
+    ]
+    common = (;
+        crossing_velocity = SVector(50.0e3, 0.0, 0.0),
+        invariant_axis = SVector(0.0, 0.0, 1.0),
+        y = collect(range(-0.3L, 0.3L; length = 61)),
+        spatial_degree = 10, pressure_degree = 6, axial_degree = 0,
+    )
+    (; times, B = [b[k] for b in B, k in 1:3], pressure, common)
+end
+SUITE["grad_shafranov"]["fit"] = @benchmarkable(
+    reconstruct_grad_shafranov(p.times, p.B, p.pressure; p.common...),
+    setup = (p = $gsr_problem)
+)
+gsr_field = reconstruct_grad_shafranov(
+    gsr_problem.times, gsr_problem.B, gsr_problem.pressure; gsr_problem.common...
+)
+gsr_r = SVector(0.37e6, 0.17e6, 0.0)
+SUITE["grad_shafranov"]["field"] = @benchmarkable ($gsr_field)($gsr_r)
+SUITE["grad_shafranov"]["current_density"] =
+    @benchmarkable current_density($gsr_field, $gsr_r)
+SUITE["grad_shafranov"]["flux"] = @benchmarkable flux_function($gsr_field, $gsr_r)
+SUITE["grad_shafranov"]["pressure"] = @benchmarkable thermal_pressure($gsr_field, $gsr_r)

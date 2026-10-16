@@ -16,6 +16,11 @@ so the field is divergence-free by construction. Sparse observations still do
 not uniquely determine it: the basis and regularization select a smooth solution.
 Boundary measurements below are uncertain observations, not exact wall conditions.
 
+For other source terms and physical boundaries, see
+[Reconstruction Across Sources and Boundaries](@ref reconstruction_cases_example).
+The [API comparison](../api.md#Choosing-a-reconstruction-model) explains how this
+general 3D model differs from axisymmetric flux reconstruction.
+
 ## Selected magnetic field
 
 ```@example reconstruction3d

@@ -1,5 +1,8 @@
 # [Biot-Savart Solver](@id biot_savart_example)
 
+To infer fields from sparse measurements of these configurations instead of
+supplying their sources, see the [reconstruction cases](@ref reconstruction_cases_example).
+
 The magnetic field for a finite wire segment is calculated using the algebraic form of the Biot-Savart law:
 ```math
 \mathbf{B} = \frac{\mu_0 I}{4\pi} \frac{d\mathbf{l} \times \mathbf{a}}{|d\mathbf{l} \times \mathbf{a}|^2} \left( \frac{d\mathbf{l} \cdot \mathbf{a}}{|\mathbf{a}|} - \frac{d\mathbf{l} \cdot \mathbf{b}}{|\mathbf{b}|} \right)

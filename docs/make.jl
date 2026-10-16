@@ -25,6 +25,8 @@ makedocs(;
             "Current Sheet" => "examples/current_sheet.md",
             "FLARE Experiment" => "examples/flare.md",
             "3D Field Reconstruction" => "examples/reconstruction3d.md",
+            "Reconstruction Cases" => "examples/reconstruction_cases.md",
+            "Spacecraft GSR" => "examples/grad_shafranov.md",
             "Parker Spiral" => "examples/parker_spiral.md",
             "Magnetosphere" => "examples/magnetosphere.md",
 

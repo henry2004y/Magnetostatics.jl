@@ -27,6 +27,13 @@ General-purpose solvers for arbitrary geometries:
 - **`PoissonSolver`**: Finite-difference Poisson solver (∇²**A** = −μ₀**J**) on a Cartesian grid with Dirichlet boundary conditions, supporting anisotropic grid spacing via `LinearSolve.jl`.
 
 ### Field Reconstruction
+- **[`reconstruct_grad_shafranov`](@ref)**: Planar spacecraft GSR with supplied
+  frame and crossing velocity, using magnetic and isotropic-pressure time series.
+  The [mock satellite demo](@ref grad_shafranov_example) reconstructs a Fadeev island
+  and examines the stability of off-track continuation.
+- **[`reconstruct_axisymmetric_field`](@ref)**: Cylindrical probe fitting under
+  azimuthal symmetry, using poloidal flux plus an independent toroidal fit.
+  The [FLARE example](@ref flare_example) demonstrates coil and plasma-current bases.
 - **[`reconstruct_field_3d`](@ref)**: Continuous divergence-free Cartesian field
   fitting from sparse vector or directional probes, with exact/weighted normal
   boundary samples, current measurements, and field-energy regularization.
@@ -34,6 +41,11 @@ General-purpose solvers for arbitrary geometries:
   and the limitations of sparse-probe inference.
   The [3D reconstruction demo](@ref reconstruction3d_example) includes noisy
   probes, boundary measurements, visual comparisons, and held-out validation.
+  [Additional reconstruction cases](@ref reconstruction_cases_example) cover open
+  loops, conducting walls, a conducting sphere and distributed volume current.
+  The [model comparison](api.md#Choosing-a-reconstruction-model) explains which
+  API to use, and the [performance guide](api.md#Reconstruction-performance)
+  describes accuracy/cost benchmarking.
 
 ## Quick Start
 
