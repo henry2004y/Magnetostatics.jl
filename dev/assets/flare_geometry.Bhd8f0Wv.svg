@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 530"
+     role="img" aria-labelledby="title description">
+  <title id="title">Idealized FLARE coil geometry</title>
+  <desc id="description">
+    A toroidal perspective and a positive-radius R-Z section of the FLARE model.
+    Two PF flux cores at R = 0.75 m and Z = plus or minus 0.40 m lie inside two
+    external EF coils at R = 1.30 m and Z = plus or minus 0.70 m.
+    An illustrative plasma current layer lies at R = 0.75 m and Z = 0.
+    The vacuum vessel, supports, and diagnostics are not shown.
+  </desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4"
+            orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="530" rx="12" fill="#ffffff"/>
+  <g font-family="sans-serif" fill="#1e293b">
+    <text x="250" y="36" text-anchor="middle" font-size="21" font-weight="bold">
+      Toroidal coil layout
+    </text>
+    <text x="750" y="36" text-anchor="middle" font-size="21" font-weight="bold">
+      Poloidal section (R, Z)
+    </text>
+    <text x="500" y="64" text-anchor="middle" font-size="15" fill="#475569">
+      Idealized model geometry; vessel and diagnostics omitted
+    </text>
+    <path d="M 500 88 V 438" stroke="#e2e8f0"/>
+
+    <path d="M 245 427 V 100" stroke="#475569" stroke-width="1.5"
+          stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+    <text x="257" y="109" font-size="17">Z</text>
+    <text x="245" y="449" text-anchor="middle" font-size="14" fill="#475569">
+      Symmetry axis (R = 0)
+    </text>
+    <ellipse cx="245" cy="375" rx="195" ry="55" fill="none"
+             stroke="#0284c7" stroke-width="9"/>
+    <ellipse cx="245" cy="330" rx="112.5" ry="32" fill="none"
+             stroke="#be123c" stroke-width="17"/>
+    <ellipse cx="245" cy="270" rx="112.5" ry="32" fill="none"
+             stroke="#d97706" stroke-width="7" stroke-dasharray="9 6"/>
+    <ellipse cx="245" cy="210" rx="112.5" ry="32" fill="none"
+             stroke="#be123c" stroke-width="17"/>
+    <ellipse cx="245" cy="165" rx="195" ry="55" fill="none"
+             stroke="#0284c7" stroke-width="9"/>
+    <path d="M 245 270 H 357.5" stroke="#475569" stroke-width="1.5"
+          marker-end="url(#arrow)"/>
+    <text x="291" y="260" font-size="17">R</text>
+    <path d="M 600 423 V 107" stroke="#475569" stroke-width="1.5"
+          marker-end="url(#arrow)"/>
+    <path d="M 600 280 H 960" stroke="#475569" stroke-width="1.5"
+          marker-end="url(#arrow)"/>
+    <text x="610" y="114" font-size="17">Z [m]</text>
+    <text x="945" y="305" font-size="17">R [m]</text>
+    <text x="581" y="300" font-size="14">0</text>
+    <g fill="none" stroke="#cbd5e1" stroke-dasharray="4 4">
+      <path d="M 600 168 H 886 V 392 H 600"/>
+      <path d="M 600 216 H 765 V 344 H 600"/>
+    </g>
+    <g font-size="14" text-anchor="end" fill="#475569">
+      <text x="590" y="173">+0.70</text>
+      <text x="590" y="221">+0.40</text>
+      <text x="590" y="349">-0.40</text>
+      <text x="590" y="397">-0.70</text>
+    </g>
+    <g fill="#be123c" stroke="#881337" stroke-width="1.5">
+      <circle cx="765" cy="216" r="12"/>
+      <circle cx="765" cy="344" r="12"/>
+    </g>
+    <g fill="#0284c7" stroke="#075985" stroke-width="1.5">
+      <circle cx="886" cy="168" r="9"/>
+      <circle cx="886" cy="392" r="9"/>
+    </g>
+    <rect x="757" y="261" width="16" height="38" rx="5"
+          fill="#fef3c7" stroke="#d97706" stroke-width="2" stroke-dasharray="4 3"/>
+    <path d="M 775 266 L 805 247 H 947" fill="none" stroke="#d97706"/>
+    <text x="806" y="237" font-size="14" fill="#92400e">Plasma layer (optional)</text>
+    <g font-size="14" text-anchor="middle" fill="#475569">
+      <text x="765" y="419">R = 0.75 m</text>
+      <text x="886" y="440">R = 1.30 m</text>
+    </g>
+    <path d="M 765 356 V 401 M 886 402 V 422" stroke="#94a3b8"/>
+
+    <g font-size="16">
+      <path d="M 113 483 H 151" stroke="#be123c" stroke-width="10"/>
+      <text x="163" y="489">PF flux cores</text>
+      <path d="M 370 483 H 408" stroke="#0284c7" stroke-width="7"/>
+      <text x="420" y="489">EF coils</text>
+      <path d="M 604 483 H 642" stroke="#d97706" stroke-width="5"
+            stroke-dasharray="8 5"/>
+      <text x="654" y="489">Plasma current layer</text>
+    </g>
+    <text x="500" y="516" text-anchor="middle" font-size="13" fill="#64748b">
+      Coil centers follow the demo parameters; thicknesses are schematic.
+    </text>
+  </g>
+</svg>
