@@ -228,23 +228,26 @@ end
 
 @inline function _rbf_kernel_terms(dr, dz, R, length_scale, inv_scale2, kernel::Symbol)
     T = promote_type(typeof(dr), typeof(dz), typeof(R), typeof(inv_scale2))
-    distance = hypot(dr, dz)
+    d2 = muladd(dr, dr, dz * dz)
     if kernel === :gaussian
-        value = exp(-0.5 * distance^2 * inv_scale2)
-        d_r = -dr * inv_scale2 * value
-        d_z = -dz * inv_scale2 * value
-        dRR = (dr^2 * inv_scale2^2 - inv_scale2) * value
-        dZZ = (dz^2 * inv_scale2^2 - inv_scale2) * value
-        return true, T(value), T(d_r), T(d_z), T(dRR + dZZ - d_r / R)
+        u = d2 * inv_scale2
+        value = exp(-T(0.5) * u)
+        val_s2 = value * inv_scale2
+        d_r = -dr * val_s2
+        d_z = -dz * val_s2
+        delta = (u - T(2)) * val_s2 - d_r / R
+        return true, T(value), T(d_r), T(d_z), T(delta)
     elseif kernel === :wendland_c2
-        q = distance / length_scale
-        q >= 1 && return false, zero(T), zero(T), zero(T), zero(T)
-        one_minus_q = 1 - q
-        value = one_minus_q^4 * (4q + 1)
-        phi_prime_over_q = -20 * one_minus_q^3
+        q2 = d2 * inv_scale2
+        q2 >= one(T) && return false, zero(T), zero(T), zero(T), zero(T)
+        q = sqrt(q2)
+        one_minus_q = one(T) - q
+        omq2 = one_minus_q * one_minus_q
+        value = (omq2 * omq2) * muladd(T(4), q, one(T))
+        phi_prime_over_q = -T(20) * (omq2 * one_minus_q)
         d_r = phi_prime_over_q * dr * inv_scale2
         d_z = phi_prime_over_q * dz * inv_scale2
-        radial_hessian = -20 * one_minus_q^2 * (1 - 4q) * inv_scale2
+        radial_hessian = -T(20) * omq2 * muladd(-T(4), q, one(T)) * inv_scale2
         tangential_hessian = phi_prime_over_q * inv_scale2
         delta = radial_hessian + tangential_hessian - d_r / R
         return true, T(value), T(d_r), T(d_z), T(delta)
@@ -264,18 +267,24 @@ end
 
 function _foreach_rbf_term(
         f::F, R, Z, centers, length_scale, kernel,
-        domain = nothing, center_bins = nothing
+        domain = nothing, grid_bins::Union{Nothing, _GridBins2D} = nothing
     ) where {F}
     inv_scale2 = inv(length_scale^2)
-    if kernel === :wendland_c2 && center_bins !== nothing
+    if kernel === :wendland_c2 && grid_bins !== nothing && !isempty(grid_bins.indices)
         Rmin, _, Zmin, _ = domain
-        cell_r = floor(Int, (R - Rmin) / length_scale)
-        cell_z = floor(Int, (Z - Zmin) / length_scale)
-        for dr in -1:1, dz in -1:1
-            bin = get(center_bins, (cell_r + dr, cell_z + dz), nothing)
-            bin === nothing && continue
-            for i in bin
-                _rbf_term(f, i, R, Z, centers, length_scale, inv_scale2, kernel)
+        ir0 = floor(Int, (R - Rmin) / length_scale) - grid_bins.origin[1] + 1
+        iz0 = floor(Int, (Z - Zmin) / length_scale) - grid_bins.origin[2] + 1
+        nr, nz = grid_bins.dims
+        @inbounds for iz in max(1, iz0 - 1):min(nz, iz0 + 1)
+            zoff = (iz - 1) * nr
+            for ir in max(1, ir0 - 1):min(nr, ir0 + 1)
+                cidx = zoff + ir
+                for ptr in grid_bins.offsets[cidx]:(grid_bins.offsets[cidx + 1] - 1)
+                    _rbf_term(
+                        f, grid_bins.indices[ptr], R, Z, centers,
+                        length_scale, inv_scale2, kernel
+                    )
+                end
             end
         end
     else
@@ -287,12 +296,12 @@ function _foreach_rbf_term(
 end
 
 function _rbf_terms(
-        R, Z, centers, length_scale, kernel, domain = nothing, center_bins = nothing
+        R, Z, centers, length_scale, kernel, domain = nothing, grid_bins = nothing
     )
     buffer = _TermBuffer{
         promote_type(typeof(R), typeof(Z), eltype(centers), typeof(length_scale)),
     }()
-    _foreach_rbf_term(buffer, R, Z, centers, length_scale, kernel, domain, center_bins)
+    _foreach_rbf_term(buffer, R, Z, centers, length_scale, kernel, domain, grid_bins)
     n = size(centers, 1)
     sparse_terms(values) = sparsevec(buffer.indices, values, n)
     return sparse_terms(buffer.values), sparse_terms(buffer.dR),
@@ -307,7 +316,7 @@ function _foreach_basis_term(f::F, basis, R, Z; flux::Bool = true) where {F}
     centers = basis.centers
     _foreach_rbf_term(
         f, R, Z, centers, basis.length_scale, basis.kernel, basis.domain,
-        basis.center_bins
+        basis.grid_bins
     )
     offset = size(centers, 1)
     if flux
@@ -330,9 +339,23 @@ struct _TermBuffer{T}
     delta::Vector{T}
 end
 
-_TermBuffer{T}() where {T} = _TermBuffer{T}(Int[], T[], T[], T[], T[])
+function _TermBuffer{T}(cap::Int = 0) where {T}
+    indices = Int[]
+    values = T[]
+    dR = T[]
+    dZ = T[]
+    delta = T[]
+    if cap > 0
+        sizehint!(indices, cap)
+        sizehint!(values, cap)
+        sizehint!(dR, cap)
+        sizehint!(dZ, cap)
+        sizehint!(delta, cap)
+    end
+    return _TermBuffer{T}(indices, values, dR, dZ, delta)
+end
 
-function (buffer::_TermBuffer)(k, value, dR, dZ, delta)
+@inline function (buffer::_TermBuffer)(k, value, dR, dZ, delta)
     push!(buffer.indices, k)
     push!(buffer.values, value)
     push!(buffer.dR, dR)
@@ -342,9 +365,11 @@ function (buffer::_TermBuffer)(k, value, dR, dZ, delta)
 end
 
 function _collect_basis_terms!(buffer::_TermBuffer, basis, R, Z; flux::Bool = true)
-    for v in (buffer.indices, buffer.values, buffer.dR, buffer.dZ, buffer.delta)
-        empty!(v)
-    end
+    empty!(buffer.indices)
+    empty!(buffer.values)
+    empty!(buffer.dR)
+    empty!(buffer.dZ)
+    empty!(buffer.delta)
     _foreach_basis_term(buffer, basis, R, Z; flux)
     return buffer
 end
@@ -463,7 +488,7 @@ function _basis_sums(
 end
 
 # Weighted least-squares rows `A[i, J] = V / σᵢ`, `b[i] = targetᵢ / σᵢ` in
-# coordinate format.
+# coordinate or preallocated dense format.
 struct _FitRows{T}
     I::Vector{Int}
     J::Vector{Int}
@@ -471,13 +496,28 @@ struct _FitRows{T}
     b::Vector{T}
 end
 
-_FitRows{T}() where {T} = _FitRows{T}(Int[], Int[], T[], T[])
+function _FitRows{T}(row_cap::Int = 0, nnz_cap::Int = 0) where {T}
+    I = Int[]
+    J = Int[]
+    V = T[]
+    b = T[]
+    if nnz_cap > 0
+        sizehint!(I, nnz_cap)
+        sizehint!(J, nnz_cap)
+        sizehint!(V, nnz_cap)
+    end
+    row_cap > 0 && sizehint!(b, row_cap)
+    return _FitRows{T}(I, J, V, b)
+end
+
+_row_count(rows::_FitRows) = length(rows.b)
 
 function _push_row!(rows::_FitRows, indices, terms, factor, target, ncolumns)
     row = length(rows.b) + 1
-    for (k, term) in zip(indices, terms)
+    @inbounds for p in eachindex(indices, terms)
+        k = indices[p]
         k <= ncolumns || continue
-        value = factor * term
+        value = factor * terms[p]
         iszero(value) && continue
         push!(rows.I, row)
         push!(rows.J, k)
@@ -487,8 +527,38 @@ function _push_row!(rows::_FitRows, indices, terms, factor, target, ncolumns)
     return nothing
 end
 
+mutable struct _DenseFitRows{T}
+    const A::Matrix{T}
+    const b::Vector{T}
+    nrows::Int
+end
+
+function _DenseFitRows{T}(max_rows::Int, ncolumns::Int) where {T}
+    return _DenseFitRows{T}(
+        zeros(T, max_rows + ncolumns, ncolumns),
+        zeros(T, max_rows + ncolumns),
+        0
+    )
+end
+
+_row_count(rows::_DenseFitRows) = rows.nrows
+
+@inline function _push_row!(
+        rows::_DenseFitRows{T}, indices, terms, factor, target, ncolumns
+    ) where {T}
+    row = rows.nrows + 1
+    rows.nrows = row
+    A = rows.A
+    @inbounds for p in eachindex(indices, terms)
+        k = indices[p]
+        k <= ncolumns && (A[row, k] = factor * terms[p])
+    end
+    @inbounds rows.b[row] = target
+    return nothing
+end
+
 function _append_weighted_row!(
-        rows::_FitRows, indices, terms, factor, target, uncertainty,
+        rows, indices, terms, factor, target, uncertainty,
         ncolumns = typemax(Int)
     )
     isfinite(target) || return nothing
@@ -518,23 +588,77 @@ function _qr_covariance(A, n_obs::Int, basis, ::Type{T}) where {T}
     return Matrix{T}(Symmetric(K * transpose(K)))
 end
 
-function _fit_rbf_with_cov(
-        rows::_FitRows{T}, regularization, ncoefficients, exact::_FitRows{T},
+function _spmv_csc!(y, x, u, A, t)
+    T = eltype(y)
+    fill!(y, zero(T))
+    rv, nzv = rowvals(A), nonzeros(A)
+    @inbounds for j in 1:size(A, 2)
+        xj = x[j]
+        iszero(xj) && continue
+        for ptr in nzrange(A, j)
+            y[rv[ptr]] += nzv[ptr] * xj
+        end
+    end
+    return y
+end
+
+function _spmv_csc_t!(x, y, u, A, t)
+    T = eltype(x)
+    rv, nzv = rowvals(A), nonzeros(A)
+    @inbounds for j in 1:size(A, 2)
+        s = zero(T)
+        @simd for ptr in nzrange(A, j)
+            s += nzv[ptr] * y[rv[ptr]]
+        end
+        x[j] = s
+    end
+    return x
+end
+
+function _subtract_obs!(res::Vector{T}, A::Matrix{T}, u::Vector{T}, nrows::Int) where {T}
+    mul!(res, @view(A[1:nrows, :]), u, one(T), -one(T))
+    return res
+end
+
+function _subtract_obs!(
+        res::Vector{T}, A::SparseMatrixCSC{T, Int}, u::Vector{T}, nrows::Int
+    ) where {T}
+    rv, nzv = rowvals(A), nonzeros(A)
+    @inbounds for j in 1:size(A, 2)
+        uj = u[j]
+        for ptr in nzrange(A, j)
+            r = rv[ptr]
+            r > nrows && break
+            res[r] -= nzv[ptr] * uj
+        end
+    end
+    return res
+end
+
+function _obs_residual_norm(A, b::Vector{T}, u::Vector{T}, nrows::Int) where {T}
+    nrows == 0 && return zero(T)
+    res = copyto!(Vector{T}(undef, nrows), 1, b, 1, nrows)
+    _subtract_obs!(res, A, u, nrows)
+    return norm(res)
+end
+
+function _solve_fit_system(
+        A, b::Vector{T}, nrows::Int, ncoefficients::Int, exact::_FitRows{T},
         algorithm, store_covariance::Bool
     ) where {T}
-    nrows = length(rows.b)
-    regularization_weight = sqrt(regularization)
-    I = append!(copy(rows.I), (nrows + 1):(nrows + ncoefficients))
-    J = append!(copy(rows.J), 1:ncoefficients)
-    V = append!(copy(rows.V), Iterators.repeated(regularization_weight, ncoefficients))
-    A = sparse(I, J, V, nrows + ncoefficients, ncoefficients)
-    A = _qr_design_matrix(A, algorithm)
-    b = vcat(rows.b, zeros(T, ncoefficients))
-
     if isempty(exact.b)
-        u = LinearSolve.solve(LinearProblem(A, b), algorithm).u
+        prob = if A isa SparseMatrixCSC && algorithm isa LinearSolve.KrylovJL
+            op = LinearSolve.FunctionOperator(
+                _spmv_csc!, zeros(T, ncoefficients), zeros(T, size(A, 1));
+                op_adjoint = _spmv_csc_t!, p = A, isinplace = true, isconstant = true
+            )
+            LinearProblem(op, b)
+        else
+            LinearProblem(A, b)
+        end
+        u = LinearSolve.solve(prob, algorithm).u
         cov = store_covariance ? _qr_covariance(A, nrows, nothing, T) : nothing
-        return u, cov
+        return u, cov, _obs_residual_norm(A, b, u, nrows)
     end
 
     C = zeros(T, length(exact.b), ncoefficients)
@@ -551,7 +675,7 @@ function _fit_rbf_with_cov(
     nullspace_basis = nullspace(C)
     if size(nullspace_basis, 2) == 0
         cov = store_covariance ? zeros(T, ncoefficients, ncoefficients) : nothing
-        return particular, cov
+        return particular, cov, _obs_residual_norm(A, b, particular, nrows)
     end
     reduced = A * nullspace_basis
     correction = LinearSolve.solve(
@@ -559,7 +683,39 @@ function _fit_rbf_with_cov(
     ).u
     u = particular + nullspace_basis * correction
     cov = store_covariance ? _qr_covariance(A, nrows, nullspace_basis, T) : nothing
-    return u, cov
+    return u, cov, _obs_residual_norm(A, b, u, nrows)
+end
+
+function _fit_rbf_with_cov(
+        rows::_FitRows{T}, regularization, ncoefficients, exact::_FitRows{T},
+        algorithm, store_covariance::Bool
+    ) where {T}
+    nrows = length(rows.b)
+    regularization_weight = sqrt(regularization)
+    append!(rows.I, (nrows + 1):(nrows + ncoefficients))
+    append!(rows.J, 1:ncoefficients)
+    append!(rows.V, Iterators.repeated(regularization_weight, ncoefficients))
+    A = sparse(rows.I, rows.J, rows.V, nrows + ncoefficients, ncoefficients)
+    A = _qr_design_matrix(A, algorithm)
+    append!(rows.b, Iterators.repeated(zero(T), ncoefficients))
+    return _solve_fit_system(
+        A, rows.b, nrows, ncoefficients, exact, algorithm, store_covariance
+    )
+end
+
+function _fit_rbf_with_cov(
+        rows::_DenseFitRows{T}, regularization, ncoefficients, exact::_FitRows{T},
+        algorithm, store_covariance::Bool
+    ) where {T}
+    nrows = rows.nrows
+    regularization_weight = sqrt(regularization)
+    A = rows.A
+    @inbounds for j in 1:ncoefficients
+        A[nrows + j, j] = regularization_weight
+    end
+    return _solve_fit_system(
+        A, rows.b, nrows, ncoefficients, exact, algorithm, store_covariance
+    )
 end
 
 function _validate_rz_positions(positions, domain, name)
@@ -593,6 +749,72 @@ function _default_rbf_centers(domain, nsamples, ::Type{T}) where {T}
     Rs = range(Rmin, Rmax; length = nside)
     Zs = range(Zmin, Zmax; length = nside)
     return reduce(vcat, [reshape(T[R, Z], 1, 2) for R in Rs for Z in Zs])
+end
+
+function _populate_fit_rows!(
+        psi_rows::P, toroidal_rows::R, exact_boundary_rows::_FitRows{T}, basis,
+        ncenters::Int, n_psi::Int, sample_positions::Matrix{T}, observed::Matrix{T},
+        uncertainty_values::Matrix{T}, boundary_positions, boundary_flux, bdy_sigma,
+        current_positions, current_density, cur_sigma
+    ) where {T, P, R}
+    terms = _TermBuffer{T}(n_psi)
+    @inbounds for i in axes(sample_positions, 1)
+        Rp, Zp = sample_positions[i, 1], sample_positions[i, 2]
+        _collect_basis_terms!(terms, basis, Rp, Zp)
+        for component in 1:3
+            target = observed[i, component]
+            isfinite(target) || continue
+            sigma = uncertainty_values[i, component]
+            if component == 1
+                _append_weighted_row!(
+                    psi_rows, terms.indices, terms.dZ, -inv(Rp), target, sigma
+                )
+            elseif component == 2
+                _append_weighted_row!(
+                    toroidal_rows, terms.indices, terms.values, one(T), target, sigma,
+                    ncenters
+                )
+            else
+                _append_weighted_row!(
+                    psi_rows, terms.indices, terms.dR, inv(Rp), target, sigma
+                )
+            end
+        end
+    end
+
+    if boundary_positions !== nothing
+        for i in eachindex(boundary_flux)
+            _collect_basis_terms!(
+                terms, basis, T(boundary_positions[i, 1]), T(boundary_positions[i, 2])
+            )
+            if bdy_sigma === nothing
+                isfinite(boundary_flux[i]) ||
+                    throw(ArgumentError("boundary_flux must be finite"))
+                _push_row!(
+                    exact_boundary_rows, terms.indices, terms.values, one(T),
+                    T(boundary_flux[i]), typemax(Int)
+                )
+            else
+                _append_weighted_row!(
+                    psi_rows, terms.indices, terms.values, one(T),
+                    T(boundary_flux[i]), bdy_sigma[i]
+                )
+            end
+        end
+    end
+
+    if current_positions !== nothing
+        for i in eachindex(current_density)
+            Rc, Zc = T(current_positions[i, 1]), T(current_positions[i, 2])
+            _collect_basis_terms!(terms, basis, Rc, Zc; flux = false)
+            target = -T(μ₀) * Rc * T(current_density[i])
+            _append_weighted_row!(
+                psi_rows, terms.indices, terms.delta, one(T), target,
+                T(μ₀) * Rc * cur_sigma[i]
+            )
+        end
+    end
+    return nothing
 end
 
 """
@@ -700,6 +922,7 @@ function reconstruct_axisymmetric_field(
     _validate_rz_positions(centers, domain_typed, "basis_centers")
     size(centers, 1) > 0 || throw(ArgumentError("at least one basis center is required"))
     center_bins = _build_center_bins(centers, domain_typed, T(length_scale))
+    grid_bins = _to_grid_bins_2d(center_bins)
     vacuum_degree_int = vacuum_degree === nothing ? -1 : Int(vacuum_degree)
     vacuum_degree_int >= 0 || vacuum_degree === nothing ||
         throw(ArgumentError("vacuum_degree must be nonnegative"))
@@ -730,39 +953,11 @@ function reconstruct_axisymmetric_field(
     n_filaments = size(filaments, 1)
     basis = (;
         centers, length_scale = T(length_scale), kernel, domain = domain_typed,
-        center_bins, vacuum_degree = vacuum_degree_int, vacuum_scale,
+        grid_bins, vacuum_degree = vacuum_degree_int, vacuum_scale,
         filament_positions = filaments, element_positions = elements, element_width,
     )
-    terms = _TermBuffer{T}()
-    psi_rows = _FitRows{T}()
-    exact_boundary_rows = _FitRows{T}()
-    toroidal_rows = _FitRows{T}()
 
-    for i in axes(sample_positions, 1)
-        R, Z = sample_positions[i, 1], sample_positions[i, 2]
-        _collect_basis_terms!(terms, basis, R, Z)
-        for component in 1:3
-            target = observed[i, component]
-            isfinite(target) || continue
-            sigma = uncertainty_values[i, component]
-            if component == 1
-                _append_weighted_row!(
-                    psi_rows, terms.indices, terms.dZ, -inv(R), target, sigma
-                )
-            elseif component == 2
-                _append_weighted_row!(
-                    toroidal_rows, terms.indices, terms.values, one(T), target, sigma,
-                    ncenters
-                )
-            else
-                _append_weighted_row!(
-                    psi_rows, terms.indices, terms.dR, inv(R), target, sigma
-                )
-            end
-        end
-    end
-
-    if boundary_positions !== nothing || boundary_flux !== nothing
+    bdy_sigma = if boundary_positions !== nothing || boundary_flux !== nothing
         boundary_positions !== nothing && boundary_flux !== nothing ||
             throw(
             ArgumentError(
@@ -775,27 +970,12 @@ function reconstruct_axisymmetric_field(
         sigma = boundary_uncertainties === nothing ? nothing : T.(boundary_uncertainties)
         sigma === nothing || length(sigma) == length(boundary_flux) ||
             throw(ArgumentError("boundary_uncertainties length differs"))
-        for i in eachindex(boundary_flux)
-            _collect_basis_terms!(
-                terms, basis, T(boundary_positions[i, 1]), T(boundary_positions[i, 2])
-            )
-            if sigma === nothing
-                isfinite(boundary_flux[i]) ||
-                    throw(ArgumentError("boundary_flux must be finite"))
-                _push_row!(
-                    exact_boundary_rows, terms.indices, terms.values, one(T),
-                    T(boundary_flux[i]), typemax(Int)
-                )
-            else
-                _append_weighted_row!(
-                    psi_rows, terms.indices, terms.values, one(T),
-                    T(boundary_flux[i]), sigma[i]
-                )
-            end
-        end
+        sigma
+    else
+        nothing
     end
 
-    if current_positions !== nothing || current_density !== nothing
+    cur_sigma = if current_positions !== nothing || current_density !== nothing
         current_positions !== nothing && current_density !== nothing ||
             throw(
             ArgumentError(
@@ -809,21 +989,60 @@ function reconstruct_axisymmetric_field(
             ones(T, length(current_density)) : T.(current_uncertainties)
         length(sigma) == length(current_density) ||
             throw(ArgumentError("current_uncertainties length differs"))
-        for i in eachindex(current_density)
-            R, Z = T(current_positions[i, 1]), T(current_positions[i, 2])
-            _collect_basis_terms!(terms, basis, R, Z; flux = false)
-            target = -T(μ₀) * R * T(current_density[i])
-            _append_weighted_row!(
-                psi_rows, terms.indices, terms.delta, one(T), target,
-                T(μ₀) * R * sigma[i]
-            )
-        end
+        sigma
+    else
+        nothing
     end
 
-    isempty(psi_rows.b) && isempty(exact_boundary_rows.b) &&
+    n_b_pol = 0
+    n_tor = 0
+    @inbounds for i in axes(observed, 1)
+        isfinite(observed[i, 1]) && (n_b_pol += 1)
+        isfinite(observed[i, 2]) && (n_tor += 1)
+        isfinite(observed[i, 3]) && (n_b_pol += 1)
+    end
+    n_bdy_pol = bdy_sigma === nothing ? 0 : count(v -> isfinite(T(v)), boundary_flux)
+    n_cur_pol = cur_sigma === nothing ? 0 : count(
+            i -> isfinite(-T(μ₀) * T(current_positions[i, 1]) * T(current_density[i])),
+            eachindex(current_density)
+        )
+    n_pol = n_b_pol + n_bdy_pol + n_cur_pol
+
+    n_elements = size(elements, 1)
+    n_psi = ncenters + n_vacuum + n_filaments + n_elements
+    min_psi_nnz = (n_b_pol + n_bdy_pol) * (n_vacuum + n_filaments + n_elements) +
+        n_cur_pol * n_elements + n_psi
+    dense_psi = algorithm isa QRFactorization && n_pol > 0 && (
+        kernel === :gaussian || 3 * min_psi_nnz > (n_pol + n_psi) * n_psi
+    )
+    dense_tor = algorithm isa QRFactorization && n_tor > 0 && kernel === :gaussian
+
+    avg_rbf = if kernel === :gaussian
+        ncenters
+    else
+        domain_area = (Rmax - Rmin) * (Zmax - Zmin)
+        support_fraction = T(π) * T(length_scale)^2 / domain_area
+        min(ncenters, ceil(Int, support_fraction * ncenters) + 4)
+    end
+    est_psi_nnz = min_psi_nnz + n_pol * avg_rbf
+    est_tor_nnz = n_tor * avg_rbf + ncenters
+
+    psi_rows = dense_psi ? _DenseFitRows{T}(n_pol, n_psi) :
+        _FitRows{T}(n_pol > 0 ? n_pol + n_psi : 0, n_pol > 0 ? est_psi_nnz : 0)
+    toroidal_rows = dense_tor ? _DenseFitRows{T}(n_tor, ncenters) :
+        _FitRows{T}(n_tor > 0 ? n_tor + ncenters : 0, n_tor > 0 ? est_tor_nnz : 0)
+    exact_boundary_rows = _FitRows{T}()
+
+    _populate_fit_rows!(
+        psi_rows, toroidal_rows, exact_boundary_rows, basis, ncenters, n_psi,
+        sample_positions, observed, uncertainty_values,
+        boundary_positions, boundary_flux, bdy_sigma,
+        current_positions, current_density, cur_sigma
+    )
+
+    _row_count(psi_rows) == 0 && isempty(exact_boundary_rows.b) &&
         throw(ArgumentError("poloidal or boundary constraints are required"))
-    n_psi = ncenters + n_vacuum + n_filaments + size(elements, 1)
-    all_psi_coefficients, psi_cov = _fit_rbf_with_cov(
+    all_psi_coefficients, psi_cov, pol_norm = _fit_rbf_with_cov(
         psi_rows, T(regularization), n_psi, exact_boundary_rows,
         algorithm, store_covariance
     )
@@ -833,30 +1052,17 @@ function reconstruct_axisymmetric_field(
     filament_currents =
         all_psi_coefficients[(ncenters + n_vacuum + 1):n_external] ./ T(μ₀)
     element_currents = all_psi_coefficients[(n_external + 1):end] ./ T(μ₀)
-    if isempty(toroidal_rows.b)
+    if _row_count(toroidal_rows) == 0
         toroidal_coefficients = zeros(T, ncenters)
         tor_cov = store_covariance ? zeros(T, ncenters, ncenters) : nothing
+        tor_norm = zero(T)
     else
-        toroidal_coefficients, tor_cov = _fit_rbf_with_cov(
+        toroidal_coefficients, tor_cov, tor_norm = _fit_rbf_with_cov(
             toroidal_rows, T(regularization), ncenters, _FitRows{T}(),
             algorithm, store_covariance
         )
     end
 
-    n_pol = length(psi_rows.b)
-    n_tor = length(toroidal_rows.b)
-    pol_norm = if n_pol == 0
-        zero(T)
-    else
-        H_psi = sparse(psi_rows.I, psi_rows.J, psi_rows.V, n_pol, n_psi)
-        norm(H_psi * all_psi_coefficients - psi_rows.b)
-    end
-    tor_norm = if n_tor == 0
-        zero(T)
-    else
-        H_tor = sparse(toroidal_rows.I, toroidal_rows.J, toroidal_rows.V, n_tor, ncenters)
-        norm(H_tor * toroidal_coefficients - toroidal_rows.b)
-    end
     total_obs = n_pol + n_tor
     weighted_rms = total_obs == 0 ? nothing :
         hypot(pol_norm, tor_norm) / sqrt(total_obs)
@@ -872,7 +1078,7 @@ function reconstruct_axisymmetric_field(
 
     return AxisymmetricFieldReconstruction(
         centers, psi_coefficients, toroidal_coefficients,
-        T(length_scale), domain_typed, kernel, center_bins, _to_grid_bins_2d(center_bins),
+        T(length_scale), domain_typed, kernel, center_bins, grid_bins,
         vacuum_coefficients, vacuum_degree_int, vacuum_scale,
         filaments, filament_currents, elements, element_currents, element_width,
         diagnostics

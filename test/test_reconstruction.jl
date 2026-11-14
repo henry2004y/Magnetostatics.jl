@@ -439,6 +439,21 @@ end
     @test sum(J_elements) * dA ≈ sum(J_ref) * dA rtol = 0.03
     @test sum(with_elements.element_currents) ≈ 15.0e3 rtol = 0.05
     @test norm(J_elements - J_ref) / norm(J_ref) < 0.25
+
+    with_elements_qr = reconstruct_axisymmetric_field(
+        position_matrix, field_matrix;
+        domain, length_scale = 0.12, basis_centers = grid(0.06),
+        regularization = 1.0e2,
+        uncertainties = fill(5.0e-4, size(field_matrix)),
+        filament_positions = rectangle_points(domain, 0.1, 48),
+        current_element_positions = grid(0.05),
+        current_positions = collocation,
+        current_density = zeros(size(collocation, 1)),
+        current_uncertainties = fill(1.0e5, size(collocation, 1)),
+        algorithm = QRFactorization()
+    )
+    @test with_elements_qr(SVector(0.9, 0.0, 0.02)) ≈
+        with_elements(SVector(0.9, 0.0, 0.02)) rtol = 1.0e-3
 end
 
 @testset "Current element kernel" begin
@@ -513,6 +528,12 @@ end
             pts, Bs; domain = dom, length_scale = 0.35, basis_centers = centers_2d,
             kernel = :wendland_c2, regularization = 1.0e-8
         )
+        fit_wend_qr = reconstruct_axisymmetric_field(
+            pts, Bs; domain = dom, length_scale = 1.5, basis_centers = centers_2d,
+            kernel = :wendland_c2, regularization = 1.0e-8,
+            algorithm = QRFactorization()
+        )
+        @test isfinite(fit_wend_qr.diagnostics.weighted_rms)
         rq = SVector(0.85, 0.15, 0.1)
         eval_B(f, r) = (f(r); @allocated f(r))
         eval_J(f, r) = (current_density(f, r); @allocated current_density(f, r))
