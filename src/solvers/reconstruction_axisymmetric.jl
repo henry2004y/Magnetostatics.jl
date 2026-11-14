@@ -349,18 +349,6 @@ function _collect_basis_terms!(buffer::_TermBuffer, basis, R, Z; flux::Bool = tr
     return buffer
 end
 
-@inline function _psi_coefficient(field::AxisymmetricFieldReconstruction, k)
-    n = length(field.psi_coefficients)
-    k <= n && return field.psi_coefficients[k]
-    k -= n
-    n = length(field.vacuum_coefficients)
-    k <= n && return field.vacuum_coefficients[k]
-    k -= n
-    n = length(field.filament_currents)
-    k <= n && return μ₀ * field.filament_currents[k]
-    return μ₀ * field.element_currents[k - n]
-end
-
 # Sums of `(ψ, ∂ψ/∂R, ∂ψ/∂Z, Δ*ψ)` with the poloidal coefficients and of
 # `(F, ∂F/∂R, ∂F/∂Z)` with the toroidal RBF coefficients, where `B_ϕ = F`.
 function _basis_sums(
@@ -572,13 +560,6 @@ function _fit_rbf_with_cov(
     u = particular + nullspace_basis * correction
     cov = store_covariance ? _qr_covariance(A, nrows, nullspace_basis, T) : nothing
     return u, cov
-end
-
-function _fit_rbf(
-        rows::_FitRows{T}, regularization, ncoefficients, exact::_FitRows{T}, algorithm
-    ) where {T}
-    u, _ = _fit_rbf_with_cov(rows, regularization, ncoefficients, exact, algorithm, false)
-    return u
 end
 
 function _validate_rz_positions(positions, domain, name)

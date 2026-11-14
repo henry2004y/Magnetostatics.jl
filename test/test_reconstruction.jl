@@ -46,13 +46,13 @@ using LinearSolve: QRFactorization
     current_positions = [0.6 -0.3; 0.9 0.2; 1.1 -0.1]
     current_values = [
         begin
-                delta_star = last(
-                    Magnetostatics._rbf_terms(
-                        R, Z, centers, length_scale, :gaussian
-                    )
+            delta_star = last(
+                Magnetostatics._rbf_terms(
+                    R, Z, centers, length_scale, :gaussian
                 )
-                -dot(delta_star, true_field.psi_coefficients) / (Magnetostatics.μ₀ * R)
-            end for (R, Z) in eachrow(current_positions)
+            )
+            -dot(delta_star, true_field.psi_coefficients) / (Magnetostatics.μ₀ * R)
+        end for (R, Z) in eachrow(current_positions)
     ]
 
     reconstructed = reconstruct_axisymmetric_field(
@@ -66,9 +66,9 @@ using LinearSolve: QRFactorization
 
     @test all(
         isapprox(
-                reconstructed(SVector(R, 0.0, Z)), true_field(SVector(R, 0.0, Z));
-                rtol = 1.0e-7, atol = 1.0e-9
-            )
+            reconstructed(SVector(R, 0.0, Z)), true_field(SVector(R, 0.0, Z));
+            rtol = 1.0e-7, atol = 1.0e-9
+        )
             for (R, Z) in positions
     )
 
@@ -113,13 +113,13 @@ using LinearSolve: QRFactorization
     )
     @test all(
         isapprox(
-                poloidal_flux(
-                    boundary_only, SVector(
-                        boundary_positions[i, 1], 0.0,
-                        boundary_positions[i, 2]
-                    )
-                ), boundary_values[i]; atol = 1.0e-12
-            ) for i in eachindex(boundary_values)
+            poloidal_flux(
+                boundary_only, SVector(
+                    boundary_positions[i, 1], 0.0,
+                    boundary_positions[i, 2]
+                )
+            ), boundary_values[i]; atol = 1.0e-12
+        ) for i in eachindex(boundary_values)
     )
 
     soft_boundary = reconstruct_axisymmetric_field(
@@ -542,6 +542,27 @@ end
         )
         @test field_covariance(fit_cov2, rq) ≈ 4 * cov3 rtol = 1.0e-10
         @test_throws DomainError field_covariance(fit_cov, SVector(0.1, 0.0, 0.0))
+
+        # 15-argument constructor, full-rank exact constraint nullspace, invalid kernel
+        legacy_15 = AxisymmetricFieldReconstruction(
+            fit_cov.centers, fit_cov.psi_coefficients, fit_cov.toroidal_coefficients,
+            fit_cov.length_scale, fit_cov.domain, fit_cov.kernel, fit_cov.center_bins,
+            fit_cov.vacuum_coefficients, fit_cov.vacuum_degree, fit_cov.vacuum_scale,
+            fit_cov.filament_positions, fit_cov.filament_currents,
+            fit_cov.element_positions, fit_cov.element_currents, fit_cov.element_width
+        )
+        @test legacy_15(rq) ≈ fit_cov(rq)
+        @test_throws ArgumentError Magnetostatics._rbf_kernel_terms(
+            0.1, 0.1, 1.0, 0.3, 1.0, :invalid
+        )
+        fit_fullrank = reconstruct_axisymmetric_field(
+            [0.85 0.0], zeros(1, 3);
+            domain = dom, length_scale = 0.3, basis_centers = [0.85 0.0],
+            boundary_positions = [0.85 0.0], boundary_flux = [0.25],
+            store_covariance = true
+        )
+        @test poloidal_flux(fit_fullrank, SA[0.85, 0.0]) ≈ 0.25
+        @test iszero(fit_fullrank.diagnostics.coefficient_covariance.psi)
     end
 end
 

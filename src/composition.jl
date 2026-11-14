@@ -6,11 +6,17 @@ contributions at each query position. Prefer constructing via `+` and `-`.
 """
 struct CompositeField{Fs <: Tuple} <: AbstractMagneticField
     fields::Fs
+
+    function CompositeField{Fs}(fields::Fs) where {Fs <: Tuple}
+        !isempty(fields) ||
+            throw(ArgumentError("CompositeField requires at least one field"))
+        return new{Fs}(fields)
+    end
 end
 
-CompositeField(fields::AbstractMagneticField...) = CompositeField{typeof(fields)}(fields)
+CompositeField(fields::Fs) where {Fs <: Tuple} = CompositeField{Fs}(fields)
+CompositeField(fields::AbstractMagneticField...) = CompositeField(fields)
 
-@inline _eval_composite_field(fields::Tuple{}, r) = zero(SVector{3, Float64})
 @inline _eval_composite_field(fields::Tuple{F}, r) where {F} = fields[1](r)
 @inline function _eval_composite_field(fields::Tuple, r)
     return fields[1](r) + _eval_composite_field(Base.tail(fields), r)
@@ -20,7 +26,6 @@ end
     return _eval_composite_field(field.fields, r)
 end
 
-@inline _eval_composite_j(fields::Tuple{}, r) = zero(SVector{3, Float64})
 @inline _eval_composite_j(fields::Tuple{F}, r) where {F} = current_density(fields[1], r)
 @inline function _eval_composite_j(fields::Tuple, r)
     return current_density(fields[1], r) + _eval_composite_j(Base.tail(fields), r)
@@ -30,7 +35,6 @@ end
     return _eval_composite_j(field.fields, r)
 end
 
-@inline _eval_composite_a(vp, fields::Tuple{}, r) = zero(SVector{3, Float64})
 @inline _eval_composite_a(vp, fields::Tuple{F}, r) where {F} = solve(vp, fields[1], r)
 @inline function _eval_composite_a(vp, fields::Tuple, r)
     return solve(vp, fields[1], r) + _eval_composite_a(vp, Base.tail(fields), r)

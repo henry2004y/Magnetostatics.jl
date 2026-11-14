@@ -51,7 +51,6 @@ function classify_magnetic_null(J::AbstractMatrix; tol::Real = 1.0e-6)
         return :degenerate
     end
     detM = det(M)
-    abs(detM) <= (tol * sv[1])^3 && return :degenerate
     vals = eigvals(M_dense)
     is_spiral = maximum(abs ∘ imag, vals) > tol * normM
     if detM > 0
@@ -210,12 +209,7 @@ function _poloidal_jacobian(
 end
 
 function _classify_poloidal(J2::SMatrix{2, 2, Float64, 4})
-    scale = norm(J2)^2
-    scale == 0.0 && return :degenerate
-    d = det(J2)
-    d < -1.0e-12 * scale && return :X_point
-    d > 1.0e-12 * scale && return :O_point
-    return :degenerate
+    return det(J2) < 0.0 ? :X_point : :O_point
 end
 
 """

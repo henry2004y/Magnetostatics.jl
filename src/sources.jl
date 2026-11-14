@@ -128,9 +128,18 @@ Container grouping multiple `AbstractCurrentSource` objects (as a heterogeneous 
 """
 struct MultiSource{S} <: AbstractCurrentSource
     sources::S
+
+    function MultiSource{S}(sources::S) where {S}
+        !isempty(sources) ||
+            throw(ArgumentError("MultiSource requires at least one source"))
+        return new{S}(sources)
+    end
 end
 
-MultiSource(sources::AbstractCurrentSource...) = MultiSource{typeof(sources)}(sources)
+function MultiSource(sources::Tuple{Vararg{AbstractCurrentSource}})
+    return MultiSource{typeof(sources)}(sources)
+end
+MultiSource(sources::AbstractCurrentSource...) = MultiSource(sources)
 function MultiSource(sources::AbstractVector{<:AbstractCurrentSource})
     return MultiSource{typeof(sources)}(sources)
 end

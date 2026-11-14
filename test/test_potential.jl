@@ -167,6 +167,25 @@ using LinearAlgebra
         @test vector_potential(field, Tuple(r)) ≈ solve(solverA, field, r)
         @test vector_potential(field, Vector(r)) ≈ solve(solverA, field, r)
     end
+
+    @testset "ConductingWall and MultiSource VectorPotential" begin
+        wall = ConductingWall(3, -1.0)
+        solverW = VectorPotential(wall)
+        l1 = CurrentLoop(0.5, 2.0, SVector(0.0, 0.0, 0.2), SVector(0.0, 0.0, 1.0))
+        l2 = CurrentLoop(0.5, -1.5, SVector(0.0, 0.0, 0.6), SVector(0.0, 0.0, 1.0))
+        wire = Wire([SVector(0.0, 0.0, -0.5), SVector(0.0, 0.0, 0.5)], 3.0)
+        pt = SVector(0.3, 0.1, 0.4)
+        @test solverW(wire, pt) ≈
+            solverA(wire, pt) + solverA(Magnetostatics.image_source(wire, wall), pt)
+        @test solverW(l1, pt) ≈
+            solverA(l1, pt) + solverA(Magnetostatics.image_source(l1, wall), pt)
+        @test solverA([l1, l2], pt) ≈ solverA(l1, pt) + solverA(l2, pt)
+        @test solverA(CurrentLoop{Float64}[], pt) == SVector(0.0, 0.0, 0.0)
+        @test solverA(MultiSource([l1, l2]), pt) ≈ solverA([l1, l2], pt)
+        @test solverA(MultiSource(l1, l2), pt) ≈ solverA(l1, pt) + solverA(l2, pt)
+        @test solverA(Dipole(SVector(0.0, 0.0, 1.0)), SVector(0.0, 0.0, 0.0)) ==
+            SVector(0.0, 0.0, 0.0)
+    end
 end
 
 end # module test_potential

@@ -153,4 +153,8 @@
             rtol = 5.0e-2
         )
     end
+
+    p_bc = PeriodicBoundary(SVector(0.0, 0.0, 0.0))
+    @test FFTSolver(p_bc, (16, 16, 16), 0.1).cache.spacing == (0.1, 0.1, 0.1)
+    @test iszero(vector_potential(FFTSolver(), zeros(3, 8, 8, 8), 0.1))
 end

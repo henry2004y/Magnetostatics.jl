@@ -46,9 +46,9 @@ end
         dz = L / n_loops
         loops = [
             CurrentLoop(
-                    R, NI / n_loops, SVector(0.0, 0.0, -L / 2 + (i - 0.5) * dz),
-                    SVector(0.0, 0.0, 1.0)
-                ) for i in 1:n_loops
+                R, NI / n_loops, SVector(0.0, 0.0, -L / 2 + (i - 0.5) * dz),
+                SVector(0.0, 0.0, 1.0)
+            ) for i in 1:n_loops
         ]
         ms = MultiSource(loops)
         for pt in (
@@ -71,6 +71,13 @@ end
             hypot(pt_off[1], pt_off[2]) *
             dot(vector_potential(sol, pt_off), normalize(SA[-pt_off[2], pt_off[1], 0.0]))
         @test _zero_alloc_call(sol, pt_off) == 0
+        @test all(isfinite, sol(SA[R, 0.0, L / 2]))
+        @test isfinite(poloidal_flux(sol, SA[R, 0.0, L / 2]))
+        @test vector_potential(sol, SA[0.0, 0.0, 0.1]) == SVector(0.0, 0.0, 0.0)
+        @test_throws ArgumentError Solenoid(-0.1, 1.0, 1.0)
+        @test_throws ArgumentError Solenoid(0.5, 0.0, 1.0)
+        @test_throws ArgumentError Solenoid(0.5, 1.0, 1.0; thickness = -0.1)
+        @test_throws ArgumentError Solenoid(0.5, 1.0, 1.0; thickness = 1.0)
 
         # Long solenoid limit
         sol_long = Solenoid(0.1, 40.0, 100.0)
@@ -96,6 +103,13 @@ end
             sol_thick(pt_in_w) rtol = 1.0e-4
         @test _fd_curl(p -> vector_potential(sol_thick, p), pt_core) ≈
             sol_thick(pt_core) rtol = 1.0e-4
+        @test poloidal_flux(sol_thick, pt_in_w) ≈
+            hypot(pt_in_w[1], pt_in_w[2]) * dot(
+            vector_potential(sol_thick, pt_in_w),
+            normalize(SA[-pt_in_w[2], pt_in_w[1], 0.0])
+        )
+        @test poloidal_flux(sol_thick, SA[0.0, 0.0, 0.1]) == 0.0
+        @test current_density(sol_thick, SA[0.9, 0.0, 0.1]) == SVector(0.0, 0.0, 0.0)
         @test _zero_alloc_call(sol_thick, pt_in_w) == 0
     end
 
@@ -117,6 +131,7 @@ end
         @test dBz ≈ -2 * dBx rtol = 1.0e-6
         p = SVector(0.3, -0.2, 0.1)
         @test _fd_curl(q -> vector_potential(ah, q), p) ≈ ah(p) rtol = 1.0e-4
+        @test current_density(ah, p) == SVector(0.0, 0.0, 0.0)
     end
 end
 
@@ -144,6 +159,7 @@ end
         @test abs(_fd_div(cyl, pt)) / norm(cyl(pt)) < 1.0e-8
         @test norm(_fd_curl(cyl, pt)) / norm(cyl(pt)) < 1.0e-8
         @test _fd_curl(q -> vector_potential(cyl, q), pt) ≈ cyl(pt) rtol = 1.0e-4
+        @test poloidal_flux(cyl, pt) ≈ poloidal_flux(cyl._solenoid, pt)
         @test current_density(cyl, pt) == SVector(0.0, 0.0, 0.0)
     end
 
@@ -187,6 +203,13 @@ end
         box_tf = rotate_field(CuboidMagnet(dims, M), R)
         pt_test = c + SVector(0.45, 0.12, -0.6)
         @test box_rot(pt_test) ≈ box_tf(pt_test - c) rtol = 1.0e-12
+        @test current_density(box, pt_in) == SVector(0.0, 0.0, 0.0)
+        @test all(isfinite, box(c + 0.5 * dims))
+        @test_throws ArgumentError CuboidMagnet(SA[-0.5, 1.0, 1.0], M)
+        @test_throws ArgumentError CuboidMagnet(dims, M; rotation = 2.0 * R)
+        @test_throws ArgumentError CuboidMagnet(
+            dims, M; rotation = Diagonal(SA[-1.0, 1.0, 1.0])
+        )
     end
 end
 

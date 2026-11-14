@@ -391,9 +391,6 @@ function solve(
     return A_direct + A_image
 end
 
-@inline function _sum_vp_tuple(solver::VectorPotential, ::Tuple{}, r)
-    return zero(SVector{3, Float64})
-end
 @inline function _sum_vp_tuple(solver::VectorPotential, sources::Tuple{S}, r) where {S}
     return solve(solver, sources[1], r)
 end

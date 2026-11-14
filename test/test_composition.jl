@@ -47,9 +47,38 @@ end
         @test _zero_alloc_j(f, r) == 0
         @test NullField() + d1 === d1
         @test d1 + NullField() === d1
+        @test NullField() + NullField() === NullField()
         @test 3.0 * NullField() === NullField()
+        @test NullField() * 3.0 === NullField()
+        @test -NullField() === NullField()
+        @test solve(VectorPotential(), NullField(), r) == SVector(0.0, 0.0, 0.0)
+        @test NullField()(1.0, 2.0, 3.0) == SVector(0.0, 0.0, 0.0)
+        @test current_density(NullField(), (1.0, 2.0, 3.0)) == SVector(0.0, 0.0, 0.0)
+        @test Dipole([0.0, 0.0, 1.0], [0.5, 0.0, 0.0])(r) ≈ d1(r)
         @test (2.0 * (3.0 * u1))(r) ≈ 6.0 * u1(r)
+        @test ((u1 * 2.0) * 3.0)(r) ≈ 6.0 * u1(r)
+        @test (-u1)(r) ≈ -u1(r)
         @test (u1 / 2.0)(r) ≈ 0.5 * u1(r)
+        @test solve(VectorPotential(), 2.0 * u1, r) ≈ 2.0 * vector_potential(u1, r)
+        @test solve(VectorPotential(), f, r) ≈ vector_potential(f, r)
+
+        f_var = CompositeField(d1, u1, h1)
+        @test f_var(r) ≈ d1(r) + u1(r) + h1(r)
+        f2 = d1 + u1
+        @test NullField() + f2 === f2
+        @test f2 + NullField() === f2
+        @test (f2 + h1)(r) ≈ f_var(r)
+        @test (d1 + (u1 + h1))(r) ≈ f_var(r)
+        @test ((d1 + u1) + (h1 + d1))(r) ≈ 2.0 * d1(r) + u1(r) + h1(r)
+        @test_throws ArgumentError CompositeField(())
+
+        s_eq = SolovevEquilibrium(2.0, 1.5, 1.5, 1.2)
+        sol_ax = Solenoid(0.8, 1.2, 100.0)
+        r_ax = SVector(1.4, 0.0, 0.2)
+        f_psi = 2.0 * s_eq + 0.5 * sol_ax
+        @test poloidal_flux(2.0 * s_eq, r_ax) ≈ 2.0 * poloidal_flux(s_eq, r_ax)
+        @test poloidal_flux(f_psi, r_ax) ≈
+            2.0 * poloidal_flux(s_eq, r_ax) + 0.5 * poloidal_flux(sol_ax, r_ax)
     end
 
     let h = HarrisSheet(2.0, 0.5),
@@ -68,10 +97,19 @@ end
         @test f_tr(r_check) ≈ R * h(R' * r_check - offset)
         @test current_density(f_tr, r_check) ≈
             R * current_density(h, R' * r_check - offset)
+        @test solve(VectorPotential(), f_tr, r_check) ≈
+            R * vector_potential(h, R' * r_check - offset)
         @test _fd_curl(p -> vector_potential(f_tr, p), r_check) ≈
             f_tr(r_check) rtol = 1.0e-5
         @test _fd_curl(f_tr, r_check) ≈
             Magnetostatics.μ₀ * current_density(f_tr, r_check) rtol = 1.0e-5
+        @test translate_field(NullField(), offset) === NullField()
+        @test rotate_field(NullField(), R) === NullField()
+        @test_throws ArgumentError TransformedField(h, offset, 2.0 * R)
+        @test_throws ArgumentError TransformedField(
+            h, offset, Diagonal(SA[-1.0, 1.0, 1.0])
+        )
+        @test_throws ArgumentError f_tr(SA[1.0, 2.0])
     end
 end
 
@@ -114,6 +152,20 @@ end
                     1.0e-7 * norm(field(pt))
             end
         end
+
+        gh = GoldHoyleFluxTube(1.3, 0.9)
+        r_gh_small = SVector(1.0e-7, 2.0e-7, 0.1)
+        @test all(isfinite, solve(VectorPotential(), gh, r_gh_small))
+        @test _fd_curl(p -> vector_potential(gh, p), r_gh_small; h = 1.0e-8) ≈
+            gh(r_gh_small) rtol = 1.0e-3
+        @test solve(VectorPotential(), gh, SA[0.0, 0.0, 0.1]) == SA[0.0, 0.0, 0.0]
+
+        ps = ParkerSpiral(5.0e-9, 1.496e11)
+        r_south = SVector(1.0e3, 0.0, -2.0e11)
+        @test all(isfinite, solve(VectorPotential(), ps, r_south))
+        @test ps(SA[0.0, 0.0, 0.0]) == SA[0.0, 0.0, 0.0]
+        @test all(isfinite, ps(SA[0.0, 0.0, 2.0e11]))
+        @test all(isfinite, current_density(ps, SA[0.0, 0.0, 2.0e11]))
     end
 end
 
@@ -139,12 +191,25 @@ end
         @test current_density(gf_lin, pt) ≈ J_exp rtol = 1.0e-12
         @test _zero_alloc_eval(gf_lin, pt) == 0
         @test _zero_alloc_j(gf_lin, pt) == 0
+        @test current_density(gf_lin, SA[-0.99, -0.99, -0.99]) ≈ J_exp rtol = 1.0e-12
+        @test current_density(gf_lin, SA[0.99, 0.99, 0.99]) ≈ J_exp rtol = 1.0e-12
 
         @test_throws DomainError gf_lin(SVector(2.0, 0.0, 0.0))
         gf_zero = GridMagneticField(B_lin, xs, ys, zs; extrapolate = :zero)
         @test gf_zero(SVector(2.0, 0.0, 0.0)) == SVector(0.0, 0.0, 0.0)
+        @test current_density(gf_zero, SVector(2.0, 0.0, 0.0)) == SVector(0.0, 0.0, 0.0)
         gf_clamp = GridMagneticField(B_lin, xs, ys, zs; extrapolate = :clamp)
         @test gf_clamp(SVector(5.0, 0.0, 0.0)) ≈ gf_lin(SVector(1.0, 0.0, 0.0))
+        @test current_density(gf_clamp, SVector(5.0, 0.0, 0.0)) ≈ J_exp rtol = 1.0e-12
+        @test_throws ArgumentError gf_lin(SA[0.0, 0.0])
+        @test_throws ArgumentError GridMagneticField(zeros(2, 5, 5, 5), 1:5, 1:5, 1:5)
+        @test_throws ArgumentError GridMagneticField(zeros(3, 5, 5, 5), 1:4, 1:5, 1:5)
+        @test_throws ArgumentError GridMagneticField(
+            B_lin, xs, ys, zs; interpolation = :quadratic
+        )
+        @test_throws ArgumentError GridMagneticField(
+            B_lin, xs, ys, zs; extrapolate = :periodic
+        )
 
         # Smooth nonlinear field comparing cubic vs linear accuracy
         f_smooth = r -> SVector(sin(r[2]), cos(r[3]), exp(0.3 * r[1]))

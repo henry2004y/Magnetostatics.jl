@@ -30,7 +30,6 @@ end
 @inline _source_eltype(::SurfaceCurrentMesh{T}) where {T} = T
 @inline _source_eltype(::MultiSource) = Float64
 @inline _source_eltype(ms::MultiSource{<:Tuple}) = _tuple_source_eltype(ms.sources)
-@inline _tuple_source_eltype(::Tuple{}) = Float64
 @inline _tuple_source_eltype(s::Tuple{A}) where {A} = _source_eltype(s[1])
 @inline function _tuple_source_eltype(s::Tuple)
     return promote_type(_source_eltype(s[1]), _tuple_source_eltype(Base.tail(s)))
@@ -136,9 +135,6 @@ function _solve_bs(
     return B
 end
 
-@inline function _sum_bs_tuple(core_radius::Float64, ::Tuple{}, r::SVector{3, T}) where {T}
-    return zero(SVector{3, T})
-end
 @inline function _sum_bs_tuple(
         core_radius::Float64, sources::Tuple{S}, r::SVector{3}
     ) where {S}

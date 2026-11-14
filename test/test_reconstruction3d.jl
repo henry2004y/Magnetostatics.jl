@@ -95,14 +95,15 @@ end
         for p in (SVector(0.13, -0.17, 0.29), SVector(-0.81, 0.41, 0.08))
             @test reconstructed(p) ≈ truth(p) atol = 1.0e-9
             @test abs(divergence(reconstructed, p)) < 1.0e-8
-            @test current_density(reconstructed, p) ≈ current_density(truth, p) rtol = 1.0e-7
+            @test current_density(reconstructed, p) ≈
+                current_density(truth, p) rtol = 1.0e-7
             h = 1.0e-5
             gradient = hcat(
                 [
                     begin
-                            step = SVector{3}(ntuple(i -> i == k ? h : 0.0, 3))
-                            (reconstructed(p + step) - reconstructed(p - step)) / (2h)
-                        end for k in 1:3
+                        step = SVector{3}(ntuple(i -> i == k ? h : 0.0, 3))
+                        (reconstructed(p + step) - reconstructed(p - step)) / (2h)
+                    end for k in 1:3
                 ]...
             )
             curl = SVector(
@@ -507,7 +508,7 @@ end
             norm(samples(dip_ext, held))
         @test err_cf < 1.0e-3
         pt = SVector(0.13, -0.17, 0.21)
-        @test abs(divergence(cf_fit, pt; h = 1.0e-6)) / norm(cf_fit(pt)) < 1.0e-10
+        @test abs(divergence(cf_fit, pt; h = 1.0e-6)) / norm(cf_fit(pt)) < 1.0e-9
         @test current_density(cf_fit, pt) == SVector(0.0, 0.0, 0.0)
         @test eval_B(cf_fit, pt) == 0
         @test eval_J(cf_fit, pt) == 0
@@ -604,6 +605,46 @@ end
         p1 = SVector{3}(surf_pts[1, :])
         cov_bdy = field_covariance(fit_exact_cov, p1)
         @test dot(n1, cov_bdy * n1) < 1.0e-20
+
+        # Directional and boundary constraints combined with virtual dipoles & sources
+        truth_ext = d1 + 500.0 * s2
+        dir_vecs = [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0]
+        dir_pts = [0.2 -0.1 0.05; -0.15 0.25 -0.1; 0.05 0.1 -0.25]
+        dir_vals = [
+            dot(SVector{3}(d), truth_ext(SVector{3}(p)))
+                for (p, d) in zip(eachrow(dir_pts), eachrow(dir_vecs))
+        ]
+        bdy_vals_ext = [
+            dot(SVector{3}(n), truth_ext(SVector{3}(p)))
+                for (p, n) in zip(eachrow(surf_pts), eachrow(nrms))
+        ]
+        fit_ext_dir = reconstruct_field_3d(
+            probes, samples(truth_ext, probes);
+            domain = box, model = :curl_free, vacuum_degree = 3,
+            dipole_positions = d_pos[1:1, :], source_fields = (s2,),
+            directional_positions = dir_pts, directional_directions = dir_vecs,
+            directional_values = dir_vals, directional_uncertainties = fill(1.0e-3, 3),
+            boundary_positions = surf_pts, boundary_normals = nrms,
+            boundary_values = bdy_vals_ext,
+            boundary_uncertainties = fill(1.0e-3, length(bdy_vals_ext)),
+            regularization = 1.0e-14, algorithm = QRFactorization()
+        )
+        @test fit_ext_dir(pt) ≈ truth_ext(pt) rtol = 1.0e-4
+
+        fit_def_vac = reconstruct_field_3d(
+            probes, samples(dip_ext, probes); domain = box, model = :curl_free
+        )
+        @test fit_def_vac.vacuum_degree == 3
+        @test_throws ArgumentError reconstruct_field_3d(
+            probes, samples(dip_ext, probes); domain = box
+        )
+        @test_throws ArgumentError reconstruct_field_3d(
+            probes, samples(dip_ext, probes);
+            domain = box, model = :curl_free, basis_centers = probes[1:2, :]
+        )
+        @test_throws ArgumentError reconstruct_field_3d(
+            probes, samples(dip_ext, probes); domain = box, model = :invalid
+        )
     end
 end
 

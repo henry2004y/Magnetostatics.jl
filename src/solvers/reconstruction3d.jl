@@ -51,20 +51,6 @@ function FieldReconstruction3D(
     )
 end
 
-function FieldReconstruction3D(
-        centers::Matrix{T}, coefficients::Vector{T}, length_scale::T,
-        domain::NTuple{6, T}, kernel::Symbol,
-        center_bins::Dict{NTuple{3, Int}, Vector{Int}},
-        grid_bins::_GridBins3D, reference_field::F, diagnostics::D
-    ) where {T, F <: AbstractMagneticField, D}
-    return FieldReconstruction3D{T, F, D, Tuple{}}(
-        centers, coefficients, length_scale, domain, kernel,
-        center_bins, grid_bins, reference_field, diagnostics,
-        :div_free, T[], -1, zero(SVector{3, T}), one(T),
-        zeros(T, 0, 3), SVector{3, T}[], (), T[]
-    )
-end
-
 function _validate_xyz(positions, domain, name)
     size(positions, 2) == 3 ||
         throw(ArgumentError("$name must have columns (x, y, z)"))
@@ -569,7 +555,6 @@ _reference_value_3d(::NullField, point::SVector{3}; current = false) = zero(poin
     return SVector{3}(value)
 end
 
-_reference_current(::NullField, pos) = zero(SVector{3, eltype(pos)})
 _reference_current(::UniformField, pos) = zero(SVector{3, eltype(pos)})
 _reference_current(field::AbstractMagneticField, pos) = current_density(field, pos)
 
@@ -730,18 +715,6 @@ function _push_curl_component_row!(
         end
     end
     return row
-end
-
-function _add_observation_3d!(rows, targets, sigmas, groups, row, target, sigma, group)
-    isnan(target) && return nothing
-    isfinite(target) || throw(ArgumentError("observations cannot be infinite"))
-    isfinite(sigma) && sigma > 0 ||
-        throw(ArgumentError("uncertainties must be finite and positive"))
-    push!(rows, row)
-    push!(targets, target)
-    push!(sigmas, sigma)
-    push!(groups, group)
-    return nothing
 end
 
 function _validate_directions_3d(directions, positions, name)
