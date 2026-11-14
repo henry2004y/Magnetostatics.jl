@@ -1,13 +1,3 @@
-"""
-    FieldReconstruction3D <: AbstractMagneticField
-
-Continuous Cartesian field represented as a uniform field plus the analytic curl
-of a radial-basis vector potential. The fitted field is divergence-free by
-construction. Coordinates are in metres and field components in tesla.
-Evaluation outside `domain` throws `DomainError`.
-Unlike [`AxisymmetricFieldReconstruction`](@ref), this model makes no symmetry
-assumption and fits Cartesian probes in a three-dimensional box.
-"""
 struct _GridBins3D
     origin::NTuple{3, Int}
     dims::NTuple{3, Int}
@@ -15,7 +5,18 @@ struct _GridBins3D
     indices::Vector{Int}
 end
 
-struct FieldReconstruction3D{T, F <: AbstractMagneticField, D} <: AbstractMagneticField
+"""
+    FieldReconstruction3D <: AbstractMagneticField
+
+Continuous Cartesian field represented as a uniform field `b₀`, the analytic curl of a
+radial-basis vector potential, optional current-free solid harmonics (`vacuum_degree`),
+virtual external 3D dipoles (`dipole_positions`), and parametric template fields
+(`source_fields`). With `model = :div_free` (default) the fitted field is divergence-free
+by construction; with `model = :curl_free` without `source_fields`, it is both
+divergence-free and curl-free. Coordinates are in metres and field components in tesla.
+Evaluation outside `domain` throws `DomainError`.
+"""
+struct FieldReconstruction3D{T, F <: AbstractMagneticField, D, SF} <: AbstractMagneticField
     centers::Matrix{T}
     coefficients::Vector{T}
     length_scale::T
@@ -25,6 +26,15 @@ struct FieldReconstruction3D{T, F <: AbstractMagneticField, D} <: AbstractMagnet
     grid_bins::_GridBins3D
     reference_field::F
     diagnostics::D
+    model::Symbol
+    vacuum_coefficients::Vector{T}
+    vacuum_degree::Int
+    vacuum_center::SVector{3, T}
+    vacuum_scale::T
+    dipole_positions::Matrix{T}
+    dipole_moments::Vector{SVector{3, T}}
+    source_fields::SF
+    source_weights::Vector{T}
 end
 
 function FieldReconstruction3D(
@@ -33,9 +43,25 @@ function FieldReconstruction3D(
         center_bins::Dict{NTuple{3, Int}, Vector{Int}},
         reference_field::F, diagnostics::D
     ) where {T, F <: AbstractMagneticField, D}
-    return FieldReconstruction3D{T, F, D}(
+    return FieldReconstruction3D{T, F, D, Tuple{}}(
         centers, coefficients, length_scale, domain, kernel,
-        center_bins, _to_grid_bins_3d(center_bins), reference_field, diagnostics
+        center_bins, _to_grid_bins_3d(center_bins), reference_field, diagnostics,
+        :div_free, T[], -1, zero(SVector{3, T}), one(T),
+        zeros(T, 0, 3), SVector{3, T}[], (), T[]
+    )
+end
+
+function FieldReconstruction3D(
+        centers::Matrix{T}, coefficients::Vector{T}, length_scale::T,
+        domain::NTuple{6, T}, kernel::Symbol,
+        center_bins::Dict{NTuple{3, Int}, Vector{Int}},
+        grid_bins::_GridBins3D, reference_field::F, diagnostics::D
+    ) where {T, F <: AbstractMagneticField, D}
+    return FieldReconstruction3D{T, F, D, Tuple{}}(
+        centers, coefficients, length_scale, domain, kernel,
+        center_bins, grid_bins, reference_field, diagnostics,
+        :div_free, T[], -1, zero(SVector{3, T}), one(T),
+        zeros(T, 0, 3), SVector{3, T}[], (), T[]
     )
 end
 
@@ -220,6 +246,220 @@ function _operators_3d(field::FieldReconstruction3D, pos)
     )
 end
 
+function _harmonic_count(vac_deg::Int)
+    return vac_deg < 1 ? 0 : (vac_deg + 2)^2 - 4
+end
+
+@inline function _harmonic_norm(l::Int, m::Int, ::Type{T}) where {T <: AbstractFloat}
+    p = one(T)
+    for k in (l - m + 1):(l + m)
+        p *= T(k)
+    end
+    odd_df = one(T)
+    for k in 1:2:(2m - 1)
+        odd_df *= T(k)
+    end
+    return odd_df / (T(l) * sqrt(p))
+end
+
+@inline function _foreach_harmonic_grad_3d(
+        f::F, point::SVector{3, T}, center::SVector{3, T}, scale::T, vac_deg::Int
+    ) where {F, T}
+    vac_deg < 1 && return nothing
+    inv_s = inv(scale)
+    x = (point[1] - center[1]) * inv_s
+    y = (point[2] - center[2]) * inv_s
+    z = (point[3] - center[3]) * inv_s
+    r2 = x * x + y * y + z * z
+    L_pot = vac_deg + 1
+    idx = 0
+    c_mm = one(T)
+    cx_mm = zero(T)
+    cy_mm = zero(T)
+    s_mm = zero(T)
+    sx_mm = zero(T)
+    sy_mm = zero(T)
+    for m in 0:L_pot
+        if m >= 1
+            c_next = x * c_mm - y * s_mm
+            cx_next = c_mm + x * cx_mm - y * sx_mm
+            cy_next = x * cy_mm - s_mm - y * sy_mm
+            s_next = y * c_mm + x * s_mm
+            sx_next = y * cx_mm + s_mm + x * sx_mm
+            sy_next = c_mm + y * cy_mm + x * sy_mm
+            c_mm, cx_mm, cy_mm = c_next, cx_next, cy_next
+            s_mm, sx_mm, sy_mm = s_next, sx_next, sy_next
+        end
+        if m >= 2
+            nmm = _harmonic_norm(m, m, T)
+            idx += 1
+            f(idx, SVector{3, T}(cx_mm * nmm, cy_mm * nmm, zero(T)))
+            idx += 1
+            f(idx, SVector{3, T}(sx_mm * nmm, sy_mm * nmm, zero(T)))
+        end
+        c1, cx1, cy1, cz1 = c_mm, cx_mm, cy_mm, zero(T)
+        c2, cx2, cy2, cz2 = zero(T), zero(T), zero(T), zero(T)
+        s1, sx1, sy1, sz1 = s_mm, sx_mm, sy_mm, zero(T)
+        s2, sx2, sy2, sz2 = zero(T), zero(T), zero(T), zero(T)
+        for l in (m + 1):L_pot
+            inv_lm = inv(T(l - m))
+            a = T(2l - 1)
+            b = T(l + m - 1)
+            c0 = (a * z * c1 - b * r2 * c2) * inv_lm
+            cx0 = (a * z * cx1 - b * (2 * x * c2 + r2 * cx2)) * inv_lm
+            cy0 = (a * z * cy1 - b * (2 * y * c2 + r2 * cy2)) * inv_lm
+            cz0 = (a * (c1 + z * cz1) - b * (2 * z * c2 + r2 * cz2)) * inv_lm
+            nlm = _harmonic_norm(l, m, T)
+            if l >= 2
+                idx += 1
+                f(idx, SVector{3, T}(cx0 * nlm, cy0 * nlm, cz0 * nlm))
+            end
+            c2, cx2, cy2, cz2 = c1, cx1, cy1, cz1
+            c1, cx1, cy1, cz1 = c0, cx0, cy0, cz0
+            if m >= 1
+                s0 = (a * z * s1 - b * r2 * s2) * inv_lm
+                sx0 = (a * z * sx1 - b * (2 * x * s2 + r2 * sx2)) * inv_lm
+                sy0 = (a * z * sy1 - b * (2 * y * s2 + r2 * sy2)) * inv_lm
+                sz0 = (a * (s1 + z * sz1) - b * (2 * z * s2 + r2 * sz2)) * inv_lm
+                if l >= 2
+                    idx += 1
+                    f(idx, SVector{3, T}(sx0 * nlm, sy0 * nlm, sz0 * nlm))
+                end
+                s2, sx2, sy2, sz2 = s1, sx1, sy1, sz1
+                s1, sx1, sy1, sz1 = s0, sx0, sy0, sz0
+            end
+        end
+    end
+    return nothing
+end
+
+@inline function _eval_harmonic_field_3d(
+        vac_c::Vector{Tc}, point::SVector{3, T}, center::SVector{3, T},
+        scale::T, vac_deg::Int
+    ) where {Tc, T}
+    vac_deg < 1 && return zero(SVector{3, T})
+    inv_s = inv(scale)
+    x = (point[1] - center[1]) * inv_s
+    y = (point[2] - center[2]) * inv_s
+    z = (point[3] - center[3]) * inv_s
+    r2 = x * x + y * y + z * z
+    L_pot = vac_deg + 1
+    idx = 0
+    bx = zero(T)
+    by = zero(T)
+    bz = zero(T)
+    c_mm = one(T)
+    cx_mm = zero(T)
+    cy_mm = zero(T)
+    s_mm = zero(T)
+    sx_mm = zero(T)
+    sy_mm = zero(T)
+    @inbounds for m in 0:L_pot
+        if m >= 1
+            c_next = x * c_mm - y * s_mm
+            cx_next = c_mm + x * cx_mm - y * sx_mm
+            cy_next = x * cy_mm - s_mm - y * sy_mm
+            s_next = y * c_mm + x * s_mm
+            sx_next = y * cx_mm + s_mm + x * sx_mm
+            sy_next = c_mm + y * cy_mm + x * sy_mm
+            c_mm, cx_mm, cy_mm = c_next, cx_next, cy_next
+            s_mm, sx_mm, sy_mm = s_next, sx_next, sy_next
+        end
+        if m >= 2
+            nmm = _harmonic_norm(m, m, T)
+            idx += 1
+            w1 = T(vac_c[idx]) * nmm
+            bx += w1 * cx_mm
+            by += w1 * cy_mm
+            idx += 1
+            w2 = T(vac_c[idx]) * nmm
+            bx += w2 * sx_mm
+            by += w2 * sy_mm
+        end
+        c1, cx1, cy1, cz1 = c_mm, cx_mm, cy_mm, zero(T)
+        c2, cx2, cy2, cz2 = zero(T), zero(T), zero(T), zero(T)
+        s1, sx1, sy1, sz1 = s_mm, sx_mm, sy_mm, zero(T)
+        s2, sx2, sy2, sz2 = zero(T), zero(T), zero(T), zero(T)
+        for l in (m + 1):L_pot
+            inv_lm = inv(T(l - m))
+            a = T(2l - 1)
+            b = T(l + m - 1)
+            c0 = (a * z * c1 - b * r2 * c2) * inv_lm
+            cx0 = (a * z * cx1 - b * (2 * x * c2 + r2 * cx2)) * inv_lm
+            cy0 = (a * z * cy1 - b * (2 * y * c2 + r2 * cy2)) * inv_lm
+            cz0 = (a * (c1 + z * cz1) - b * (2 * z * c2 + r2 * cz2)) * inv_lm
+            nlm = _harmonic_norm(l, m, T)
+            if l >= 2
+                idx += 1
+                w = T(vac_c[idx]) * nlm
+                bx += w * cx0
+                by += w * cy0
+                bz += w * cz0
+            end
+            c2, cx2, cy2, cz2 = c1, cx1, cy1, cz1
+            c1, cx1, cy1, cz1 = c0, cx0, cy0, cz0
+            if m >= 1
+                s0 = (a * z * s1 - b * r2 * s2) * inv_lm
+                sx0 = (a * z * sx1 - b * (2 * x * s2 + r2 * sx2)) * inv_lm
+                sy0 = (a * z * sy1 - b * (2 * y * s2 + r2 * sy2)) * inv_lm
+                sz0 = (a * (s1 + z * sz1) - b * (2 * z * s2 + r2 * sz2)) * inv_lm
+                if l >= 2
+                    idx += 1
+                    ws = T(vac_c[idx]) * nlm
+                    bx += ws * sx0
+                    by += ws * sy0
+                    bz += ws * sz0
+                end
+                s2, sx2, sy2, sz2 = s1, sx1, sy1, sz1
+                s1, sx1, sy1, sz1 = s0, sx0, sy0, sz0
+            end
+        end
+    end
+    return SVector{3, T}(bx, by, bz)
+end
+
+@inline function _dipole_scale(domain::NTuple{6, T}, rd::SVector{3, T}) where {T}
+    dx = max(zero(T), domain[1] - rd[1], rd[1] - domain[2])
+    dy = max(zero(T), domain[3] - rd[2], rd[2] - domain[4])
+    dz = max(zero(T), domain[5] - rd[3], rd[3] - domain[6])
+    return max(sqrt(dx * dx + dy * dy + dz * dz), eps(T))
+end
+
+@inline function _dipole_basis_matrix(
+        point::SVector{3, T}, rd::SVector{3, T}, d_scale::T
+    ) where {T}
+    disp = point - rd
+    inv_r = inv(norm(disp))
+    n = disp * inv_r
+    fac = (d_scale * inv_r)^3
+    eye = one(SMatrix{3, 3, T, 9})
+    return fac * (T(3) * (n * transpose(n)) - eye)
+end
+
+@inline function _eval_source_term(::Val{false}, sf, point::SVector{3, T}) where {T}
+    return SVector{3, T}(sf(point))
+end
+
+@inline function _eval_source_term(::Val{true}, sf, point::SVector{3, T}) where {T}
+    return SVector{3, T}(_reference_current(sf, point))
+end
+
+@inline function _eval_sources_3d(
+        ::Tuple{}, weights, offset::Int, point::SVector{3, T}, ::Val{current}
+    ) where {T, current}
+    return zero(SVector{3, T})
+end
+
+@inline function _eval_sources_3d(
+        sources::Tuple{Any, Vararg{Any}}, weights, offset::Int,
+        point::SVector{3, T}, ::Val{current}
+    ) where {T, current}
+    term = weights[offset] * _eval_source_term(Val(current), sources[1], point)
+    return term + _eval_sources_3d(
+        Base.tail(sources), weights, offset + 1, point, Val(current)
+    )
+end
+
 function (field::FieldReconstruction3D)(pos)
     point = _check_3d_position(field, pos)
     return _reference_value_3d(field.reference_field, point) +
@@ -238,54 +478,86 @@ end
     pvec = SVector{3, T}(px, py, pz)
     @inbounds acc = current ? zero(SVector{3, T}) :
         SVector{3, T}(T(coefficients[1]), T(coefficients[2]), T(coefficients[3]))
-    if kernel === :gaussian
-        @inbounds for j in axes(centers, 1)
-            cj = SVector{3, T}(T(centers[j, 1]), T(centers[j, 2]), T(centers[j, 3]))
-            disp = pvec - cj
-            gradient, hessian = _kernel_derivatives_3d(disp, scale, kernel)
-            off = 3 + 3 * (j - 1)
-            a = SVector{3, T}(
-                T(coefficients[off + 1]), T(coefficients[off + 2]), T(coefficients[off + 3])
-            )
-            acc += current ? scale * (hessian * a - tr(hessian) * a) :
-                scale * cross(gradient, a)
-        end
-    else
-        gb = field.grid_bins
-        if !isempty(gb.indices)
-            d = field.domain
-            ix0 = floor(Int, (px - d[1]) / scale) - gb.origin[1] + 1
-            iy0 = floor(Int, (py - d[3]) / scale) - gb.origin[2] + 1
-            iz0 = floor(Int, (pz - d[5]) / scale) - gb.origin[3] + 1
-            nx, ny, nz = gb.dims
-            nx_ny = nx * ny
-            @inbounds for iz in max(1, iz0 - 1):min(nz, iz0 + 1)
-                zoff = (iz - 1) * nx_ny
-                for iy in max(1, iy0 - 1):min(ny, iy0 + 1)
-                    yzoff = zoff + (iy - 1) * nx
-                    for ix in max(1, ix0 - 1):min(nx, ix0 + 1)
-                        cidx = yzoff + ix
-                        for ptr in gb.offsets[cidx]:(gb.offsets[cidx + 1] - 1)
-                            j = gb.indices[ptr]
-                            disp = pvec - SVector{3, T}(
-                                T(centers[j, 1]), T(centers[j, 2]), T(centers[j, 3])
-                            )
-                            norm(disp) >= scale && continue
-                            gradient, hessian = _kernel_derivatives_3d(disp, scale, kernel)
-                            off = 3 + 3 * (j - 1)
-                            a = SVector{3, T}(
-                                T(coefficients[off + 1]), T(coefficients[off + 2]),
-                                T(coefficients[off + 3])
-                            )
-                            acc += current ? scale * (hessian * a - tr(hessian) * a) :
-                                scale * cross(gradient, a)
+    if !isempty(centers)
+        if kernel === :gaussian
+            @inbounds for j in axes(centers, 1)
+                cj = SVector{3, T}(T(centers[j, 1]), T(centers[j, 2]), T(centers[j, 3]))
+                disp = pvec - cj
+                gradient, hessian = _kernel_derivatives_3d(disp, scale, kernel)
+                off = 3 + 3 * (j - 1)
+                a = SVector{3, T}(
+                    T(coefficients[off + 1]), T(coefficients[off + 2]),
+                    T(coefficients[off + 3])
+                )
+                acc += current ? scale * (hessian * a - tr(hessian) * a) :
+                    scale * cross(gradient, a)
+            end
+        else
+            gb = field.grid_bins
+            if !isempty(gb.indices)
+                d = field.domain
+                ix0 = floor(Int, (px - d[1]) / scale) - gb.origin[1] + 1
+                iy0 = floor(Int, (py - d[3]) / scale) - gb.origin[2] + 1
+                iz0 = floor(Int, (pz - d[5]) / scale) - gb.origin[3] + 1
+                nx, ny, nz = gb.dims
+                nx_ny = nx * ny
+                @inbounds for iz in max(1, iz0 - 1):min(nz, iz0 + 1)
+                    zoff = (iz - 1) * nx_ny
+                    for iy in max(1, iy0 - 1):min(ny, iy0 + 1)
+                        yzoff = zoff + (iy - 1) * nx
+                        for ix in max(1, ix0 - 1):min(nx, ix0 + 1)
+                            cidx = yzoff + ix
+                            for ptr in gb.offsets[cidx]:(gb.offsets[cidx + 1] - 1)
+                                j = gb.indices[ptr]
+                                disp = pvec - SVector{3, T}(
+                                    T(centers[j, 1]), T(centers[j, 2]), T(centers[j, 3])
+                                )
+                                norm(disp) >= scale && continue
+                                gradient, hessian = _kernel_derivatives_3d(
+                                    disp, scale, kernel
+                                )
+                                off = 3 + 3 * (j - 1)
+                                a = SVector{3, T}(
+                                    T(coefficients[off + 1]), T(coefficients[off + 2]),
+                                    T(coefficients[off + 3])
+                                )
+                                acc += current ? scale * (hessian * a - tr(hessian) * a) :
+                                    scale * cross(gradient, a)
+                            end
                         end
                     end
                 end
             end
         end
     end
-    return current ? acc / T(μ₀) : acc
+    current && (acc /= T(μ₀))
+    if !current
+        vac_deg = field.vacuum_degree
+        if vac_deg >= 1
+            acc += _eval_harmonic_field_3d(
+                field.vacuum_coefficients, pvec, SVector{3, T}(field.vacuum_center),
+                T(field.vacuum_scale), vac_deg
+            )
+        end
+        dips = field.dipole_positions
+        moms = field.dipole_moments
+        if !isempty(moms)
+            @inbounds for j in eachindex(moms)
+                rd = SVector{3, T}(T(dips[j, 1]), T(dips[j, 2]), T(dips[j, 3]))
+                disp = pvec - rd
+                rmag = norm(disp)
+                n = disp / rmag
+                m_j = SVector{3, T}(moms[j])
+                acc += (T(μ0_4π) / rmag^3) * (T(3) * dot(m_j, n) * n - m_j)
+            end
+        end
+    end
+    if !isempty(field.source_fields)
+        acc += _eval_sources_3d(
+            field.source_fields, field.source_weights, 1, pvec, Val(current)
+        )
+    end
+    return acc
 end
 
 _reference_value_3d(::NullField, point::SVector{3}; current = false) = zero(point)
@@ -500,30 +772,110 @@ function _quadrature_3d(domain, grid, ::Type{T}) where {T}
     return points, weights
 end
 
+function _push_ext_field_terms!(
+        rows::_TripletRows3D{T}, row::Int, point::SVector{3, T},
+        m::Int, weight::T, ext
+    ) where {T}
+    if ext.vac_deg >= 1
+        @inbounds _foreach_harmonic_grad_3d(
+            point, ext.vac_center, ext.vac_scale, ext.vac_deg
+        ) do idx, grad
+            _push_triplet!(rows, row, ext.offset_vac + idx, weight * grad[m])
+        end
+    end
+    if !isempty(ext.dipoles)
+        @inbounds for j in axes(ext.dipoles, 1)
+            rd = SVector{3, T}(ext.dipoles[j, 1], ext.dipoles[j, 2], ext.dipoles[j, 3])
+            M_j = _dipole_basis_matrix(point, rd, ext.dip_scales[j])
+            off = ext.offset_dip + 3 * (j - 1)
+            for k in 1:3
+                _push_triplet!(rows, row, off + k, weight * M_j[m, k])
+            end
+        end
+    end
+    for (idx, sf) in enumerate(ext.source_fields)
+        b_sf = _eval_source_term(Val(false), sf, point)
+        _push_triplet!(rows, row, ext.offset_src + idx, weight * b_sf[m])
+    end
+    return nothing
+end
+
+function _push_ext_dir_terms!(
+        rows::_TripletRows3D{T}, row::Int, point::SVector{3, T},
+        direction::SVector{3, T}, weight::T, ext
+    ) where {T}
+    if ext.vac_deg >= 1
+        @inbounds _foreach_harmonic_grad_3d(
+            point, ext.vac_center, ext.vac_scale, ext.vac_deg
+        ) do idx, grad
+            _push_triplet!(rows, row, ext.offset_vac + idx, weight * dot(direction, grad))
+        end
+    end
+    if !isempty(ext.dipoles)
+        @inbounds for j in axes(ext.dipoles, 1)
+            rd = SVector{3, T}(ext.dipoles[j, 1], ext.dipoles[j, 2], ext.dipoles[j, 3])
+            M_j = _dipole_basis_matrix(point, rd, ext.dip_scales[j])
+            w = weight * (M_j * direction)
+            off = ext.offset_dip + 3 * (j - 1)
+            for k in 1:3
+                _push_triplet!(rows, row, off + k, w[k])
+            end
+        end
+    end
+    for (idx, sf) in enumerate(ext.source_fields)
+        b_sf = _eval_source_term(Val(false), sf, point)
+        _push_triplet!(rows, row, ext.offset_src + idx, weight * dot(direction, b_sf))
+    end
+    return nothing
+end
+
+function _push_ext_curl_terms!(
+        rows::_TripletRows3D{T}, row::Int, point::SVector{3, T},
+        m::Int, factor::T, ext
+    ) where {T}
+    for (idx, sf) in enumerate(ext.source_fields)
+        j_sf = _eval_source_term(Val(true), sf, point)
+        _push_triplet!(rows, row, ext.offset_src + idx, factor * j_sf[m])
+    end
+    return nothing
+end
+
 function _regularizer_3d(
         centers, scale, kernel, domain, grid_bins::_GridBins3D,
-        grid, mode, ::Type{T}
+        grid, mode, ::Type{T}, ext = nothing
     ) where {T}
-    ncoefficients = 3 + 3 * size(centers, 1)
+    ncenters = size(centers, 1)
+    ncoefficients = ext === nothing ? 3 + 3 * ncenters : ext.ncoefficients
     points, weights = _quadrature_3d(domain, grid, T)
     reg_rows = _TripletRows3D{T}()
     scratch = _KernelScratch3D{T}()
     unsupported = 0
     scale_T = T(scale)
+    has_curl = ncenters > 0 || (ext !== nothing && !isempty(ext.source_fields))
     @inbounds for i in axes(points, 1)
         pt = SVector{3, T}(points[i, 1], points[i, 2], points[i, 3])
-        count = _collect_kernel_3d!(
-            scratch, pt, centers, scale_T, kernel, domain, grid_bins
-        )
-        unsupported += count == 0
+        if ncenters > 0
+            count = _collect_kernel_3d!(
+                scratch, pt, centers, scale_T, kernel, domain, grid_bins
+            )
+            unsupported += count == 0
+        end
         if mode === :field
             factor = sqrt(weights[i])
             for m in 1:3
-                _push_field_component_row!(reg_rows, m, scale_T, scratch, factor)
+                row = _push_field_component_row!(reg_rows, m, scale_T, scratch, factor)
+                ext === nothing || _push_ext_field_terms!(reg_rows, row, pt, m, factor, ext)
             end
-            curl_factor = factor * scale_T
-            for m in 1:3
-                _push_curl_component_row!(reg_rows, m, scale_T, scratch, curl_factor)
+            if has_curl
+                curl_factor = factor * scale_T
+                for m in 1:3
+                    row = _push_curl_component_row!(
+                        reg_rows, m, scale_T, scratch, curl_factor
+                    )
+                    ext === nothing || _push_ext_curl_terms!(
+                        reg_rows, row, pt, m, curl_factor * T(μ₀), ext
+                    )
+                end
             end
         end
     end
@@ -537,10 +889,10 @@ end
 
 function _regularizer_3d(
         centers, scale, kernel, domain, bins::Dict{NTuple{3, Int}, Vector{Int}},
-        grid, mode, ::Type{T}
+        grid, mode, ::Type{T}, ext = nothing
     ) where {T}
     return _regularizer_3d(
-        centers, scale, kernel, domain, _to_grid_bins_3d(bins), grid, mode, T
+        centers, scale, kernel, domain, _to_grid_bins_3d(bins), grid, mode, T, ext
     )
 end
 
@@ -549,7 +901,10 @@ function _group_rms_3d(residual, groups, group)
     return isempty(selected) ? nothing : norm(selected) / sqrt(length(selected))
 end
 
-function _solve_3d(A, b, C, d, algorithm, abstol, reltol, maxiters)
+function _solve_3d(
+        A, b, C, d, n_obs::Int, store_covariance::Bool,
+        algorithm, abstol, reltol, maxiters
+    )
     T = eltype(b)
     particular = zeros(T, size(A, 2))
     basis = nothing
@@ -560,7 +915,10 @@ function _solve_3d(A, b, C, d, algorithm, abstol, reltol, maxiters)
         norm(C * particular - d, Inf) <= tolerance ||
             throw(ArgumentError("exact boundary constraints are inconsistent"))
         basis = nullspace(dense_C)
-        size(basis, 2) == 0 && return particular, :constrained, 0
+        if size(basis, 2) == 0
+            cov = store_covariance ? zeros(T, size(A, 2), size(A, 2)) : nothing
+            return particular, :constrained, 0, cov
+        end
     end
     reduced = basis === nothing ? A : A * basis
     solution = LinearSolve.solve(
@@ -570,62 +928,43 @@ function _solve_3d(A, b, C, d, algorithm, abstol, reltol, maxiters)
         error("3D reconstruction did not converge: $(solution.retcode)")
     coefficients = basis === nothing ? solution.u : particular + basis * solution.u
     all(isfinite, coefficients) || error("3D reconstruction produced non-finite values")
-    return coefficients, solution.retcode, solution.iters
+    cov = store_covariance ? _qr_covariance(A, n_obs, basis, T) : nothing
+    return coefficients, solution.retcode, solution.iters, cov
 end
 
 """
-    reconstruct_field_3d(positions, B_observed; domain, length_scale, ...)
+    reconstruct_field_3d(positions, B_observed; domain, length_scale = nothing, ...)
 
-Fit a divergence-free Cartesian magnetic field. `positions` and `B_observed`
-are `n × 3` matrices. `NaN` field components denote missing measurements;
-infinite values are rejected. `uncertainties` has the observation shape and is
-in tesla. The box `domain` is `(xmin, xmax, ymin, ymax, zmin, zmax)`.
+Fit a Cartesian magnetic field. `positions` and `B_observed` are `n × 3` matrices. `NaN`
+field components denote missing measurements; infinite values are rejected.
+`uncertainties` has the observation shape and is in tesla. `domain` is
+`(xmin, xmax, ymin, ymax, zmin, zmax)`.
 
-The model is `reference_field + b₀ + curl(A)`, with
-`A = length_scale * sum(φⱼ * aⱼ)`. `:wendland_c2` (default) has support radius
-`length_scale`; `:gaussian` is global. Default centers cover the box; custom
-`basis_centers` must be an `m × 3` matrix inside it. `reference_field` defaults
-to `NullField()` and must itself be divergence-free.
+With `model = :div_free` (default), the fitted field is divergence-free by construction:
+`reference_field + b₀ + curl(A) + ∇Φ_vac + ∑ B_dip + ∑ wₖ Sₖ`, where `A` uses vector
+potential RBFs with support radius `length_scale` (`:wendland_c2` default or `:gaussian`).
+With `model = :curl_free`, no vector potential RBFs are included (so `length_scale` may be
+omitted) and `vacuum_degree` defaults to `3` unless `dipole_positions` or `source_fields`
+are supplied, yielding a strictly current-free reconstruction (when `source_fields` is
+empty).
 
-Additional directional probes use `directional_positions`, unit
-`directional_directions` and scalar `directional_values` in tesla, with
-`directional_uncertainties` (default: one tesla). Cartesian or directional
-components marked `NaN` are skipped, including their uncertainty entries.
+Optional basis extensions:
+- `vacuum_degree::Union{Nothing, Integer} = nothing`: add current-free real solid harmonic
+  scalar potential modes of field polynomial degree `1:vacuum_degree` (with uniform `b₀`
+  covering degree 0).
+- `dipole_positions = nothing`: `m × 3` matrix of virtual external 3D dipole positions lying
+  strictly outside `domain`; fitted dipole moments are stored in `field.dipole_moments`.
+- `source_fields = ()`: tuple or vector of `AbstractMagneticField` templates whose scalar
+  amplitudes are fitted linearly and stored in `field.source_weights`.
+- `store_covariance::Bool = false`: compute and store the frequentist parameter covariance
+  in `field.diagnostics.coefficient_covariance` for use with [`field_covariance`](@ref).
 
-`boundary_positions`, unit `boundary_normals` and finite `boundary_values`
-constrain `n ⋅ B`. Without `boundary_uncertainties` these are exact constraints
-at the supplied points; otherwise they are weighted observations in tesla.
-The evaluation box need not coincide with this physical surface. Exact
-constraints use a dense null-space reduction, intended for modest problems.
-They do not enforce a condition between samples or establish closed-surface
-flux compatibility. Prefer soft constraints for noisy surface data.
-
-`current_positions` and `current_density` are `m × 3` matrices; current
-components and `current_uncertainties` (default: one A/m²) are in A/m².
-Current observations and `current_density(field, pos)` require the reference
-field to implement current density (zero is supported for null/uniform fields).
-
-`regularization` is positive. With `regularization_mode = :field` (default),
-it penalizes the box-averaged `|δB|² + length_scale² * |curl(δB)|²`, where
-`δB = B - reference_field`, using normalized tensor trapezoidal quadrature.
-The grid defaults to at least two intervals per length scale along each axis;
-override it with `regularization_grid = (nx, ny, nz)`. A machine-epsilon
-coefficient ridge stabilizes potential gauge modes. `:coefficients` instead
-uses a coefficient ridge alone. All coefficients have field units.
-
-Sparse least squares uses `algorithm = KrylovJL_LSMR()` with `abstol`,
-`reltol`, and `maxiters` (default: 10,000). Nonconvergence throws an error.
-`field.diagnostics` reports residuals in observation units, weighted
-RMS, exact-constraint error, convergence and sampled RBF support coverage.
-Uncovered locations retain only the uniform and reference fields and generate
-a fitting warning. Coverage on the quadrature grid is not a proof of coverage
-everywhere, nor are fit residuals uncertainty estimates. Sparse probes do not
-determine a unique physical field; basis, length scale and regularization are
-modeling assumptions, not additional measurements.
+Directional probes, boundary normal flux (`n ⋅ B`), current density observations, and
+regularization options behave as described in the 3D inverse guide.
 """
 function reconstruct_field_3d(
         positions::AbstractMatrix{<:Real}, B_observed::AbstractMatrix{<:Real};
-        domain, length_scale, basis_centers = nothing, kernel = :wendland_c2,
+        domain, length_scale = nothing, basis_centers = nothing, kernel = :wendland_c2,
         uncertainties = ones(size(B_observed)), regularization = 1.0e-8,
         reference_field::AbstractMagneticField = NullField(),
         algorithm = KrylovJL_LSMR(), abstol = 1.0e-10, reltol = 1.0e-10,
@@ -636,16 +975,44 @@ function reconstruct_field_3d(
         boundary_positions = nothing, boundary_normals = nothing,
         boundary_values = nothing, boundary_uncertainties = nothing,
         current_positions = nothing, current_density = nothing,
-        current_uncertainties = nothing
+        current_uncertainties = nothing,
+        model::Symbol = :div_free,
+        vacuum_degree::Union{Nothing, Integer} = nothing,
+        dipole_positions = nothing,
+        source_fields = (),
+        store_covariance::Bool = false
     )
     length(domain) == 6 ||
         throw(ArgumentError("domain must contain three pairs of bounds"))
-    T = promote_type(Float64, eltype(positions), eltype(B_observed), typeof(length_scale))
+    model in (:div_free, :curl_free) ||
+        throw(ArgumentError("model must be :div_free or :curl_free"))
+    if model === :div_free && length_scale === nothing
+        throw(ArgumentError("length_scale is required when model = :div_free"))
+    end
+    if model === :curl_free && basis_centers !== nothing
+        throw(ArgumentError("basis_centers cannot be supplied when model = :curl_free"))
+    end
+    source_fields isa Union{Tuple, AbstractVector} ||
+        throw(ArgumentError("source_fields must be a Tuple or AbstractVector"))
+    src_tuple = source_fields isa Tuple ? source_fields : Tuple(source_fields)
+    all(sf -> sf isa AbstractMagneticField, src_tuple) ||
+        throw(ArgumentError("all entries in source_fields must be AbstractMagneticField"))
+    if model === :curl_free && current_positions !== nothing && isempty(src_tuple)
+        throw(
+            ArgumentError(
+                "curl_free model without source_fields cannot fit current observations"
+            )
+        )
+    end
+    scale_type = length_scale === nothing ? Float64 : typeof(length_scale)
+    T = promote_type(Float64, eltype(positions), eltype(B_observed), scale_type)
     box = NTuple{6, T}(Tuple(domain))
     all(isfinite, box) && all(box[2k] > box[2k - 1] for k in 1:3) ||
         throw(ArgumentError("domain bounds must be finite and strictly increasing"))
+    scale_T = length_scale === nothing ?
+        minimum(box[2k] - box[2k - 1] for k in 1:3) / 2 : T(length_scale)
     for (name, value) in (
-            ("length_scale", length_scale), ("regularization", regularization),
+            ("length_scale", scale_T), ("regularization", regularization),
             ("abstol", abstol), ("reltol", reltol),
         )
         isfinite(value) && value > 0 ||
@@ -661,14 +1028,67 @@ function reconstruct_field_3d(
         throw(ArgumentError("B_observed must have the same size as positions"))
     size(uncertainties) == size(B_observed) ||
         throw(ArgumentError("uncertainties must have the same size as B_observed"))
-    centers = basis_centers === nothing ? _centers_3d(box, T(length_scale), T) :
+
+    vac_deg = if model === :curl_free && vacuum_degree === nothing &&
+            dipole_positions === nothing && isempty(src_tuple)
+        3
+    elseif vacuum_degree === nothing
+        -1
+    else
+        Int(vacuum_degree)
+    end
+    vacuum_degree === nothing || vac_deg >= 1 ||
+        throw(ArgumentError("vacuum_degree must be >= 1"))
+    vac_center = SVector{3, T}(
+        (box[1] + box[2]) / 2, (box[3] + box[4]) / 2, (box[5] + box[6]) / 2
+    )
+    vac_scale = hypot(
+        (box[2] - box[1]) / 2, (box[4] - box[3]) / 2, (box[6] - box[5]) / 2
+    )
+    n_vac = _harmonic_count(vac_deg)
+
+    dipoles = dipole_positions === nothing ? zeros(T, 0, 3) : Matrix{T}(dipole_positions)
+    size(dipoles, 2) == 3 ||
+        throw(ArgumentError("dipole_positions must have columns (x, y, z)"))
+    all(isfinite, dipoles) || throw(ArgumentError("dipole_positions must be finite"))
+    n_dip = size(dipoles, 1)
+    dip_scales = Vector{T}(undef, n_dip)
+    for j in 1:n_dip
+        rd = SVector{3, T}(dipoles[j, 1], dipoles[j, 2], dipoles[j, 3])
+        inside = (box[1] <= rd[1] <= box[2]) &&
+            (box[3] <= rd[2] <= box[4]) &&
+            (box[5] <= rd[3] <= box[6])
+        !inside || throw(ArgumentError("dipole_positions must lie outside the domain"))
+        dip_scales[j] = _dipole_scale(box, rd)
+    end
+
+    centers = if model === :curl_free
+        zeros(T, 0, 3)
+    elseif basis_centers === nothing
+        _centers_3d(box, scale_T, T)
+    else
         Matrix{T}(basis_centers)
-    _validate_xyz(centers, box, "basis_centers")
-    size(centers, 1) > 0 || throw(ArgumentError("at least one center is required"))
-    bins = _bins_3d(centers, box, T(length_scale))
+    end
+    if model === :div_free
+        _validate_xyz(centers, box, "basis_centers")
+        size(centers, 1) > 0 || throw(ArgumentError("at least one center is required"))
+    end
+    ncenters = size(centers, 1)
+    bins = ncenters == 0 ? Dict{NTuple{3, Int}, Vector{Int}}() :
+        _bins_3d(centers, box, scale_T)
     grid_bins = _to_grid_bins_3d(bins)
-    scale_T = T(length_scale)
-    ncoefficients = 3 + 3size(centers, 1)
+
+    n_rbf = 3 + 3 * ncenters
+    offset_vac = n_rbf
+    offset_dip = offset_vac + n_vac
+    offset_src = offset_dip + 3 * n_dip
+    n_src = length(src_tuple)
+    ncoefficients = offset_src + n_src
+    ext = (;
+        vac_deg, vac_center, vac_scale, dipoles, dip_scales,
+        source_fields = src_tuple, offset_vac, offset_dip, offset_src, ncoefficients,
+    )
+
     H_rows = _TripletRows3D{T}()
     exact_rows = _TripletRows3D{T}()
     targets, sigmas = T[], T[]
@@ -679,10 +1099,12 @@ function reconstruct_field_3d(
     inv_mu0 = inv(T(μ₀))
     @inbounds for i in axes(positions, 1)
         point = SVector{3, T}(positions[i, 1], positions[i, 2], positions[i, 3])
-        count = _collect_kernel_3d!(
-            scratch, point, centers, scale_T, kernel, box, grid_bins
-        )
-        uncovered += count == 0
+        if ncenters > 0
+            count = _collect_kernel_3d!(
+                scratch, point, centers, scale_T, kernel, box, grid_bins
+            )
+            uncovered += count == 0
+        end
         reference = _reference_value_3d(reference_field, point)
         for k in 1:3
             raw = B_observed[i, k]
@@ -692,7 +1114,8 @@ function reconstruct_field_3d(
             sigma = T(uncertainties[i, k])
             isfinite(sigma) && sigma > 0 ||
                 throw(ArgumentError("uncertainties must be finite and positive"))
-            _push_field_component_row!(H_rows, k, scale_T, scratch)
+            row = _push_field_component_row!(H_rows, k, scale_T, scratch)
+            _push_ext_field_terms!(H_rows, row, point, k, one(T), ext)
             push!(targets, target)
             push!(sigmas, sigma)
             push!(groups, :probe)
@@ -729,23 +1152,27 @@ function reconstruct_field_3d(
         for i in eachindex(values)
             point = SVector{3, T}(locations[i, 1], locations[i, 2], locations[i, 3])
             direction = SVector{3, T}(directions[i, 1], directions[i, 2], directions[i, 3])
-            count = _collect_kernel_3d!(
-                scratch, point, centers, scale_T, kernel, box, grid_bins
-            )
-            uncovered += count == 0
+            if ncenters > 0
+                count = _collect_kernel_3d!(
+                    scratch, point, centers, scale_T, kernel, box, grid_bins
+                )
+                uncovered += count == 0
+            end
             reference = _reference_value_3d(reference_field, point)
             raw = values[i]
             isnan(raw) && continue
             target = T(raw - dot(direction, reference))
             isfinite(target) || throw(ArgumentError("observations cannot be infinite"))
             if exact
-                _push_directional_row!(exact_rows, direction, scale_T, scratch)
+                row = _push_directional_row!(exact_rows, direction, scale_T, scratch)
+                _push_ext_dir_terms!(exact_rows, row, point, direction, one(T), ext)
                 push!(exact_targets, target)
             else
                 sigma = errors === nothing ? one(T) : T(errors[i])
                 isfinite(sigma) && sigma > 0 ||
                     throw(ArgumentError("uncertainties must be finite and positive"))
-                _push_directional_row!(H_rows, direction, scale_T, scratch)
+                row = _push_directional_row!(H_rows, direction, scale_T, scratch)
+                _push_ext_dir_terms!(H_rows, row, point, direction, one(T), ext)
                 push!(targets, target)
                 push!(sigmas, sigma)
                 push!(groups, group)
@@ -766,10 +1193,12 @@ function reconstruct_field_3d(
             point = SVector{3, T}(
                 current_positions[i, 1], current_positions[i, 2], current_positions[i, 3]
             )
-            count = _collect_kernel_3d!(
-                scratch, point, centers, scale_T, kernel, box, grid_bins
-            )
-            uncovered += count == 0
+            if ncenters > 0
+                count = _collect_kernel_3d!(
+                    scratch, point, centers, scale_T, kernel, box, grid_bins
+                )
+                uncovered += count == 0
+            end
             reference = _reference_value_3d(reference_field, point; current = true)
             for k in 1:3
                 raw = current_density[i, k]
@@ -779,7 +1208,8 @@ function reconstruct_field_3d(
                 sigma = T(errors[i, k])
                 isfinite(sigma) && sigma > 0 ||
                     throw(ArgumentError("uncertainties must be finite and positive"))
-                _push_curl_component_row!(H_rows, k, scale_T, scratch, inv_mu0)
+                row = _push_curl_component_row!(H_rows, k, scale_T, scratch, inv_mu0)
+                _push_ext_curl_terms!(H_rows, row, point, k, one(T), ext)
                 push!(targets, target)
                 push!(sigmas, sigma)
                 push!(groups, :current)
@@ -791,24 +1221,40 @@ function reconstruct_field_3d(
     H_rows.nrows == 0 && exact_rows.nrows == 0 &&
         throw(ArgumentError("a finite observation or exact constraint is required"))
     grid = regularization_grid === nothing ?
-        ntuple(k -> max(3, ceil(Int, 2(box[2k] - box[2k - 1]) / length_scale) + 1), 3) :
+        ntuple(k -> max(3, ceil(Int, 2(box[2k] - box[2k - 1]) / scale_T) + 1), 3) :
         regularization_grid
     L, unsupported_grid, grid_count = _regularizer_3d(
-        centers, scale_T, kernel, box, grid_bins, grid, regularization_mode, T
+        centers, scale_T, kernel, box, grid_bins, grid, regularization_mode, T, ext
     )
     H = _sparse_matrix(H_rows, ncoefficients)
     weighted = Diagonal(inv.(sigmas)) * H
     A = vcat(weighted, sqrt(T(regularization)) * L)
     b = vcat(targets ./ sigmas, zeros(T, size(L, 1)))
     C = _sparse_matrix(exact_rows, ncoefficients)
-    coefficients, retcode, iterations = _solve_3d(
-        A, b, C, exact_targets, algorithm, abstol, reltol, maxiters
+    all_coefficients, retcode, iterations, covariance = _solve_3d(
+        A, b, C, exact_targets, H_rows.nrows, store_covariance,
+        algorithm, abstol, reltol, maxiters
     )
-    residual = H * coefficients - targets
+    residual = H * all_coefficients - targets
     exact_error = isempty(exact_targets) ? zero(T) :
-        norm(C * coefficients - exact_targets, Inf)
+        norm(C * all_coefficients - exact_targets, Inf)
     tolerance = 100eps(T) * max(one(T), norm(exact_targets))
     exact_error <= tolerance || error("exact boundary constraints lost numerical accuracy")
+
+    rbf_coefficients = all_coefficients[1:n_rbf]
+    vacuum_coefficients = all_coefficients[(offset_vac + 1):offset_dip]
+    dipole_moments = Vector{SVector{3, T}}(undef, n_dip)
+    for j in 1:n_dip
+        off = offset_dip + 3 * (j - 1)
+        c_j = SVector{3, T}(
+            all_coefficients[off + 1], all_coefficients[off + 2], all_coefficients[off + 3]
+        )
+        dipole_moments[j] = c_j * (dip_scales[j]^3 / T(μ0_4π))
+    end
+    source_weights = all_coefficients[(offset_src + 1):ncoefficients]
+
+    eff_uncovered = ncenters == 0 ? 0 : uncovered
+    eff_unsupported_grid = ncenters == 0 ? 0 : unsupported_grid
     diagnostics = (
         weighted_rms = isempty(targets) ? nothing :
             norm(residual ./ sigmas) / sqrt(length(targets)),
@@ -820,16 +1266,23 @@ function reconstruct_field_3d(
         exact_constraint_count = length(exact_targets),
         coefficient_count = ncoefficients,
         observation_count = length(targets), solver_retcode = retcode,
-        iterations = iterations, unsupported_observations = uncovered,
-        unsupported_grid_points = unsupported_grid, grid_point_count = grid_count,
-        sampled_support_fraction = 1 - unsupported_grid / grid_count,
+        iterations = iterations, unsupported_observations = eff_uncovered,
+        unsupported_grid_points = eff_unsupported_grid, grid_point_count = grid_count,
+        sampled_support_fraction = ncenters == 0 ? one(T) :
+            1 - eff_unsupported_grid / grid_count,
+        coefficient_covariance = covariance,
     )
-    if uncovered > 0 || unsupported_grid > 0
+    if eff_uncovered > 0 || eff_unsupported_grid > 0
         message = "RBF support has gaps; only uniform/reference fields act there"
-        @warn message unsupported_observations = uncovered grid_gaps = unsupported_grid
+        @warn message unsupported_observations = eff_uncovered grid_gaps =
+            eff_unsupported_grid
     end
-    return FieldReconstruction3D(
-        centers, coefficients, scale_T, box, kernel, bins, grid_bins,
-        reference_field, diagnostics
+    F = typeof(reference_field)
+    D = typeof(diagnostics)
+    SF = typeof(src_tuple)
+    return FieldReconstruction3D{T, F, D, SF}(
+        centers, rbf_coefficients, scale_T, box, kernel, bins, grid_bins,
+        reference_field, diagnostics, model, vacuum_coefficients, vac_deg,
+        vac_center, vac_scale, dipoles, dipole_moments, src_tuple, source_weights
     )
 end

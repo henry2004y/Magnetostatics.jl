@@ -29,5 +29,6 @@ end
     @testset "Physical reconstruction cases" include("test_reconstruction_cases.jl")
     @testset "Reconstruction uncertainty" include("test_reconstruction_uncertainty.jl")
     @testset "Spacecraft Grad-Shafranov reconstruction" include("test_grad_shafranov.jl")
+    @testset "Topology and covariance" include("test_topology.jl")
     @testset "FieldTracer integration" include("test_fieldtracer.jl")
 end

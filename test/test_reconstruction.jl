@@ -523,6 +523,25 @@ end
         @test fit_wend.diagnostics !== nothing
         @test fit_wend.diagnostics.observation_count == size(pts, 1) * 3
         @test isfinite(fit_wend.diagnostics.weighted_rms)
+        @test_throws ArgumentError field_covariance(fit_wend, rq)
+
+        fit_cov = reconstruct_axisymmetric_field(
+            pts, Bs; domain = dom, length_scale = 0.35, basis_centers = centers_2d,
+            kernel = :wendland_c2, uncertainties = fill(1.0e-4, size(Bs)),
+            regularization = 1.0e-8, store_covariance = true
+        )
+        cov3 = field_covariance(fit_cov, rq)
+        cov2 = field_covariance(fit_cov, SA[0.85, 0.1])
+        @test issymmetric(cov3)
+        @test issymmetric(cov2)
+        @test minimum(eigvals(Symmetric(cov3))) >= -1.0e-18
+        fit_cov2 = reconstruct_axisymmetric_field(
+            pts, Bs; domain = dom, length_scale = 0.35, basis_centers = centers_2d,
+            kernel = :wendland_c2, uncertainties = fill(2.0e-4, size(Bs)),
+            regularization = 1.0e-8, store_covariance = true
+        )
+        @test field_covariance(fit_cov2, rq) ≈ 4 * cov3 rtol = 1.0e-10
+        @test_throws DomainError field_covariance(fit_cov, SVector(0.1, 0.0, 0.0))
     end
 end
 

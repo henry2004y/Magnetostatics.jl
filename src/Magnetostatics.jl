@@ -25,11 +25,14 @@ include("geometry.jl")
 include("utils.jl")
 include("composition.jl")
 include("grid_field.jl")
+include("topology.jl")
 
 # Core types
 export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, AbstractBoundary
 export CompositeField, ScaledField, TransformedField, GridMagneticField
 export translate_field, rotate_field
+export field_jacobian, classify_magnetic_null, locate_magnetic_null,
+    locate_poloidal_critical_point, field_covariance
 # Solvers
 export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, DSTFactorization, solve
 export multipole_boundary

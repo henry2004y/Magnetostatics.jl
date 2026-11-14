@@ -1,16 +1,3 @@
-"""
-    AxisymmetricFieldReconstruction <: AbstractMagneticField
-
-Continuous axisymmetric magnetic field reconstructed from sparse measurements
-using a compactly supported Wendland C2 radial-basis expansion of the poloidal
-flux `ψ(R, Z)` by default, optionally augmented with global vacuum
-(homogeneous Grad–Shafranov) polynomial solutions, virtual external filaments,
-and softened toroidal current elements that carry net plasma current.
-The poloidal field is divergence-free by construction. The toroidal field is
-fit independently when toroidal measurements are supplied.
-Unlike [`FieldReconstruction3D`](@ref), this model assumes azimuthal symmetry
-about the z axis and fits cylindrical probe components on an `(R, Z)` domain.
-"""
 struct _GridBins2D
     origin::NTuple{2, Int}
     dims::NTuple{2, Int}
@@ -57,6 +44,19 @@ function _to_grid_bins_2d(bins::Dict{Tuple{Int, Int}, Vector{Int}})
     return _GridBins2D(origin, dims, offsets, indices)
 end
 
+"""
+    AxisymmetricFieldReconstruction <: AbstractMagneticField
+
+Continuous axisymmetric magnetic field reconstructed from sparse measurements
+using a compactly supported Wendland C2 radial-basis expansion of the poloidal
+flux `ψ(R, Z)` by default, optionally augmented with global vacuum
+(homogeneous Grad–Shafranov) polynomial solutions, virtual external filaments,
+and softened toroidal current elements that carry net plasma current.
+The poloidal field is divergence-free by construction. The toroidal field is
+fit independently when toroidal measurements are supplied.
+Unlike [`FieldReconstruction3D`](@ref), this model assumes azimuthal symmetry
+about the z axis and fits cylindrical probe components on an `(R, Z)` domain.
+"""
 struct AxisymmetricFieldReconstruction{T, D} <: AbstractMagneticField
     centers::Matrix{T}
     psi_coefficients::Vector{T}
@@ -518,8 +518,21 @@ function _qr_design_matrix(A::SparseMatrixCSC, algorithm)
     return Matrix(A)
 end
 
-function _fit_rbf(
-        rows::_FitRows{T}, regularization, ncoefficients, exact::_FitRows{T}, algorithm
+function _qr_covariance(A, n_obs::Int, basis, ::Type{T}) where {T}
+    n_coeff = size(A, 2)
+    n_obs == 0 && return zeros(T, n_coeff, n_coeff)
+    basis !== nothing && size(basis, 2) == 0 && return zeros(T, n_coeff, n_coeff)
+    Az = basis === nothing ? Matrix(A) : Matrix(A * basis)
+    F = qr(Az)
+    Q_dense = Matrix(F.Q)
+    K_u = UpperTriangular(F.R) \ transpose(@view Q_dense[1:n_obs, :])
+    K = basis === nothing ? K_u : basis * K_u
+    return Matrix{T}(Symmetric(K * transpose(K)))
+end
+
+function _fit_rbf_with_cov(
+        rows::_FitRows{T}, regularization, ncoefficients, exact::_FitRows{T},
+        algorithm, store_covariance::Bool
     ) where {T}
     nrows = length(rows.b)
     regularization_weight = sqrt(regularization)
@@ -530,8 +543,11 @@ function _fit_rbf(
     A = _qr_design_matrix(A, algorithm)
     b = vcat(rows.b, zeros(T, ncoefficients))
 
-    isempty(exact.b) &&
-        return LinearSolve.solve(LinearProblem(A, b), algorithm).u
+    if isempty(exact.b)
+        u = LinearSolve.solve(LinearProblem(A, b), algorithm).u
+        cov = store_covariance ? _qr_covariance(A, nrows, nothing, T) : nothing
+        return u, cov
+    end
 
     C = zeros(T, length(exact.b), ncoefficients)
     for (i, j, v) in zip(exact.I, exact.J, exact.V)
@@ -545,12 +561,24 @@ function _fit_rbf(
         throw(ArgumentError("exact boundary flux constraints are inconsistent"))
 
     nullspace_basis = nullspace(C)
-    size(nullspace_basis, 2) == 0 && return particular
+    if size(nullspace_basis, 2) == 0
+        cov = store_covariance ? zeros(T, ncoefficients, ncoefficients) : nothing
+        return particular, cov
+    end
     reduced = A * nullspace_basis
     correction = LinearSolve.solve(
         LinearProblem(reduced, b - A * particular), algorithm
     ).u
-    return particular + nullspace_basis * correction
+    u = particular + nullspace_basis * correction
+    cov = store_covariance ? _qr_covariance(A, nrows, nullspace_basis, T) : nothing
+    return u, cov
+end
+
+function _fit_rbf(
+        rows::_FitRows{T}, regularization, ncoefficients, exact::_FitRows{T}, algorithm
+    ) where {T}
+    u, _ = _fit_rbf_with_cov(rows, regularization, ncoefficients, exact, algorithm, false)
+    return u
 end
 
 function _validate_rz_positions(positions, domain, name)
@@ -637,7 +665,9 @@ evaluation outside it throws `DomainError`. Singular sources such as coil
 filaments cannot be represented and should lie outside the domain. The default
 current uncertainty is `1` A/m². Exact boundary constraints currently
 use a dense null-space reduction; pass boundary uncertainties for the scalable
-iterative path.
+iterative path. Pass `store_covariance = true` to store the frequentist parameter
+covariance in `field.diagnostics.coefficient_covariance` for use with
+[`field_covariance`](@ref).
 """
 function reconstruct_axisymmetric_field(
         positions::AbstractMatrix{<:Real}, B_observed::AbstractMatrix{<:Real};
@@ -653,7 +683,8 @@ function reconstruct_axisymmetric_field(
         vacuum_degree::Union{Nothing, Integer} = nothing,
         filament_positions = nothing,
         current_element_positions = nothing,
-        current_element_width = nothing
+        current_element_width = nothing,
+        store_covariance::Bool = false
     )
     size(positions, 2) == 2 ||
         throw(ArgumentError("positions must have columns (R, Z)"))
@@ -811,8 +842,9 @@ function reconstruct_axisymmetric_field(
     isempty(psi_rows.b) && isempty(exact_boundary_rows.b) &&
         throw(ArgumentError("poloidal or boundary constraints are required"))
     n_psi = ncenters + n_vacuum + n_filaments + size(elements, 1)
-    all_psi_coefficients = _fit_rbf(
-        psi_rows, T(regularization), n_psi, exact_boundary_rows, algorithm
+    all_psi_coefficients, psi_cov = _fit_rbf_with_cov(
+        psi_rows, T(regularization), n_psi, exact_boundary_rows,
+        algorithm, store_covariance
     )
     psi_coefficients = all_psi_coefficients[1:ncenters]
     vacuum_coefficients = all_psi_coefficients[(ncenters + 1):(ncenters + n_vacuum)]
@@ -820,8 +852,15 @@ function reconstruct_axisymmetric_field(
     filament_currents =
         all_psi_coefficients[(ncenters + n_vacuum + 1):n_external] ./ T(μ₀)
     element_currents = all_psi_coefficients[(n_external + 1):end] ./ T(μ₀)
-    toroidal_coefficients = isempty(toroidal_rows.b) ? zeros(T, ncenters) :
-        _fit_rbf(toroidal_rows, T(regularization), ncenters, _FitRows{T}(), algorithm)
+    if isempty(toroidal_rows.b)
+        toroidal_coefficients = zeros(T, ncenters)
+        tor_cov = store_covariance ? zeros(T, ncenters, ncenters) : nothing
+    else
+        toroidal_coefficients, tor_cov = _fit_rbf_with_cov(
+            toroidal_rows, T(regularization), ncenters, _FitRows{T}(),
+            algorithm, store_covariance
+        )
+    end
 
     n_pol = length(psi_rows.b)
     n_tor = length(toroidal_rows.b)
@@ -846,6 +885,8 @@ function reconstruct_axisymmetric_field(
         toroidal_rms = n_tor == 0 ? nothing : tor_norm / sqrt(n_tor),
         coefficient_count = n_psi + (n_tor == 0 ? 0 : ncenters),
         observation_count = total_obs,
+        coefficient_covariance = store_covariance ?
+            (; psi = psi_cov, toroidal = tor_cov) : nothing,
     )
 
     return AxisymmetricFieldReconstruction(
