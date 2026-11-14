@@ -15,6 +15,7 @@ end
     include("test_potential.jl")
     include("test_utils.jl")
     include("test_current_density.jl")
+    include("test_composition.jl")
     @testset "geometry" include("test_geometry.jl")
     @testset "equilibria" include("test_equilibria.jl")
     @testset "astrophysical" include("test_astrophysical.jl")

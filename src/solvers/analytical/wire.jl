@@ -52,6 +52,19 @@ end
     return field(SVector(x, y, z))
 end
 
+function current_density(field::InfiniteWire{T}, pos) where {T}
+    @boundscheck length(pos) >= 3 ||
+        throw(ArgumentError("Input must have at least 3 elements."))
+    (; I, r, center, direction) = field
+    r_pos = SVector{3, T}(pos[1], pos[2], pos[3]) - center
+    z_local = dot(r_pos, direction)
+    rho = norm(r_pos - z_local * direction)
+    if rho <= r && r > zero(T)
+        return (I / (T(π) * r^2)) * direction
+    end
+    return zero(SVector{3, T})
+end
+
 """
     CurrentLoopAnalytic{T} <: AbstractMagneticField
 
@@ -129,4 +142,9 @@ end
 # Make structs callable
 @inline function (field::CurrentLoopAnalytic)(r)
     return getB_loop(r, field.loop)
+end
+
+@inline function current_density(::CurrentLoopAnalytic{T}, pos) where {T}
+    R = promote_type(T, eltype(pos))
+    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
 end

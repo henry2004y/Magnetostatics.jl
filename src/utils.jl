@@ -208,6 +208,28 @@ function image_source(source::Wire{T}, bc::ConductingWall) where {T}
     return Wire{T}(reflected, -source.current)
 end
 
+function image_source(loop::CurrentLoop{T}, bc::ConductingWall) where {T}
+    ax = bc.axis
+    wall = T(bc.position)
+    c = SVector{3, T}(ntuple(i -> i == ax ? 2 * wall - loop.center[i] : loop.center[i], 3))
+    n = SVector{3, T}(ntuple(i -> i == ax ? -loop.normal[i] : loop.normal[i], 3))
+    return _current_loop_unchecked(loop.radius, loop.current, c, n)
+end
+
+function image_source(ms::MultiSource{<:Tuple}, bc::ConductingWall)
+    return MultiSource(map(s -> image_source(s, bc), ms.sources))
+end
+
+function image_source(ms::MultiSource{<:AbstractVector}, bc::ConductingWall)
+    return MultiSource([image_source(s, bc) for s in ms.sources])
+end
+
+function image_source(
+        sources::AbstractVector{<:AbstractCurrentSource}, bc::ConductingWall
+    )
+    return [image_source(s, bc) for s in sources]
+end
+
 """
     compute_curl!(B, A, xs, ys, zs)
 

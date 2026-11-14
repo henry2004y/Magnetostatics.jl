@@ -23,9 +23,13 @@ include("solvers/reconstruction3d.jl")
 include("solvers/grad_shafranov.jl")
 include("geometry.jl")
 include("utils.jl")
+include("composition.jl")
+include("grid_field.jl")
 
 # Core types
 export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, AbstractBoundary
+export CompositeField, ScaledField, TransformedField, GridMagneticField
+export translate_field, rotate_field
 # Solvers
 export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, DSTFactorization, solve
 export multipole_boundary
@@ -39,7 +43,8 @@ export vector_potential, current_density, compute_curl!, compute_curl
 export b_unit, field_magnitude, grad_b, magnetic_curvature, drift_velocities,
     mirror_ratio, loss_cone_angle, magnetic_helicity
 # Source geometries
-export Wire, CurrentLoop, TorusKnot, TrefoilKnot, InfiniteWire, SurfaceCurrentMesh
+export Wire, CurrentLoop, TorusKnot, TrefoilKnot, InfiniteWire, SurfaceCurrentMesh,
+    MultiSource
 # Analytical fields
 export HarrisSheet, AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarrisSheet,
     FadeevIsland, Dipole, CurrentLoopAnalytic, UniformField, NullField

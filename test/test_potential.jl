@@ -84,6 +84,10 @@ using LinearAlgebra
         B_exact = dipole(r_check)
 
         @test isapprox(B_numeric, B_exact, rtol = 1.0e-3)
+
+        # Off-center dipole
+        d_off = Dipole(M, SVector(0.2, -0.3, 0.1))
+        @test isapprox(curl_A(solverA, d_off, r_check), d_off(r_check), rtol = 1.0e-3)
     end
 
     @testset "CurrentLoop" begin

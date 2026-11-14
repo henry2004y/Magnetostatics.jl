@@ -53,13 +53,21 @@ Compute vector potential A for a magnetic dipole.
 A = (mu0 / 4pi) * (m x r) / r^3
 """
 function solve(::VectorPotential, source::Dipole{T}, r) where {T}
-    r_vec = SVector{3}(r)
+    r_vec = SVector{3}(
+        r[1] - source.center[1], r[2] - source.center[2], r[3] - source.center[3]
+    )
     r_mag = norm(r_vec)
+    FT = promote_type(T, eltype(r_vec))
+    FT_float = FT <: AbstractFloat ? FT : Float64
     if r_mag < 1.0e-10
-        return @SVector zeros(T, 3)
-    else
-        return (μ0_4π / r_mag^3) * cross(source.M, r_vec)
+        return zero(SVector{3, FT_float})
     end
+    return (FT_float(μ0_4π) / r_mag^3) * cross(source.M, r_vec)
+end
+
+@inline function _logcosh(x::T) where {T}
+    ax = abs(x)
+    return ax + log1p(exp(-2 * ax)) - log(T(2))
 end
 
 """
@@ -70,10 +78,186 @@ A = (0, -B0 * L * log(cosh(z/L)), 0)
 """
 function solve(::VectorPotential, field::HarrisSheet{T}, r) where {T}
     z, L, B0 = r[3], field.L, field.B0
-    z_norm = abs(z / L)
-    # Stable implementation of log(cosh(x))
-    val = z_norm + log1p(exp(-2 * z_norm)) - log(T(2))
-    return SVector(zero(T), -B0 * L * val, zero(T))
+    return SVector(zero(T), -B0 * L * _logcosh(z / L), zero(T))
+end
+
+function solve(::VectorPotential, field::AsymmetricHarrisSheet{T}, r) where {T}
+    z = r[3]
+    (; B1, B2, L) = field
+    ay = -((B1 + B2) / 2) * z - ((B1 - B2) / 2) * L * _logcosh(z / L)
+    return SVector(zero(T), ay, zero(T))
+end
+
+function solve(::VectorPotential, field::ForceFreeHarrisSheet{T}, r) where {T}
+    z = r[3]
+    (; B0, L) = field
+    ax = 2 * B0 * L * atan(tanh(z / (2 * L)))
+    ay = -B0 * L * _logcosh(z / L)
+    return SVector(ax, ay, zero(T))
+end
+
+function solve(::VectorPotential, field::BifurcatedHarrisSheet{T}, r) where {T}
+    z = r[3]
+    (; B0, L, d) = field
+    ay = -(B0 * L / 2) * (_logcosh((z - d) / L) + _logcosh((z + d) / L))
+    return SVector(zero(T), ay, zero(T))
+end
+
+function solve(::VectorPotential, field::FadeevIsland{T}, r) where {T}
+    x, z = r[1], r[3]
+    (; B0, L, Lx, ε) = field
+    az = abs(z / L)
+    lval = az + log(T(0.5) * (one(T) + exp(-2 * az)) + exp(-az) * ε * cos(x / Lx))
+    return SVector(zero(T), B0 * L * lval, zero(T))
+end
+
+function solve(::VectorPotential, field::GuideFieldHarrisSheet{T}, r) where {T}
+    x, z = r[1], r[3]
+    (; B0, L, Bg, Bn) = field
+    ay = -B0 * L * _logcosh(z / L) + Bn * x
+    ax = Bg * z
+    return SVector(ax, ay, zero(T))
+end
+
+function solve(::VectorPotential, field::InfiniteWire{T}, r) where {T}
+    (; I, center, direction) = field
+    a = field.r
+    r_pos = SVector{3, T}(r[1], r[2], r[3]) - center
+    z_local = dot(r_pos, direction)
+    rho = norm(r_pos - z_local * direction)
+    rho < 1.0e-15 && return zero(SVector{3, T})
+    mu0_4pi_I = T(μ0_4π) * I
+    a_par = rho <= a ? -mu0_4pi_I * (rho / a)^2 : -mu0_4pi_I * (one(T) + 2 * log(rho / a))
+    return a_par * direction
+end
+
+function solve(solver::VectorPotential, field::CurrentLoopAnalytic, r)
+    return solve(solver, field.loop, r)
+end
+
+function solve(solver::VectorPotential, field::MagneticMirror{T}, r) where {T}
+    (; distance, radius, current, center, normal) = field
+    c1 = center - T(0.5) * distance * normal
+    c2 = center + T(0.5) * distance * normal
+    cl1 = _current_loop_unchecked(radius, current, c1, normal)
+    cl2 = _current_loop_unchecked(radius, current, c2, normal)
+    return solve(solver, cl1, r) + solve(solver, cl2, r)
+end
+
+function solve(solver::VectorPotential, field::MagneticBottle{T}, r) where {T}
+    (; distance, radius_side, radius_center, current_side, current_center, center, normal) =
+        field
+    half_d = T(0.5) * distance * normal
+    cl1 = _current_loop_unchecked(radius_side, current_side, center - half_d, normal)
+    cl2 = _current_loop_unchecked(radius_side, current_side, center + half_d, normal)
+    cl3 = _current_loop_unchecked(radius_center, current_center, center, normal)
+    return solve(solver, cl1, r) + solve(solver, cl2, r) + solve(solver, cl3, r)
+end
+
+function solve(::VectorPotential, field::ZPinch{T}, r) where {T}
+    x = r[1] - field.center[1]
+    y = r[2] - field.center[2]
+    rho = hypot(x, y)
+    (; I, a) = field
+    mu0_4pi_I = T(μ0_4π) * I
+    az = if rho <= a
+        -mu0_4pi_I * (rho / a)^2
+    else
+        -mu0_4pi_I * (one(T) + 2 * log(rho / a))
+    end
+    return SVector{3, T}(zero(T), zero(T), az)
+end
+
+function solve(::VectorPotential, field::TaylorState{T}, r) where {T}
+    return inv(field.alpha) * field(r)
+end
+
+function solve(solver::VectorPotential, field::ScrewPinch{T}, r) where {T}
+    x = r[1] - field.center[1]
+    y = r[2] - field.center[2]
+    az = solve(solver, ZPinch(field.I, field.a; center = field.center), r)[3]
+    half_bz = T(0.5) * field.Bz0
+    return SVector{3, T}(-half_bz * y, half_bz * x, az)
+end
+
+function solve(::VectorPotential, field::SolovevEquilibrium{T}, r) where {T}
+    x, y = r[1], r[2]
+    R = hypot(x, y)
+    R < 1.0e-10 && return zero(SVector{3, T})
+    A_phi = poloidal_flux(field, r) / R
+    A_Z = -field.R0 * field.B0 * log(R / field.R0)
+    inv_R = inv(R)
+    return SVector{3, T}(-A_phi * y * inv_R, A_phi * x * inv_R, A_Z)
+end
+
+function solve(::VectorPotential, field::GoldHoyleFluxTube{T}, r) where {T}
+    x = r[1] - field.center[1]
+    y = r[2] - field.center[2]
+    rho = hypot(x, y)
+    rho < 1.0e-15 && return zero(SVector{3, T})
+    (; B0, tau) = field
+    u = tau * rho
+    u2 = u * u
+    if abs(u) < T(1.0e-5)
+        a_theta = T(0.5) * B0 * rho * (one(T) - T(0.5) * u2)
+        az = -T(0.5) * B0 * tau * rho * rho * (one(T) - T(0.5) * u2)
+    else
+        lval = log1p(u2)
+        a_theta = (B0 / (2 * tau * u)) * lval
+        az = -(B0 / (2 * tau)) * lval
+    end
+    inv_r = inv(rho)
+    return SVector{3, T}(-a_theta * y * inv_r, a_theta * x * inv_r, az)
+end
+
+function solve(::VectorPotential, field::ParkerSpiral{T}, r) where {T}
+    rx = r[1] - field.center[1]
+    ry = r[2] - field.center[2]
+    rz = r[3] - field.center[3]
+    rmag = sqrt(rx^2 + ry^2 + rz^2)
+    rho = hypot(rx, ry)
+    rmag < 1.0e-10 && return zero(SVector{3, T})
+    rho < 1.0e-15 && return zero(SVector{3, T})
+    (; B0, r0, v_sw, Omega) = field
+    sin_theta = rho / rmag
+    cos_theta = rz / rmag
+    a_theta = -(B0 * r0^2 * Omega / v_sw) *
+        ((rmag - r0 - r0 * log(rmag / r0)) / rmag) * sin_theta
+    denom = one(T) + cos_theta
+    a_phi = if denom > T(1.0e-12)
+        B0 * r0^2 * sin_theta / (rmag * denom)
+    else
+        B0 * r0^2 * (one(T) - cos_theta) / (rmag * sin_theta)
+    end
+    inv_rho = inv(rho)
+    cos_phi, sin_phi = rx * inv_rho, ry * inv_rho
+    return SVector{3, T}(
+        a_theta * cos_theta * cos_phi - a_phi * sin_phi,
+        a_theta * cos_theta * sin_phi + a_phi * cos_phi,
+        -a_theta * sin_theta
+    )
+end
+
+function solve(solver::VectorPotential, field::FLARECoils{T}, r) where {T}
+    (; R_pf, z_pf, I_pf, R_ef, z_ef, I_ef, R_p, I_p) = field
+    z_hat = SVector(zero(T), zero(T), one(T))
+    cl_pf_up = _current_loop_unchecked(R_pf, I_pf, SVector(zero(T), zero(T), z_pf), z_hat)
+    cl_pf_dn = _current_loop_unchecked(R_pf, I_pf, SVector(zero(T), zero(T), -z_pf), z_hat)
+    A = solve(solver, cl_pf_up, r) + solve(solver, cl_pf_dn, r)
+    if abs(I_ef) > 0.0
+        cl_ef_up = _current_loop_unchecked(
+            R_ef, I_ef, SVector(zero(T), zero(T), z_ef), z_hat
+        )
+        cl_ef_dn = _current_loop_unchecked(
+            R_ef, I_ef, SVector(zero(T), zero(T), -z_ef), z_hat
+        )
+        A += solve(solver, cl_ef_up, r) + solve(solver, cl_ef_dn, r)
+    end
+    if abs(I_p) > 0.0
+        cl_p = _current_loop_unchecked(R_p, I_p, SVector(zero(T), zero(T), zero(T)), z_hat)
+        A += solve(solver, cl_p, r)
+    end
+    return A
 end
 
 """
@@ -159,6 +343,44 @@ function solve(solver::VectorPotential{ConductingWall}, source::Wire{T}, r) wher
     img = image_source(source, solver.bc)
     A_image = solve(VectorPotential(), img, r)
     return A_direct + A_image
+end
+
+function solve(
+        solver::VectorPotential{ConductingWall}, source::CurrentLoop{T}, r
+    ) where {T}
+    A_direct = solve(VectorPotential(), source, r)
+    img = image_source(source, solver.bc)
+    A_image = solve(VectorPotential(), img, r)
+    return A_direct + A_image
+end
+
+@inline function _sum_vp_tuple(solver::VectorPotential, ::Tuple{}, r)
+    return zero(SVector{3, Float64})
+end
+@inline function _sum_vp_tuple(solver::VectorPotential, sources::Tuple{S}, r) where {S}
+    return solve(solver, sources[1], r)
+end
+@inline function _sum_vp_tuple(solver::VectorPotential, sources::Tuple, r)
+    return solve(solver, sources[1], r) + _sum_vp_tuple(solver, Base.tail(sources), r)
+end
+
+function solve(solver::VectorPotential, ms::MultiSource{<:Tuple}, r)
+    return _sum_vp_tuple(solver, ms.sources, r)
+end
+
+function solve(solver::VectorPotential, ms::MultiSource{<:AbstractVector}, r)
+    return solve(solver, ms.sources, r)
+end
+
+function solve(
+        solver::VectorPotential, sources::AbstractVector{<:AbstractCurrentSource}, r
+    )
+    isempty(sources) && return zero(SVector{3, Float64})
+    acc = solve(solver, sources[1], r)
+    for i in 2:length(sources)
+        acc += solve(solver, sources[i], r)
+    end
+    return acc
 end
 
 function (solver::VectorPotential)(source, r)

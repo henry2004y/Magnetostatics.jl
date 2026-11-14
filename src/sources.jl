@@ -118,3 +118,19 @@ A convenience constructor for a (2,3) torus knot, also known as a trefoil knot.
 function TrefoilKnot(R, r, current, center = [0, 0, 0], normal = [0, 0, 1], up = [1, 0, 0])
     return TorusKnot(R, r, 2, 3, current, center, normal, up)
 end
+
+"""
+    MultiSource{S} <: AbstractCurrentSource
+
+Container grouping multiple `AbstractCurrentSource` objects (as a heterogeneous `Tuple` or
+`AbstractVector`) so solvers such as `BiotSavart`, `VectorPotential`, and
+`compute_surface_current` evaluate their combined field cleanly without concatenating wires.
+"""
+struct MultiSource{S} <: AbstractCurrentSource
+    sources::S
+end
+
+MultiSource(sources::AbstractCurrentSource...) = MultiSource{typeof(sources)}(sources)
+function MultiSource(sources::AbstractVector{<:AbstractCurrentSource})
+    return MultiSource{typeof(sources)}(sources)
+end

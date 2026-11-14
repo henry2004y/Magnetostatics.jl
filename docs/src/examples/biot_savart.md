@@ -161,11 +161,8 @@ loop_p  = discretize_loop(R_coil, 200, I_coil;
 loop_m  = discretize_loop(R_coil, 200, I_coil;
               center=SVector(0.0, 0.0, -R_coil/2), normal=SVector(0.0, 0.0, 1.0))
 
-# Combine into a single Wire for the BEM (concatenate segments)
-helmholtz = Wire(
-    vcat(loop_p.points, loop_m.points),
-    I_coil
-)
+# Combine the two separate loops without adding an artificial connecting segment
+helmholtz = MultiSource(loop_p, loop_m)
 
 # --- BEM solve for the conducting sphere ---
 bc   = ConductingSphere(SVector(0.0, 0.0, 0.0), R, 32, 64)

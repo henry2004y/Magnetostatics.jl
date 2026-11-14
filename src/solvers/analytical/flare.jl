@@ -107,38 +107,9 @@ end
     return B
 end
 
-function vector_potential(field::FLARECoils{T}, pos) where {T}
-    (; R_pf, z_pf, I_pf, R_ef, z_ef, I_ef, R_p, I_p) = field
-    solver = VectorPotential()
-    z_hat = SVector(zero(T), zero(T), one(T))
-
-    cl_pf_up = _current_loop_unchecked(
-        R_pf, I_pf, SVector(zero(T), zero(T), z_pf), z_hat
-    )
-    cl_pf_dn = _current_loop_unchecked(
-        R_pf, I_pf, SVector(zero(T), zero(T), -z_pf), z_hat
-    )
-
-    A = solve(solver, cl_pf_up, pos) + solve(solver, cl_pf_dn, pos)
-
-    if abs(I_ef) > 0.0
-        cl_ef_up = _current_loop_unchecked(
-            R_ef, I_ef, SVector(zero(T), zero(T), z_ef), z_hat
-        )
-        cl_ef_dn = _current_loop_unchecked(
-            R_ef, I_ef, SVector(zero(T), zero(T), -z_ef), z_hat
-        )
-        A += solve(solver, cl_ef_up, pos) + solve(solver, cl_ef_dn, pos)
-    end
-
-    if abs(I_p) > 0.0
-        cl_p = _current_loop_unchecked(
-            R_p, I_p, SVector(zero(T), zero(T), zero(T)), z_hat
-        )
-        A += solve(solver, cl_p, pos)
-    end
-
-    return A
+function current_density(::FLARECoils{T}, pos) where {T}
+    R = promote_type(T, eltype(pos))
+    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
 end
 
 """

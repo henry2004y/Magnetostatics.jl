@@ -46,6 +46,10 @@ struct NullField <: AbstractMagneticField end
 
 (::NullField)(r::AbstractVector{T}) where {T} = zero(SVector{3, T})
 (::NullField)(x, y, z) = zero(SVector{3, promote_type(typeof(x), typeof(y), typeof(z))})
+@inline current_density(::NullField, r::AbstractVector{T}) where {T} = zero(SVector{3, T})
+@inline function current_density(::NullField, r)
+    return zero(SVector{3, Float64})
+end
 
 """
     vector_potential(field::AbstractMagneticField, r)

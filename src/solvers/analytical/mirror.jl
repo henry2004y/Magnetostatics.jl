@@ -44,6 +44,11 @@ end
     return getB_loop(r, cl1) + getB_loop(r, cl2)
 end
 
+@inline function current_density(::MagneticMirror{T}, pos) where {T}
+    R = promote_type(T, eltype(pos))
+    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
+end
+
 """
     getB_mirror(x, y, z, distance, a, I1) -> SVector{3}
     getB_mirror(r, distance, a, I1; center=[0,0,0], normal=[0,0,1]) -> SVector{3}
@@ -112,6 +117,11 @@ end
     cl2 = _current_loop_unchecked(radius_side, current_side, center + half_d, normal)
     cl3 = _current_loop_unchecked(radius_center, current_center, center, normal)
     return getB_loop(r, cl1) + getB_loop(r, cl2) + getB_loop(r, cl3)
+end
+
+@inline function current_density(::MagneticBottle{T}, pos) where {T}
+    R = promote_type(T, eltype(pos))
+    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
 end
 
 """

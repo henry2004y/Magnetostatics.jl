@@ -68,6 +68,31 @@ end
     return Br * r_hat + Bphi * phi_hat
 end
 
+function current_density(field::ParkerSpiral{T}, pos) where {T}
+    rx = pos[1] - field.center[1]
+    ry = pos[2] - field.center[2]
+    rz = pos[3] - field.center[3]
+    r = sqrt(rx^2 + ry^2 + rz^2)
+    r < 1.0e-10 && return zero(SVector{3, T})
+    (; B0, r0, v_sw, Omega) = field
+    rho = hypot(rx, ry)
+    sin_theta = rho / r
+    cos_theta = rz / r
+    pref = B0 * r0^2 * Omega / (T(μ₀) * v_sw * r^3)
+    jr = -2 * pref * (r - r0) * cos_theta
+    jtheta = pref * r0 * sin_theta
+    inv_r = inv(r)
+    r_hat = SVector{3, T}(rx * inv_r, ry * inv_r, rz * inv_r)
+    if rho < 1.0e-15
+        return jr * r_hat
+    end
+    inv_rho = inv(rho)
+    theta_hat = SVector{3, T}(
+        cos_theta * rx * inv_rho, cos_theta * ry * inv_rho, -sin_theta
+    )
+    return jr * r_hat + jtheta * theta_hat
+end
+
 """
     GuideFieldHarrisSheet{T} <: AbstractMagneticField
 
@@ -108,16 +133,6 @@ function current_density(field::GuideFieldHarrisSheet{T}, pos) where {T}
     (; B0, L) = field
     jy = (B0 / (T(μ₀) * L)) * sech(z / L)^2
     return SVector{3, T}(zero(T), jy, zero(T))
-end
-
-function vector_potential(field::GuideFieldHarrisSheet{T}, pos) where {T}
-    x, z = pos[1], pos[3]
-    (; B0, L, Bg, Bn) = field
-    z_norm = abs(z / L)
-    val = z_norm + log1p(exp(-2 * z_norm)) - log(T(2))
-    ay = -B0 * L * val + Bn * x
-    ax = -Bg * z
-    return SVector{3, T}(ax, ay, zero(T))
 end
 
 """
@@ -164,4 +179,11 @@ end
     by = b_theta * (x * inv_r)
 
     return SVector{3, T}(bx, by, bz)
+end
+
+function current_density(field::GoldHoyleFluxTube{T}, pos) where {T}
+    x = pos[1] - field.center[1]
+    y = pos[2] - field.center[2]
+    denom = one(T) + (field.tau * hypot(x, y))^2
+    return (2 * field.tau / (T(μ₀) * denom)) * field(pos)
 end

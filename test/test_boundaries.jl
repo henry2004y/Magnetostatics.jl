@@ -84,4 +84,53 @@ end
     @test max_residual / B_peak < 0.05
 end
 
+@testset "MultiSource, Loop Wall Image, PeriodicBoundary and Filament Softening" begin
+    let l1 = CurrentLoop(0.8, 12.0, SA[0.0, 0.0, 0.4], SA[0.0, 0.0, 1.0]),
+            l2 = CurrentLoop(0.8, 12.0, SA[0.0, 0.0, -0.4], SA[0.0, 0.0, 1.0]),
+            ms = MultiSource(l1, l2),
+            w1 = discretize_loop(l1, 160),
+            w2 = discretize_loop(l2, 160),
+            r = SVector(0.25, -0.15, 0.1)
+        @test solve(BiotSavart(), ms, r) ≈ getB_loop(r, l1) + getB_loop(r, l2)
+        @test solve(BiotSavart(), [l1, l2], r) ≈ getB_loop(r, l1) + getB_loop(r, l2)
+        @test solve(VectorPotential(), ms, r) ≈
+            solve(VectorPotential(), l1, r) + solve(VectorPotential(), l2, r)
+
+        # ConductingWall image for CurrentLoop matches discretized Wire image
+        wall = ConductingWall(3, 0.0)
+        solver_w = BiotSavart(wall)
+        @test abs(solve(solver_w, l1, SVector(0.3, -0.2, 0.0))[3]) < 1.0e-12
+        @test solve(solver_w, l1, SVector(0.3, -0.2, 0.7)) ≈
+            solve(solver_w, w1, SVector(0.3, -0.2, 0.7)) rtol = 1.0e-3
+
+        # Tilted loop perpendicular to wall
+        l_tilt = CurrentLoop(0.5, 5.0, SA[0.0, 0.0, 0.8], SA[1.0, 0.2, 0.3])
+        @test abs(solve(solver_w, l_tilt, SVector(0.1, 0.4, 0.0))[3]) < 1.0e-12
+
+        # PeriodicBoundary sums explicit lattice images
+        pbc = PeriodicBoundary((2.0, 2.0, 0.0); n_images = (1, 1, 0))
+        B_pbc = solve(BiotSavart(pbc), ms, r)
+        B_manual = sum(
+            solve(BiotSavart(), ms, r - SVector(2.0 * kx, 2.0 * ky, 0.0))
+                for kx in -1:1, ky in -1:1
+        )
+        @test B_pbc ≈ B_manual
+
+        # Finite-core filament softening eliminates on-wire singularity
+        straight = Wire([SA[0.0, 0.0, -5.0], SA[0.0, 0.0, 5.0]], 10.0)
+        bs_soft = BiotSavart(; core_radius = 0.05)
+        @test solve(bs_soft, straight, SA[0.0, 0.0, 0.0]) == SVector(0.0, 0.0, 0.0)
+        B_core = solve(bs_soft, straight, SA[0.05, 0.0, 0.0])
+        @test isapprox(
+            B_core[2], Magnetostatics.μ₀ * 10.0 / (4 * π * 0.05); rtol = 1.0e-3
+        )
+        @test all(isfinite, solve(bs_soft, l1, SA[0.8, 0.0, 0.4]))
+
+        # ConductingSphere BEM accepts MultiSource directly
+        bc_s = ConductingSphere(SA[0.0, 0.0, 0.0], 0.2, 8, 16)
+        mesh_ms = compute_surface_current(bc_s, [w1, w2])
+        @test length(mesh_ms.centers) == 8 * 16
+    end
+end
+
 end # module test_boundaries

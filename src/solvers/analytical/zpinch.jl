@@ -42,22 +42,6 @@ function current_density(field::ZPinch{T}, pos) where {T}
     return SVector{3, T}(zero(T), zero(T), jz)
 end
 
-function vector_potential(field::ZPinch{T}, pos) where {T}
-    x = pos[1] - field.center[1]
-    y = pos[2] - field.center[2]
-    r = hypot(x, y)
-    (; I, a) = field
-    mu0_4pi_I = T(μ0_4π) * I
-
-    az = if r <= a
-        -mu0_4pi_I * (r / a)^2
-    else
-        -mu0_4pi_I * (one(T) + 2 * log(r / a))
-    end
-
-    return SVector{3, T}(zero(T), zero(T), az)
-end
-
 """
     getB_zpinch(x, y, z, I, a) -> SVector{3}
     getB_zpinch(r, I, a) -> SVector{3}
