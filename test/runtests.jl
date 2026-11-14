@@ -18,6 +18,7 @@ end
     include("test_composition.jl")
     @testset "geometry" include("test_geometry.jl")
     @testset "equilibria" include("test_equilibria.jl")
+    @testset "solenoid and magnets" include("test_solenoid_magnets.jl")
     @testset "astrophysical" include("test_astrophysical.jl")
     @testset "flare" include("test_flare.jl")
     @testset "knot" include("test_knot.jl")

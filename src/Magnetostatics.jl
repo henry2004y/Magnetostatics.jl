@@ -57,7 +57,8 @@ export AnalyticalMagnetosphere, draped_imf_field,
     ZPinch, getB_zpinch,
     SolovevEquilibrium, poloidal_flux, TaylorState, ScrewPinch,
     ParkerSpiral, GuideFieldHarrisSheet, GoldHoyleFluxTube,
-    FLARECoils
+    FLARECoils, Solenoid, HelmholtzCoil, AntiHelmholtzCoil,
+    SphereMagnet, CylinderMagnet, CuboidMagnet
 
 
 # Utilities

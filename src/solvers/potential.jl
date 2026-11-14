@@ -260,6 +260,43 @@ function solve(solver::VectorPotential, field::FLARECoils{T}, r) where {T}
     return A
 end
 
+function solve(::VectorPotential, field::Solenoid{T}, pos) where {T}
+    rho_vec, rho, z_loc = _solenoid_local_cyl(field, pos)
+    (; radius, length, current, thickness, normal) = field
+    rho <= T(1.0e-12) * radius && return zero(SVector{3, T})
+    if thickness <= zero(T)
+        a_phi = _solenoid_sheet_a_phi(radius, length, current, rho, z_loc)
+    else
+        a_phi = _solenoid_thick_a_phi(radius, length, current, thickness, rho, z_loc)
+    end
+    rho_hat = rho_vec / rho
+    phi_hat = cross(normal, rho_hat)
+    return a_phi * phi_hat
+end
+
+@inline function solve(solver::VectorPotential, field::AntiHelmholtzCoil, r)
+    return solve(solver, field.loop1, r) + solve(solver, field.loop2, r)
+end
+
+@inline function solve(::VectorPotential, field::SphereMagnet{T}, r) where {T}
+    @boundscheck length(r) >= 3 ||
+        throw(ArgumentError("Input must have at least 3 elements."))
+    @inbounds r_rel = SVector{3, T}(
+        r[1] - field.center[1], r[2] - field.center[2], r[3] - field.center[3]
+    )
+    rmag = norm(r_rel)
+    (; M, radius) = field
+    if rmag <= radius
+        return (T(μ₀) / T(3)) * cross(M, r_rel)
+    end
+    m = (T(4) / T(3)) * T(π) * radius^3 * M
+    return (T(μ0_4π) / rmag^3) * cross(m, r_rel)
+end
+
+@inline function solve(solver::VectorPotential, field::CylinderMagnet, r)
+    return solve(solver, field._solenoid, r)
+end
+
 """
     solve(solver::VectorPotential, field::UniformField, r)
 
