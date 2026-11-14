@@ -46,13 +46,13 @@ using LinearSolve: QRFactorization
     current_positions = [0.6 -0.3; 0.9 0.2; 1.1 -0.1]
     current_values = [
         begin
-            delta_star = last(
-                Magnetostatics._rbf_terms(
-                    R, Z, centers, length_scale, :gaussian
+                delta_star = last(
+                    Magnetostatics._rbf_terms(
+                        R, Z, centers, length_scale, :gaussian
+                    )
                 )
-            )
-            -dot(delta_star, true_field.psi_coefficients) / (Magnetostatics.μ₀ * R)
-        end for (R, Z) in eachrow(current_positions)
+                -dot(delta_star, true_field.psi_coefficients) / (Magnetostatics.μ₀ * R)
+            end for (R, Z) in eachrow(current_positions)
     ]
 
     reconstructed = reconstruct_axisymmetric_field(
@@ -66,9 +66,9 @@ using LinearSolve: QRFactorization
 
     @test all(
         isapprox(
-            reconstructed(SVector(R, 0.0, Z)), true_field(SVector(R, 0.0, Z));
-            rtol = 1.0e-7, atol = 1.0e-9
-        )
+                reconstructed(SVector(R, 0.0, Z)), true_field(SVector(R, 0.0, Z));
+                rtol = 1.0e-7, atol = 1.0e-9
+            )
             for (R, Z) in positions
     )
 
@@ -113,13 +113,13 @@ using LinearSolve: QRFactorization
     )
     @test all(
         isapprox(
-            poloidal_flux(
-                boundary_only, SVector(
-                    boundary_positions[i, 1], 0.0,
-                    boundary_positions[i, 2]
-                )
-            ), boundary_values[i]; atol = 1.0e-12
-        ) for i in eachindex(boundary_values)
+                poloidal_flux(
+                    boundary_only, SVector(
+                        boundary_positions[i, 1], 0.0,
+                        boundary_positions[i, 2]
+                    )
+                ), boundary_values[i]; atol = 1.0e-12
+            ) for i in eachindex(boundary_values)
     )
 
     soft_boundary = reconstruct_axisymmetric_field(
@@ -484,6 +484,46 @@ end
         positions, zeros(4, 3); kw...,
         current_element_positions = [0.8 0.0], current_element_width = -1.0
     )
+end
+
+@testset "Axisymmetric zero-allocation query and diagnostics" begin
+    let
+        dom = (0.4, 1.3, -0.6, 0.6)
+        centers_2d = zeros(16, 2)
+        idx = 0
+        for R in range(0.45, 1.25; length = 4), Z in range(-0.5, 0.5; length = 4)
+            idx += 1
+            centers_2d[idx, 1] = R
+            centers_2d[idx, 2] = Z
+        end
+        loop_src = CurrentLoop(0.3, 1.0e4, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
+        pts = zeros(20, 2)
+        Bs = zeros(20, 3)
+        p = 0
+        for R in range(0.5, 1.2; length = 5), Z in range(-0.4, 0.4; length = 4)
+            p += 1
+            pts[p, 1] = R
+            pts[p, 2] = Z
+            B = getB_loop(SVector(R, 0.0, Z), loop_src)
+            Bs[p, 1] = B[1]
+            Bs[p, 2] = B[2]
+            Bs[p, 3] = B[3]
+        end
+        fit_wend = reconstruct_axisymmetric_field(
+            pts, Bs; domain = dom, length_scale = 0.35, basis_centers = centers_2d,
+            kernel = :wendland_c2, regularization = 1.0e-8
+        )
+        rq = SVector(0.85, 0.15, 0.1)
+        eval_B(f, r) = (f(r); @allocated f(r))
+        eval_J(f, r) = (current_density(f, r); @allocated current_density(f, r))
+        eval_psi(f, r) = (poloidal_flux(f, r); @allocated poloidal_flux(f, r))
+        @test eval_B(fit_wend, rq) == 0
+        @test eval_J(fit_wend, rq) == 0
+        @test eval_psi(fit_wend, rq) == 0
+        @test fit_wend.diagnostics !== nothing
+        @test fit_wend.diagnostics.observation_count == size(pts, 1) * 3
+        @test isfinite(fit_wend.diagnostics.weighted_rms)
+    end
 end
 
 end # module test_reconstruction

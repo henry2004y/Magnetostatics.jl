@@ -11,7 +11,53 @@ fit independently when toroidal measurements are supplied.
 Unlike [`FieldReconstruction3D`](@ref), this model assumes azimuthal symmetry
 about the z axis and fits cylindrical probe components on an `(R, Z)` domain.
 """
-struct AxisymmetricFieldReconstruction{T} <: AbstractMagneticField
+struct _GridBins2D
+    origin::NTuple{2, Int}
+    dims::NTuple{2, Int}
+    offsets::Vector{Int}
+    indices::Vector{Int}
+end
+
+function _to_grid_bins_2d(bins::Dict{Tuple{Int, Int}, Vector{Int}})
+    isempty(bins) && return _GridBins2D((0, 0), (0, 0), Int[1], Int[])
+    min_r, min_z = typemax(Int), typemax(Int)
+    max_r, max_z = typemin(Int), typemin(Int)
+    total = 0
+    for (cell, vec) in bins
+        cr, cz = cell
+        cr < min_r && (min_r = cr); cr > max_r && (max_r = cr)
+        cz < min_z && (min_z = cz); cz > max_z && (max_z = cz)
+        total += length(vec)
+    end
+    origin = (min_r, min_z)
+    dims = (max_r - min_r + 1, max_z - min_z + 1)
+    nr, _ = dims
+    ncells = nr * dims[2]
+    counts = zeros(Int, ncells)
+    for (cell, vec) in bins
+        cidx = (cell[2] - min_z) * nr + (cell[1] - min_r) + 1
+        @inbounds counts[cidx] += length(vec)
+    end
+    offsets = Vector{Int}(undef, ncells + 1)
+    offsets[1] = 1
+    @inbounds for c in 1:ncells
+        offsets[c + 1] = offsets[c] + counts[c]
+    end
+    indices = Vector{Int}(undef, total)
+    fill!(counts, 0)
+    for (cell, vec) in bins
+        cidx = (cell[2] - min_z) * nr + (cell[1] - min_r) + 1
+        pos = offsets[cidx] + counts[cidx]
+        @inbounds for v in vec
+            indices[pos] = v
+            pos += 1
+        end
+        counts[cidx] += length(vec)
+    end
+    return _GridBins2D(origin, dims, offsets, indices)
+end
+
+struct AxisymmetricFieldReconstruction{T, D} <: AbstractMagneticField
     centers::Matrix{T}
     psi_coefficients::Vector{T}
     toroidal_coefficients::Vector{T}
@@ -19,6 +65,7 @@ struct AxisymmetricFieldReconstruction{T} <: AbstractMagneticField
     domain::NTuple{4, T}
     kernel::Symbol
     center_bins::Dict{Tuple{Int, Int}, Vector{Int}}
+    grid_bins::_GridBins2D
     vacuum_coefficients::Vector{T}
     vacuum_degree::Int
     vacuum_scale::T
@@ -27,6 +74,7 @@ struct AxisymmetricFieldReconstruction{T} <: AbstractMagneticField
     element_positions::Matrix{T}
     element_currents::Vector{T}
     element_width::T
+    diagnostics::D
 end
 
 function AxisymmetricFieldReconstruction(
@@ -36,8 +84,25 @@ function AxisymmetricFieldReconstruction(
     ) where {T}
     return AxisymmetricFieldReconstruction(
         centers, psi_coefficients, toroidal_coefficients, length_scale, domain,
-        kernel, center_bins, T[], -1, one(T), zeros(T, 0, 2), T[],
-        zeros(T, 0, 2), T[], one(T)
+        kernel, center_bins, _to_grid_bins_2d(center_bins), T[], -1, one(T),
+        zeros(T, 0, 2), T[], zeros(T, 0, 2), T[], one(T), nothing
+    )
+end
+
+function AxisymmetricFieldReconstruction(
+        centers::Matrix{T}, psi_coefficients::Vector{T}, toroidal_coefficients::Vector{T},
+        length_scale::T, domain::NTuple{4, T}, kernel::Symbol,
+        center_bins::Dict{Tuple{Int, Int}, Vector{Int}},
+        vacuum_coefficients::Vector{T}, vacuum_degree::Int, vacuum_scale::T,
+        filament_positions::Matrix{T}, filament_currents::Vector{T},
+        element_positions::Matrix{T}, element_currents::Vector{T}, element_width::T
+    ) where {T}
+    return AxisymmetricFieldReconstruction(
+        centers, psi_coefficients, toroidal_coefficients, length_scale, domain,
+        kernel, center_bins, _to_grid_bins_2d(center_bins),
+        vacuum_coefficients, vacuum_degree, vacuum_scale,
+        filament_positions, filament_currents,
+        element_positions, element_currents, element_width, nothing
     )
 end
 
@@ -91,7 +156,7 @@ function _unit_loop_terms(a, ρ, z)
     β2 = (a + ρ)^2 + z^2
     β = sqrt(β2)
     m = 4 * a * ρ / β2
-    K, E = ellipk(m), ellipe(m)
+    K, E = _ellipke(m)
     s2 = a^2 + ρ^2 + z^2
     psi = sqrt(a * ρ / m) * ((1 - m / 2) * K - E) / π
     B_z = (K + (a^2 - ρ^2 - z^2) / α2 * E) / (2π * β)
@@ -298,17 +363,115 @@ end
 
 # Sums of `(ψ, ∂ψ/∂R, ∂ψ/∂Z, Δ*ψ)` with the poloidal coefficients and of
 # `(F, ∂F/∂R, ∂F/∂Z)` with the toroidal RBF coefficients, where `B_ϕ = F`.
-function _basis_sums(field::AxisymmetricFieldReconstruction, R, Z; flux::Bool = true)
-    T = promote_type(eltype(field.psi_coefficients), typeof(R), typeof(Z))
-    toroidal = field.toroidal_coefficients
-    ncenters = length(toroidal)
-    sums = Ref(zero(SVector{7, T}))
-    _foreach_basis_term(field, R, Z; flux) do k, value, dR, dZ, delta
-        c = _psi_coefficient(field, k)
-        t = k <= ncenters ? toroidal[k] : zero(eltype(toroidal))
-        sums[] += SVector(c * value, c * dR, c * dZ, c * delta, t * value, t * dR, t * dZ)
+function _basis_sums(
+        field::AxisymmetricFieldReconstruction, R_in, Z_in; flux::Bool = true
+    )
+    T = promote_type(eltype(field.psi_coefficients), typeof(R_in), typeof(Z_in))
+    R = T(R_in)
+    Z = T(Z_in)
+    centers = field.centers
+    psi_c = field.psi_coefficients
+    tor_c = field.toroidal_coefficients
+    scale = field.length_scale
+    inv_scale2 = inv(scale^2)
+    kernel = field.kernel
+
+    s_psi = zero(T); s_dR = zero(T); s_dZ = zero(T); s_delta = zero(T)
+    s_F = zero(T); s_dFR = zero(T); s_dFZ = zero(T)
+
+    if kernel === :wendland_c2
+        gb = field.grid_bins
+        if !isempty(gb.indices)
+            Rmin, _, Zmin, _ = field.domain
+            ir0 = floor(Int, (R - Rmin) / scale) - gb.origin[1] + 1
+            iz0 = floor(Int, (Z - Zmin) / scale) - gb.origin[2] + 1
+            nr, nz = gb.dims
+            @inbounds for iz in max(1, iz0 - 1):min(nz, iz0 + 1)
+                zoff = (iz - 1) * nr
+                for ir in max(1, ir0 - 1):min(nr, ir0 + 1)
+                    cidx = zoff + ir
+                    for ptr in gb.offsets[cidx]:(gb.offsets[cidx + 1] - 1)
+                        i = gb.indices[ptr]
+                        supported, val, dR, dZ, delta = _rbf_kernel_terms(
+                            R - centers[i, 1], Z - centers[i, 2], R, scale, inv_scale2,
+                            kernel
+                        )
+                        supported || continue
+                        c = psi_c[i]
+                        t = tor_c[i]
+                        s_psi += c * val; s_dR += c * dR; s_dZ += c * dZ
+                        s_delta += c * delta
+                        s_F += t * val; s_dFR += t * dR; s_dFZ += t * dZ
+                    end
+                end
+            end
+        end
+    else
+        @inbounds for i in axes(centers, 1)
+            supported, val, dR, dZ, delta = _rbf_kernel_terms(
+                R - centers[i, 1], Z - centers[i, 2], R, scale, inv_scale2, kernel
+            )
+            supported || continue
+            c = psi_c[i]
+            t = tor_c[i]
+            s_psi += c * val; s_dR += c * dR; s_dZ += c * dZ; s_delta += c * delta
+            s_F += t * val; s_dFR += t * dR; s_dFZ += t * dZ
+        end
     end
-    return sums[]
+
+    if flux && field.vacuum_degree >= 0
+        vac = field.vacuum_coefficients
+        vscale = field.vacuum_scale
+        x, z = R / vscale, Z / vscale
+        @inbounds s_psi += vac[1]
+        @inbounds for n in 2:field.vacuum_degree
+            value = zero(T); dR = zero(T); dZ = zero(T)
+            j = isodd(n) ? 1 : 0
+            a = one(T)
+            while n - j >= 2
+                m = n - j
+                value += a * x^m * z^j
+                dR += a * m * x^(m - 1) * z^j / vscale
+                j > 0 && (dZ += a * j * x^m * z^(j - 1) / vscale)
+                a = -a * m * (m - 2) / ((j + 1) * (j + 2))
+                j += 2
+            end
+            cv = vac[n]
+            s_psi += cv * value
+            s_dR += cv * dR
+            s_dZ += cv * dZ
+        end
+    end
+
+    if flux
+        filaments = field.filament_positions
+        fcurrents = field.filament_currents
+        @inbounds for k in eachindex(fcurrents)
+            psi, B_ρ, B_z, _ = _unit_loop_terms(filaments[k, 1], R, Z - filaments[k, 2])
+            cf = T(μ₀) * fcurrents[k]
+            s_psi += cf * psi
+            s_dR += cf * R * B_z
+            s_dZ -= cf * R * B_ρ
+        end
+    end
+
+    elements = field.element_positions
+    ecurrents = field.element_currents
+    if !isempty(ecurrents)
+        ε2 = field.element_width^2
+        @inbounds for k in eachindex(ecurrents)
+            ΔZ = Z - elements[k, 2]
+            u = sqrt(ΔZ^2 + ε2)
+            psi, B_ρ, B_z, dB_ρ = _unit_loop_terms(elements[k, 1], R, u)
+            ce = T(μ₀) * ecurrents[k]
+            s_psi += ce * psi
+            s_dR += ce * R * B_z
+            s_dZ -= ce * R * B_ρ * ΔZ / u
+            s_delta += ce * ε2 * R / u^2 * (dB_ρ - B_ρ / u)
+        end
+    end
+
+    return SVector{7, T}(s_psi, s_dR, s_dZ, s_delta, s_F, s_dFR, s_dFZ)
 end
 
 # Weighted least-squares rows `A[i, J] = V / σᵢ`, `b[i] = targetᵢ / σᵢ` in
@@ -647,10 +810,9 @@ function reconstruct_axisymmetric_field(
 
     isempty(psi_rows.b) && isempty(exact_boundary_rows.b) &&
         throw(ArgumentError("poloidal or boundary constraints are required"))
+    n_psi = ncenters + n_vacuum + n_filaments + size(elements, 1)
     all_psi_coefficients = _fit_rbf(
-        psi_rows, T(regularization),
-        ncenters + n_vacuum + n_filaments + size(elements, 1),
-        exact_boundary_rows, algorithm
+        psi_rows, T(regularization), n_psi, exact_boundary_rows, algorithm
     )
     psi_coefficients = all_psi_coefficients[1:ncenters]
     vacuum_coefficients = all_psi_coefficients[(ncenters + 1):(ncenters + n_vacuum)]
@@ -661,11 +823,37 @@ function reconstruct_axisymmetric_field(
     toroidal_coefficients = isempty(toroidal_rows.b) ? zeros(T, ncenters) :
         _fit_rbf(toroidal_rows, T(regularization), ncenters, _FitRows{T}(), algorithm)
 
+    n_pol = length(psi_rows.b)
+    n_tor = length(toroidal_rows.b)
+    pol_norm = if n_pol == 0
+        zero(T)
+    else
+        H_psi = sparse(psi_rows.I, psi_rows.J, psi_rows.V, n_pol, n_psi)
+        norm(H_psi * all_psi_coefficients - psi_rows.b)
+    end
+    tor_norm = if n_tor == 0
+        zero(T)
+    else
+        H_tor = sparse(toroidal_rows.I, toroidal_rows.J, toroidal_rows.V, n_tor, ncenters)
+        norm(H_tor * toroidal_coefficients - toroidal_rows.b)
+    end
+    total_obs = n_pol + n_tor
+    weighted_rms = total_obs == 0 ? nothing :
+        hypot(pol_norm, tor_norm) / sqrt(total_obs)
+    diagnostics = (
+        weighted_rms = weighted_rms,
+        poloidal_rms = n_pol == 0 ? nothing : pol_norm / sqrt(n_pol),
+        toroidal_rms = n_tor == 0 ? nothing : tor_norm / sqrt(n_tor),
+        coefficient_count = n_psi + (n_tor == 0 ? 0 : ncenters),
+        observation_count = total_obs,
+    )
+
     return AxisymmetricFieldReconstruction(
         centers, psi_coefficients, toroidal_coefficients,
-        T(length_scale), domain_typed, kernel, center_bins,
+        T(length_scale), domain_typed, kernel, center_bins, _to_grid_bins_2d(center_bins),
         vacuum_coefficients, vacuum_degree_int, vacuum_scale,
-        filaments, filament_currents, elements, element_currents, element_width
+        filaments, filament_currents, elements, element_currents, element_width,
+        diagnostics
     )
 end
 

@@ -36,6 +36,19 @@ struct CurrentLoop{T} <: AbstractCurrentSource
         n_hat = normalize(SVector{3, T}(normal))
         return new{T}(T(radius), T(current), SVector{3, T}(center), n_hat)
     end
+
+    function CurrentLoop{T}(
+            radius::T, current::T, center::SVector{3, T},
+            normal::SVector{3, T}, ::Val{false}
+        ) where {T}
+        return new{T}(radius, current, center, normal)
+    end
+end
+
+@inline function _current_loop_unchecked(
+        radius::T, current::T, center::SVector{3, T}, n_hat::SVector{3, T}
+    ) where {T}
+    return CurrentLoop{T}(radius, current, center, n_hat, Val(false))
 end
 
 """

@@ -137,13 +137,17 @@ function thermal_pressure(field::GradShafranovReconstruction, pos)
     return Pt - Bz^2 / (2μ₀)
 end
 
-function _gsr_source(c, values, second, projector, pressure, offset, scale)
-    flux = values * c
-    source = map(flux) do A
-        _, derivative, _ = _chebyshev_sum(pressure, (A - offset) / scale)
-        μ₀ * derivative / scale
+function _gsr_source!(
+        result, flux_buf, source_buf, c, values, second, projector,
+        pressure, offset, scale
+    )
+    mul!(flux_buf, values, c)
+    @inbounds for i in eachindex(flux_buf)
+        _, derivative, _ = _chebyshev_sum(pressure, (flux_buf[i] - offset) / scale)
+        source_buf[i] = μ₀ * derivative / scale
     end
-    result = -projector * (second * c + source)
+    mul!(source_buf, second, c, one(eltype(source_buf)), one(eltype(source_buf)))
+    mul!(result, projector, source_buf, -one(eltype(result)), false)
     all(isfinite, result) ||
         error("GSR continuation diverged; reduce strip width or spatial degree")
     return result
@@ -153,27 +157,49 @@ function _march_gsr!(
         flux, normal, ys, track_index, max_step, values, second, projector,
         pressure, offset, scale
     )
+    T = eltype(flux)
+    nmodes = size(flux, 1)
+    npts = size(values, 1)
+    c = Vector{T}(undef, nmodes)
+    q = Vector{T}(undef, nmodes)
+    mid_c = Vector{T}(undef, nmodes)
+    mid_q = Vector{T}(undef, nmodes)
+    acc = Vector{T}(undef, nmodes)
+    mid_acc = Vector{T}(undef, nmodes)
+    flux_buf = Vector{T}(undef, npts)
+    source_buf = Vector{T}(undef, npts)
+
     for direction in (-1, 1)
         last_index = direction == -1 ? 1 : length(ys)
         for j in (track_index + direction):direction:last_index
             previous = j - direction
-            c, q = copy(flux[:, previous]), copy(normal[:, previous])
+            @inbounds for i in 1:nmodes
+                c[i] = flux[i, previous]
+                q[i] = normal[i, previous]
+            end
             steps = max(1, ceil(Int, abs(ys[j] - ys[previous]) / max_step))
             h = (ys[j] - ys[previous]) / steps
+            half_h = h / 2
             for _ in 1:steps
-                acceleration = _gsr_source(
-                    c, values, second, projector, pressure, offset, scale
+                _gsr_source!(
+                    acc, flux_buf, source_buf, c, values, second, projector,
+                    pressure, offset, scale
                 )
-                midpoint_c, midpoint_q = c + (h / 2) * q, q + (h / 2) * acceleration
-                midpoint_acceleration = _gsr_source(
-                    midpoint_c, values, second, projector, pressure, offset, scale
+                @. mid_c = c + half_h * q
+                @. mid_q = q + half_h * acc
+                _gsr_source!(
+                    mid_acc, flux_buf, source_buf, mid_c, values, second, projector,
+                    pressure, offset, scale
                 )
-                c += h * midpoint_q
-                q += h * midpoint_acceleration
+                @. c = c + h * mid_q
+                @. q = q + h * mid_acc
                 all(isfinite, c) && all(isfinite, q) ||
                     error("GSR continuation diverged; reduce strip width or spatial degree")
             end
-            flux[:, j], normal[:, j] = c, q
+            @inbounds for i in 1:nmodes
+                flux[i, j] = c[i]
+                normal[i, j] = q[i]
+            end
         end
     end
     return nothing

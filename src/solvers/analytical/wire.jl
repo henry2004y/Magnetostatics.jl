@@ -101,8 +101,7 @@ end
     denom_sq = (radius + rho)^2 + z_local^2
     k_sq = 4 * radius * rho / denom_sq
 
-    K_val = ellipk(k_sq)
-    E_val = ellipe(k_sq)
+    K_val, E_val = _ellipke(k_sq)
 
     # Common factor
     factor = μ₀ * current / (2 * π * sqrt(denom_sq))

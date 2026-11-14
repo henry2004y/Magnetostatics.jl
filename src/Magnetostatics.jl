@@ -27,7 +27,8 @@ include("utils.jl")
 # Core types
 export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, AbstractBoundary
 # Solvers
-export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, solve
+export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, DSTFactorization, solve
+export multipole_boundary
 export AxisymmetricFieldReconstruction, reconstruct_axisymmetric_field
 export FieldReconstruction3D, reconstruct_field_3d
 export GradShafranovReconstruction, reconstruct_grad_shafranov

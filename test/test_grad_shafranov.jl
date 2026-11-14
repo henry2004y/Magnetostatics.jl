@@ -71,9 +71,9 @@ end
     gradient = hcat(
         [
             (
-                field(point + h * SVector{3}(ntuple(i -> i == k, 3))) -
+                    field(point + h * SVector{3}(ntuple(i -> i == k, 3))) -
                     field(point - h * SVector{3}(ntuple(i -> i == k, 3)))
-            ) / (2h)
+                ) / (2h)
                 for k in 1:3
         ]...
     )
@@ -172,12 +172,12 @@ end
             norm(pressures) < 0.03
         expected_J = point_matrix(
             SVector(
-                0.0, 0.0, 20.0e-9 * (1 - 0.3^2) /
+                    0.0, 0.0, 20.0e-9 * (1 - 0.3^2) /
                     (
-                    Magnetostatics.μ₀ * 1.0e6 *
+                        Magnetostatics.μ₀ * 1.0e6 *
                         (cosh((p[2] + 0.2e6) / 1.0e6) - 0.3cos(p[1] / 1.0e6))^2
-                )
-            ) for p in heldout
+                    )
+                ) for p in heldout
         )
         predicted_J = point_matrix(current_density(field, p) for p in heldout)
         @test norm(predicted_J - expected_J) / norm(expected_J) < 0.03

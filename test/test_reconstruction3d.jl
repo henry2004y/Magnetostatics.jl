@@ -100,9 +100,9 @@ end
             gradient = hcat(
                 [
                     begin
-                        step = SVector{3}(ntuple(i -> i == k ? h : 0.0, 3))
-                        (reconstructed(p + step) - reconstructed(p - step)) / (2h)
-                    end for k in 1:3
+                            step = SVector{3}(ntuple(i -> i == k ? h : 0.0, 3))
+                            (reconstructed(p + step) - reconstructed(p - step)) / (2h)
+                        end for k in 1:3
                 ]...
             )
             curl = SVector(
@@ -466,6 +466,16 @@ end
     )
     @test ridge_fit(SVector(0.13, -0.17, 0.29)) ≈
         gaussian_truth(SVector(0.13, -0.17, 0.29)) atol = 1.0e-7
+
+    let
+        eval_B(f, r) = (f(r); @allocated f(r))
+        eval_J(f, r) = (current_density(f, r); @allocated current_density(f, r))
+        rq = SVector(0.1, 0.1, 0.1)
+        @test eval_B(fit, rq) == 0
+        @test eval_J(fit, rq) == 0
+        @test eval_B(ridge_fit, rq) == 0
+        @test eval_J(ridge_fit, rq) == 0
+    end
 end
 
 end # module test_reconstruction3d

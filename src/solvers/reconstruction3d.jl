@@ -8,6 +8,13 @@ Evaluation outside `domain` throws `DomainError`.
 Unlike [`AxisymmetricFieldReconstruction`](@ref), this model makes no symmetry
 assumption and fits Cartesian probes in a three-dimensional box.
 """
+struct _GridBins3D
+    origin::NTuple{3, Int}
+    dims::NTuple{3, Int}
+    offsets::Vector{Int}
+    indices::Vector{Int}
+end
+
 struct FieldReconstruction3D{T, F <: AbstractMagneticField, D} <: AbstractMagneticField
     centers::Matrix{T}
     coefficients::Vector{T}
@@ -15,8 +22,21 @@ struct FieldReconstruction3D{T, F <: AbstractMagneticField, D} <: AbstractMagnet
     domain::NTuple{6, T}
     kernel::Symbol
     center_bins::Dict{NTuple{3, Int}, Vector{Int}}
+    grid_bins::_GridBins3D
     reference_field::F
     diagnostics::D
+end
+
+function FieldReconstruction3D(
+        centers::Matrix{T}, coefficients::Vector{T}, length_scale::T,
+        domain::NTuple{6, T}, kernel::Symbol,
+        center_bins::Dict{NTuple{3, Int}, Vector{Int}},
+        reference_field::F, diagnostics::D
+    ) where {T, F <: AbstractMagneticField, D}
+    return FieldReconstruction3D{T, F, D}(
+        centers, coefficients, length_scale, domain, kernel,
+        center_bins, _to_grid_bins_3d(center_bins), reference_field, diagnostics
+    )
 end
 
 function _validate_xyz(positions, domain, name)
@@ -31,12 +51,55 @@ function _validate_xyz(positions, domain, name)
     return nothing
 end
 
-function _check_3d_position(field, pos)
+function _to_grid_bins_3d(bins::Dict{NTuple{3, Int}, Vector{Int}})
+    isempty(bins) && return _GridBins3D((0, 0, 0), (0, 0, 0), Int[1], Int[])
+    min_x = typemax(Int); min_y = typemax(Int); min_z = typemax(Int)
+    max_x = typemin(Int); max_y = typemin(Int); max_z = typemin(Int)
+    total = 0
+    for (cell, vec) in bins
+        cx, cy, cz = cell
+        cx < min_x && (min_x = cx); cx > max_x && (max_x = cx)
+        cy < min_y && (min_y = cy); cy > max_y && (max_y = cy)
+        cz < min_z && (min_z = cz); cz > max_z && (max_z = cz)
+        total += length(vec)
+    end
+    origin = (min_x, min_y, min_z)
+    dims = (max_x - min_x + 1, max_y - min_y + 1, max_z - min_z + 1)
+    nx, ny, _ = dims
+    nx_ny = nx * ny
+    ncells = nx_ny * dims[3]
+    counts = zeros(Int, ncells)
+    for (cell, vec) in bins
+        cidx = (cell[3] - min_z) * nx_ny + (cell[2] - min_y) * nx + (cell[1] - min_x) + 1
+        @inbounds counts[cidx] += length(vec)
+    end
+    offsets = Vector{Int}(undef, ncells + 1)
+    offsets[1] = 1
+    @inbounds for c in 1:ncells
+        offsets[c + 1] = offsets[c] + counts[c]
+    end
+    indices = Vector{Int}(undef, total)
+    fill!(counts, 0)
+    for (cell, vec) in bins
+        cidx = (cell[3] - min_z) * nx_ny + (cell[2] - min_y) * nx + (cell[1] - min_x) + 1
+        pos = offsets[cidx] + counts[cidx]
+        @inbounds for v in vec
+            indices[pos] = v
+            pos += 1
+        end
+        counts[cidx] += length(vec)
+    end
+    return _GridBins3D(origin, dims, offsets, indices)
+end
+
+@inline function _check_3d_position(field, pos)
     length(pos) == 3 || throw(ArgumentError("position must have three coordinates"))
-    all(
-        field.domain[2k - 1] <= pos[k] <= field.domain[2k] for k in 1:3
-    ) || throw(DomainError(pos, "position is outside the reconstruction domain"))
-    return SVector{3}(pos)
+    @inbounds begin
+        d = field.domain
+        (d[1] <= pos[1] <= d[2] && d[3] <= pos[2] <= d[4] && d[5] <= pos[3] <= d[6]) ||
+            throw(DomainError(pos, "position is outside the reconstruction domain"))
+        return SVector{3}(pos[1], pos[2], pos[3])
+    end
 end
 
 function _centers_3d(domain, length_scale, ::Type{T}) where {T}
@@ -163,24 +226,75 @@ function (field::FieldReconstruction3D)(pos)
         _correction_3d(field, point, Val(false))
 end
 
-function _correction_3d(field::FieldReconstruction3D, point, ::Val{current}) where {current}
+@inline function _correction_3d(
+        field::FieldReconstruction3D, point::SVector{3}, ::Val{current}
+    ) where {current}
     T = promote_type(eltype(point), eltype(field.coefficients))
     coefficients = field.coefficients
-    value = Ref(
-        current ? zero(SVector{3, T}) : SVector{3, T}(ntuple(k -> coefficients[k], 3))
-    )
+    centers = field.centers
     scale = field.length_scale
-    _foreach_kernel_3d(
-        point, field.centers, scale, field.kernel, field.domain, field.center_bins
-    ) do j, gradient, hessian
-        a = SVector{3, T}(ntuple(k -> coefficients[3 + 3(j - 1) + k], 3))
-        value[] += if current
-            scale * (hessian * a - tr(hessian) * a)
-        else
-            scale * cross(gradient, a)
+    kernel = field.kernel
+    px, py, pz = T(point[1]), T(point[2]), T(point[3])
+    pvec = SVector{3, T}(px, py, pz)
+    @inbounds acc = current ? zero(SVector{3, T}) :
+        SVector{3, T}(T(coefficients[1]), T(coefficients[2]), T(coefficients[3]))
+    if kernel === :gaussian
+        @inbounds for j in axes(centers, 1)
+            cj = SVector{3, T}(T(centers[j, 1]), T(centers[j, 2]), T(centers[j, 3]))
+            disp = pvec - cj
+            gradient, hessian = _kernel_derivatives_3d(disp, scale, kernel)
+            off = 3 + 3 * (j - 1)
+            a = SVector{3, T}(
+                T(coefficients[off + 1]), T(coefficients[off + 2]), T(coefficients[off + 3])
+            )
+            acc += current ? scale * (hessian * a - tr(hessian) * a) :
+                scale * cross(gradient, a)
+        end
+    else
+        gb = field.grid_bins
+        if !isempty(gb.indices)
+            d = field.domain
+            ix0 = floor(Int, (px - d[1]) / scale) - gb.origin[1] + 1
+            iy0 = floor(Int, (py - d[3]) / scale) - gb.origin[2] + 1
+            iz0 = floor(Int, (pz - d[5]) / scale) - gb.origin[3] + 1
+            nx, ny, nz = gb.dims
+            nx_ny = nx * ny
+            @inbounds for iz in max(1, iz0 - 1):min(nz, iz0 + 1)
+                zoff = (iz - 1) * nx_ny
+                for iy in max(1, iy0 - 1):min(ny, iy0 + 1)
+                    yzoff = zoff + (iy - 1) * nx
+                    for ix in max(1, ix0 - 1):min(nx, ix0 + 1)
+                        cidx = yzoff + ix
+                        for ptr in gb.offsets[cidx]:(gb.offsets[cidx + 1] - 1)
+                            j = gb.indices[ptr]
+                            disp = pvec - SVector{3, T}(
+                                T(centers[j, 1]), T(centers[j, 2]), T(centers[j, 3])
+                            )
+                            norm(disp) >= scale && continue
+                            gradient, hessian = _kernel_derivatives_3d(disp, scale, kernel)
+                            off = 3 + 3 * (j - 1)
+                            a = SVector{3, T}(
+                                T(coefficients[off + 1]), T(coefficients[off + 2]),
+                                T(coefficients[off + 3])
+                            )
+                            acc += current ? scale * (hessian * a - tr(hessian) * a) :
+                                scale * cross(gradient, a)
+                        end
+                    end
+                end
+            end
         end
     end
-    return current ? value[] / μ₀ : value[]
+    return current ? acc / T(μ₀) : acc
+end
+
+_reference_value_3d(::NullField, point::SVector{3}; current = false) = zero(point)
+
+@inline function _reference_value_3d(field, point; current = false)
+    value = current ? _reference_current(field, point) : field(point)
+    length(value) == 3 && all(isfinite, value) ||
+        throw(ArgumentError("reference field must return three finite components"))
+    return SVector{3}(value)
 end
 
 _reference_current(::NullField, pos) = zero(SVector{3, eltype(pos)})
@@ -208,11 +322,142 @@ function _matrix_3d(rows, ncoefficients, ::Type{T}) where {T}
     return sparse(I, J, V, length(rows), ncoefficients)
 end
 
-function _reference_value_3d(field, point; current = false)
-    value = current ? _reference_current(field, point) : field(point)
-    length(value) == 3 && all(isfinite, value) ||
-        throw(ArgumentError("reference field must return three finite components"))
-    return SVector{3}(value)
+mutable struct _TripletRows3D{T}
+    nrows::Int
+    I::Vector{Int}
+    J::Vector{Int}
+    V::Vector{T}
+end
+
+_TripletRows3D{T}() where {T} = _TripletRows3D{T}(0, Int[], Int[], T[])
+
+@inline function _push_triplet!(rows::_TripletRows3D{T}, i::Int, j::Int, v::T) where {T}
+    iszero(v) && return nothing
+    push!(rows.I, i)
+    push!(rows.J, j)
+    push!(rows.V, v)
+    return nothing
+end
+
+function _sparse_matrix(rows::_TripletRows3D{T}, ncoefficients::Int) where {T}
+    return sparse(rows.I, rows.J, rows.V, rows.nrows, ncoefficients)
+end
+
+struct _KernelScratch3D{T}
+    indices::Vector{Int}
+    grads::Vector{SVector{3, T}}
+    hessians::Vector{SMatrix{3, 3, T, 9}}
+end
+
+function _KernelScratch3D{T}() where {T}
+    return _KernelScratch3D{T}(Int[], SVector{3, T}[], SMatrix{3, 3, T, 9}[])
+end
+
+function _collect_kernel_3d!(
+        scratch::_KernelScratch3D{T}, point::SVector{3, T},
+        centers, scale::T, kernel::Symbol, domain, gb::_GridBins3D
+    ) where {T}
+    empty!(scratch.indices)
+    empty!(scratch.grads)
+    empty!(scratch.hessians)
+    if kernel === :gaussian
+        @inbounds for j in axes(centers, 1)
+            cj = SVector{3, T}(T(centers[j, 1]), T(centers[j, 2]), T(centers[j, 3]))
+            disp = point - cj
+            gradient, hessian = _kernel_derivatives_3d(disp, scale, kernel)
+            push!(scratch.indices, j)
+            push!(scratch.grads, gradient)
+            push!(scratch.hessians, hessian)
+        end
+    elseif !isempty(gb.indices)
+        ix0 = floor(Int, (point[1] - domain[1]) / scale) - gb.origin[1] + 1
+        iy0 = floor(Int, (point[2] - domain[3]) / scale) - gb.origin[2] + 1
+        iz0 = floor(Int, (point[3] - domain[5]) / scale) - gb.origin[3] + 1
+        nx, ny, nz = gb.dims
+        nx_ny = nx * ny
+        @inbounds for iz in max(1, iz0 - 1):min(nz, iz0 + 1)
+            zoff = (iz - 1) * nx_ny
+            for iy in max(1, iy0 - 1):min(ny, iy0 + 1)
+                yzoff = zoff + (iy - 1) * nx
+                for ix in max(1, ix0 - 1):min(nx, ix0 + 1)
+                    cidx = yzoff + ix
+                    for ptr in gb.offsets[cidx]:(gb.offsets[cidx + 1] - 1)
+                        j = gb.indices[ptr]
+                        disp = point - SVector{3, T}(
+                            T(centers[j, 1]), T(centers[j, 2]), T(centers[j, 3])
+                        )
+                        norm(disp) >= scale && continue
+                        gradient, hessian = _kernel_derivatives_3d(disp, scale, kernel)
+                        push!(scratch.indices, j)
+                        push!(scratch.grads, gradient)
+                        push!(scratch.hessians, hessian)
+                    end
+                end
+            end
+        end
+    end
+    return length(scratch.indices)
+end
+
+function _push_field_component_row!(
+        rows::_TripletRows3D{T}, m::Int, scale::T, scratch::_KernelScratch3D{T},
+        weight::T = one(T)
+    ) where {T}
+    row = (rows.nrows += 1)
+    _push_triplet!(rows, row, m, weight)
+    factor = weight * scale
+    @inbounds for idx in eachindex(scratch.indices)
+        off = 3 + 3 * (scratch.indices[idx] - 1)
+        g = scratch.grads[idx]
+        if m == 1
+            _push_triplet!(rows, row, off + 2, -factor * g[3])
+            _push_triplet!(rows, row, off + 3, factor * g[2])
+        elseif m == 2
+            _push_triplet!(rows, row, off + 1, factor * g[3])
+            _push_triplet!(rows, row, off + 3, -factor * g[1])
+        else
+            _push_triplet!(rows, row, off + 1, -factor * g[2])
+            _push_triplet!(rows, row, off + 2, factor * g[1])
+        end
+    end
+    return row
+end
+
+function _push_directional_row!(
+        rows::_TripletRows3D{T}, direction::SVector{3, T}, scale::T,
+        scratch::_KernelScratch3D{T}, weight::T = one(T)
+    ) where {T}
+    row = (rows.nrows += 1)
+    for k in 1:3
+        _push_triplet!(rows, row, k, weight * direction[k])
+    end
+    factor = weight * scale
+    @inbounds for idx in eachindex(scratch.indices)
+        off = 3 + 3 * (scratch.indices[idx] - 1)
+        w = factor * cross(direction, scratch.grads[idx])
+        for k in 1:3
+            _push_triplet!(rows, row, off + k, w[k])
+        end
+    end
+    return row
+end
+
+function _push_curl_component_row!(
+        rows::_TripletRows3D{T}, m::Int, scale::T, scratch::_KernelScratch3D{T},
+        factor::T = one(T)
+    ) where {T}
+    row = (rows.nrows += 1)
+    coeff = factor * scale
+    @inbounds for idx in eachindex(scratch.indices)
+        off = 3 + 3 * (scratch.indices[idx] - 1)
+        h = scratch.hessians[idx]
+        tr_h = tr(h)
+        for k in 1:3
+            val = coeff * (m == k ? h[m, m] - tr_h : h[m, k])
+            _push_triplet!(rows, row, off + k, val)
+        end
+    end
+    return row
 end
 
 function _add_observation_3d!(rows, targets, sigmas, groups, row, target, sigma, group)
@@ -256,27 +501,47 @@ function _quadrature_3d(domain, grid, ::Type{T}) where {T}
 end
 
 function _regularizer_3d(
-        centers, scale, kernel, domain, bins, grid, mode, ::Type{T}
+        centers, scale, kernel, domain, grid_bins::_GridBins3D,
+        grid, mode, ::Type{T}
     ) where {T}
-    ncoefficients = 3 + 3size(centers, 1)
+    ncoefficients = 3 + 3 * size(centers, 1)
     points, weights = _quadrature_3d(domain, grid, T)
-    rows = SparseVector{T, Int}[]
+    reg_rows = _TripletRows3D{T}()
+    scratch = _KernelScratch3D{T}()
     unsupported = 0
-    for i in axes(points, 1)
-        field_rows, curl_rows, count = _operators_3d(
-            SVector{3, T}(points[i, :]), centers, scale, kernel, domain, bins
+    scale_T = T(scale)
+    @inbounds for i in axes(points, 1)
+        pt = SVector{3, T}(points[i, 1], points[i, 2], points[i, 3])
+        count = _collect_kernel_3d!(
+            scratch, pt, centers, scale_T, kernel, domain, grid_bins
         )
         unsupported += count == 0
         if mode === :field
             factor = sqrt(weights[i])
-            append!(rows, factor .* field_rows)
-            append!(rows, (factor * scale) .* curl_rows)
+            for m in 1:3
+                _push_field_component_row!(reg_rows, m, scale_T, scratch, factor)
+            end
+            curl_factor = factor * scale_T
+            for m in 1:3
+                _push_curl_component_row!(reg_rows, m, scale_T, scratch, curl_factor)
+            end
         end
     end
-    identity = sparse(T(1) * I, ncoefficients, ncoefficients)
-    L = mode === :coefficients ? identity :
-        vcat(_matrix_3d(rows, ncoefficients, T), sqrt(eps(T)) * identity)
-    return L, unsupported, size(points, 1)
+    ridge_weight = mode === :coefficients ? one(T) : sqrt(eps(T))
+    for k in 1:ncoefficients
+        row = (reg_rows.nrows += 1)
+        _push_triplet!(reg_rows, row, k, ridge_weight)
+    end
+    return _sparse_matrix(reg_rows, ncoefficients), unsupported, size(points, 1)
+end
+
+function _regularizer_3d(
+        centers, scale, kernel, domain, bins::Dict{NTuple{3, Int}, Vector{Int}},
+        grid, mode, ::Type{T}
+    ) where {T}
+    return _regularizer_3d(
+        centers, scale, kernel, domain, _to_grid_bins_3d(bins), grid, mode, T
+    )
 end
 
 function _group_rms_3d(residual, groups, group)
@@ -401,24 +666,36 @@ function reconstruct_field_3d(
     _validate_xyz(centers, box, "basis_centers")
     size(centers, 1) > 0 || throw(ArgumentError("at least one center is required"))
     bins = _bins_3d(centers, box, T(length_scale))
+    grid_bins = _to_grid_bins_3d(bins)
+    scale_T = T(length_scale)
     ncoefficients = 3 + 3size(centers, 1)
-    rows, targets, sigmas = SparseVector{T, Int}[], T[], T[]
+    H_rows = _TripletRows3D{T}()
+    exact_rows = _TripletRows3D{T}()
+    targets, sigmas = T[], T[]
     groups = Symbol[]
-    exact_rows, exact_targets = SparseVector{T, Int}[], T[]
+    exact_targets = T[]
+    scratch = _KernelScratch3D{T}()
     uncovered = 0
-    for i in axes(positions, 1)
-        point = SVector{3, T}(positions[i, :])
-        operators, _, count = _operators_3d(
-            point, centers, T(length_scale), kernel, box, bins
+    inv_mu0 = inv(T(μ₀))
+    @inbounds for i in axes(positions, 1)
+        point = SVector{3, T}(positions[i, 1], positions[i, 2], positions[i, 3])
+        count = _collect_kernel_3d!(
+            scratch, point, centers, scale_T, kernel, box, grid_bins
         )
         uncovered += count == 0
         reference = _reference_value_3d(reference_field, point)
         for k in 1:3
-            target = B_observed[i, k]
-            _add_observation_3d!(
-                rows, targets, sigmas, groups, operators[k], T(target - reference[k]),
-                T(uncertainties[i, k]), :probe
-            )
+            raw = B_observed[i, k]
+            isnan(raw) && continue
+            target = T(raw - reference[k])
+            isfinite(target) || throw(ArgumentError("observations cannot be infinite"))
+            sigma = T(uncertainties[i, k])
+            isfinite(sigma) && sigma > 0 ||
+                throw(ArgumentError("uncertainties must be finite and positive"))
+            _push_field_component_row!(H_rows, k, scale_T, scratch)
+            push!(targets, target)
+            push!(sigmas, sigma)
+            push!(groups, :probe)
         end
     end
     for (locations, directions, values, errors, group) in (
@@ -450,23 +727,28 @@ function reconstruct_field_3d(
         errors === nothing || matching_errors ||
             throw(ArgumentError("$group uncertainties must match values"))
         for i in eachindex(values)
-            point = SVector{3, T}(locations[i, :])
-            direction = SVector{3, T}(directions[i, :])
-            operators, _, count = _operators_3d(
-                point, centers, T(length_scale), kernel, box, bins
+            point = SVector{3, T}(locations[i, 1], locations[i, 2], locations[i, 3])
+            direction = SVector{3, T}(directions[i, 1], directions[i, 2], directions[i, 3])
+            count = _collect_kernel_3d!(
+                scratch, point, centers, scale_T, kernel, box, grid_bins
             )
             uncovered += count == 0
-            row = sum(direction[k] * operators[k] for k in 1:3)
             reference = _reference_value_3d(reference_field, point)
-            target = T(values[i] - dot(direction, reference))
+            raw = values[i]
+            isnan(raw) && continue
+            target = T(raw - dot(direction, reference))
+            isfinite(target) || throw(ArgumentError("observations cannot be infinite"))
             if exact
-                push!(exact_rows, row)
+                _push_directional_row!(exact_rows, direction, scale_T, scratch)
                 push!(exact_targets, target)
             else
                 sigma = errors === nothing ? one(T) : T(errors[i])
-                _add_observation_3d!(
-                    rows, targets, sigmas, groups, row, target, sigma, group
-                )
+                isfinite(sigma) && sigma > 0 ||
+                    throw(ArgumentError("uncertainties must be finite and positive"))
+                _push_directional_row!(H_rows, direction, scale_T, scratch)
+                push!(targets, target)
+                push!(sigmas, sigma)
+                push!(groups, group)
             end
         end
     end
@@ -481,35 +763,44 @@ function reconstruct_field_3d(
         size(errors) == size(current_density) ||
             throw(ArgumentError("current_uncertainties must match current_density"))
         for i in axes(current_positions, 1)
-            point = SVector{3, T}(current_positions[i, :])
-            _, operators, count = _operators_3d(
-                point, centers, T(length_scale), kernel, box, bins
+            point = SVector{3, T}(
+                current_positions[i, 1], current_positions[i, 2], current_positions[i, 3]
+            )
+            count = _collect_kernel_3d!(
+                scratch, point, centers, scale_T, kernel, box, grid_bins
             )
             uncovered += count == 0
             reference = _reference_value_3d(reference_field, point; current = true)
             for k in 1:3
-                _add_observation_3d!(
-                    rows, targets, sigmas, groups, operators[k] / T(μ₀),
-                    T(current_density[i, k] - reference[k]), T(errors[i, k]), :current
-                )
+                raw = current_density[i, k]
+                isnan(raw) && continue
+                target = T(raw - reference[k])
+                isfinite(target) || throw(ArgumentError("observations cannot be infinite"))
+                sigma = T(errors[i, k])
+                isfinite(sigma) && sigma > 0 ||
+                    throw(ArgumentError("uncertainties must be finite and positive"))
+                _push_curl_component_row!(H_rows, k, scale_T, scratch, inv_mu0)
+                push!(targets, target)
+                push!(sigmas, sigma)
+                push!(groups, :current)
             end
         end
     elseif current_uncertainties !== nothing
         throw(ArgumentError("current_uncertainties require current observations"))
     end
-    isempty(rows) && isempty(exact_rows) &&
+    H_rows.nrows == 0 && exact_rows.nrows == 0 &&
         throw(ArgumentError("a finite observation or exact constraint is required"))
     grid = regularization_grid === nothing ?
         ntuple(k -> max(3, ceil(Int, 2(box[2k] - box[2k - 1]) / length_scale) + 1), 3) :
         regularization_grid
     L, unsupported_grid, grid_count = _regularizer_3d(
-        centers, T(length_scale), kernel, box, bins, grid, regularization_mode, T
+        centers, scale_T, kernel, box, grid_bins, grid, regularization_mode, T
     )
-    H = _matrix_3d(rows, ncoefficients, T)
+    H = _sparse_matrix(H_rows, ncoefficients)
     weighted = Diagonal(inv.(sigmas)) * H
     A = vcat(weighted, sqrt(T(regularization)) * L)
     b = vcat(targets ./ sigmas, zeros(T, size(L, 1)))
-    C = _matrix_3d(exact_rows, ncoefficients, T)
+    C = _sparse_matrix(exact_rows, ncoefficients)
     coefficients, retcode, iterations = _solve_3d(
         A, b, C, exact_targets, algorithm, abstol, reltol, maxiters
     )
@@ -538,7 +829,7 @@ function reconstruct_field_3d(
         @warn message unsupported_observations = uncovered grid_gaps = unsupported_grid
     end
     return FieldReconstruction3D(
-        centers, coefficients, T(length_scale), box, kernel, bins,
+        centers, coefficients, scale_T, box, kernel, bins, grid_bins,
         reference_field, diagnostics
     )
 end

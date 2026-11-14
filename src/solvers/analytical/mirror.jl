@@ -39,8 +39,8 @@ end
     (; distance, radius, current, center, normal) = field
     c1 = center - 0.5 * distance * normal
     c2 = center + 0.5 * distance * normal
-    cl1 = CurrentLoop(radius, current, c1, normal)
-    cl2 = CurrentLoop(radius, current, c2, normal)
+    cl1 = _current_loop_unchecked(radius, current, c1, normal)
+    cl2 = _current_loop_unchecked(radius, current, c2, normal)
     return getB_loop(r, cl1) + getB_loop(r, cl2)
 end
 
@@ -105,10 +105,13 @@ struct MagneticBottle{T} <: AbstractMagneticField
 end
 
 @inline function (field::MagneticBottle)(r)
-    (; distance, radius_side, radius_center, current_side, current_center, center, normal) = field
-    B_mirror = MagneticMirror(distance, radius_side, current_side; center, normal)(r)
-    cl3 = CurrentLoop(radius_center, current_center, center, normal)
-    return B_mirror + getB_loop(r, cl3)
+    (; distance, radius_side, radius_center, current_side, current_center, center, normal) =
+        field
+    half_d = 0.5 * distance * normal
+    cl1 = _current_loop_unchecked(radius_side, current_side, center - half_d, normal)
+    cl2 = _current_loop_unchecked(radius_side, current_side, center + half_d, normal)
+    cl3 = _current_loop_unchecked(radius_center, current_center, center, normal)
+    return getB_loop(r, cl1) + getB_loop(r, cl2) + getB_loop(r, cl3)
 end
 
 """

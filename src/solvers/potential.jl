@@ -141,8 +141,7 @@ function solve(::VectorPotential, loop::CurrentLoop{T}, r) where {T}
     k_sq = 4 * R * rho / denom_sq
     k = sqrt(k_sq)
 
-    K_val = ellipk(k_sq)
-    E_val = ellipe(k_sq)
+    K_val, E_val = _ellipke(k_sq)
 
     prefactor = (μ₀ * current) / (π * k) * sqrt(R / rho)
     A_phi = prefactor * ((1 - k_sq / 2) * K_val - E_val)
@@ -172,28 +171,30 @@ function vector_potential(field::AbstractMagneticField, r)
 end
 
 """
-    PoissonSolver{ALG} <: AbstractSolver
+    DSTFactorization()
+
+Fast direct solver for `PoissonSolver` using the 3D Type-I Discrete Sine Transform
+(`FFTW.RODFT00`).  Solves the 7-point Dirichlet finite-difference Poisson equation in
+`O(N log N)` time to machine precision without assembling a sparse matrix.
+"""
+struct DSTFactorization end
+
+"""
+    PoissonSolver{ALG, LMAT} <: AbstractSolver
 
 Grid-based solver for the magnetostatic vector potential equation ∇²**A** = −μ₀ **J** on a
-uniform Cartesian grid with homogeneous Dirichlet boundary conditions (`A = 0` on all domain faces).
+uniform Cartesian grid with Dirichlet boundary conditions (`A = 0` by default, or
+inhomogeneous via `boundary`).
 
-Each Cartesian component is solved independently with the same 7-point finite-difference Laplacian matrix via `LinearSolve.jl`.
-Pass any`LinearSolve` algorithm as `alg`; the default is `KrylovJL_CG()`.
+Each Cartesian component is solved with the same 7-point finite-difference Laplacian
+matrix via `LinearSolve.jl`, or directly in `O(N log N)` time using `DSTFactorization()`.
+The sparse Laplacian is constructed as a Symmetric Positive Definite (SPD) matrix so
+`CholeskyFactorization()`, `KrylovJL_CG()`, and `KLUFactorization()` all apply directly.
 
 # Fields
 - `xs`, `ys`, `zs`: grid node positions as `AbstractRange` objects.
-- `alg`: `LinearSolve` algorithm (e.g. `KrylovJL_CG()`,
-  `KLUFactorization()`, `UMFPACKFactorization()`).
-
-# Example
-```julia
-xs = range(-1.0, 1.0; length = 32)
-ys = range(-1.0, 1.0; length = 32)
-zs = range(-0.5, 0.5; length = 16)
-solver = PoissonSolver(xs, ys, zs) # default: CG
-solver_direct = PoissonSolver(xs, ys, zs; alg = KLUFactorization())
-A = solve(solver, J_grid)  # J_grid :: (3,nx,ny,nz)
-```
+- `alg`: `LinearSolve` algorithm (e.g. `KrylovJL_CG()`, `CholeskyFactorization()`,
+  `KLUFactorization()`) or `DSTFactorization()`.
 """
 struct PoissonSolver{ALG, LMAT} <: AbstractSolver
     xs::AbstractRange
@@ -205,88 +206,297 @@ end
 
 function PoissonSolver(xs, ys, zs; alg = KrylovJL_CG())
     nx, ny, nz = length(xs), length(ys), length(zs)
+    nx >= 2 && ny >= 2 && nz >= 2 ||
+        throw(ArgumentError("Grid must have at least 2 points along each axis"))
     dx, dy, dz = step(xs), step(ys), step(zs)
-    L = _build_laplacian_3d(nx, ny, nz, dx, dy, dz)
+    L = alg isa DSTFactorization ? nothing : _build_laplacian_3d(nx, ny, nz, dx, dy, dz)
     return PoissonSolver(xs, ys, zs, alg, L)
 end
 
-# Build the (N×N) sparse matrix for -∇² with 7-point central differences.
-# Supports anisotropic spacing (dx, dy, dz). Boundary nodes carry identity
-# rows (Dirichlet: A = 0).
+# Build the strictly Symmetric Positive Definite (N×N) sparse matrix for -∇² with
+# 7-point central differences. Boundary nodes are decoupled diagonals (`diag_val`);
+# inhomogeneous boundary contributions are applied directly to the RHS.
 function _build_laplacian_3d(nx, ny, nz, dx, dy, dz)
     n = nx * ny * nz
-    inv_dx2 = inv(dx)^2
-    inv_dy2 = inv(dy)^2
-    inv_dz2 = inv(dz)^2
-    diag_val = 2(inv_dx2 + inv_dy2 + inv_dz2)
+    inv_dx2 = inv(Float64(dx))^2
+    inv_dy2 = inv(Float64(dy))^2
+    inv_dz2 = inv(Float64(dz))^2
+    diag_val = 2 * (inv_dx2 + inv_dy2 + inv_dz2)
 
-    rows = Int[]
-    cols = Int[]
-    vals = Float64[]
+    nix = max(0, nx - 2)
+    niy = max(0, ny - 2)
+    niz = max(0, nz - 2)
+    nnz_max = n + 6 * nix * niy * niz
 
-    function idx(i, j, k)
-        return (k - 1) * (nx * ny) + (j - 1) * nx + i
-    end
+    rows = Vector{Int}(undef, nnz_max)
+    cols = Vector{Int}(undef, nnz_max)
+    vals = Vector{Float64}(undef, nnz_max)
+    ptr = 0
+    nx_ny = nx * ny
 
-    function is_boundary(i, j, k)
-        return i == 1 || i == nx || j == 1 || j == ny || k == 1 || k == nz
-    end
-
-    for k in 1:nz, j in 1:ny, i in 1:nx
-        row = idx(i, j, k)
-        if is_boundary(i, j, k)
-            push!(rows, row); push!(cols, row); push!(vals, 1.0)
-        else
-            push!(rows, row); push!(cols, row); push!(vals, diag_val)
-            for (di, dj, dk, coeff) in (
-                    (-1, 0, 0, inv_dx2), (1, 0, 0, inv_dx2),
-                    (0, -1, 0, inv_dy2), (0, 1, 0, inv_dy2),
-                    (0, 0, -1, inv_dz2), (0, 0, 1, inv_dz2),
-                )
-                push!(rows, row)
-                push!(cols, idx(i + di, j + dj, k + dk))
-                push!(vals, -coeff)
+    @inbounds for k in 1:nz, j in 1:ny, i in 1:nx
+        row = (k - 1) * nx_ny + (j - 1) * nx + i
+        ptr += 1
+        rows[ptr] = row
+        cols[ptr] = row
+        vals[ptr] = diag_val
+        if 1 < i < nx && 1 < j < ny && 1 < k < nz
+            if i > 2
+                ptr += 1; rows[ptr] = row; cols[ptr] = row - 1; vals[ptr] = -inv_dx2
+            end
+            if i < nx - 1
+                ptr += 1; rows[ptr] = row; cols[ptr] = row + 1; vals[ptr] = -inv_dx2
+            end
+            if j > 2
+                ptr += 1; rows[ptr] = row; cols[ptr] = row - nx; vals[ptr] = -inv_dy2
+            end
+            if j < ny - 1
+                ptr += 1; rows[ptr] = row; cols[ptr] = row + nx; vals[ptr] = -inv_dy2
+            end
+            if k > 2
+                ptr += 1; rows[ptr] = row; cols[ptr] = row - nx_ny; vals[ptr] = -inv_dz2
+            end
+            if k < nz - 1
+                ptr += 1; rows[ptr] = row; cols[ptr] = row + nx_ny; vals[ptr] = -inv_dz2
             end
         end
     end
 
+    resize!(rows, ptr)
+    resize!(cols, ptr)
+    resize!(vals, ptr)
     return sparse(rows, cols, vals, n, n)
 end
 
-"""
-    solve(solver::PoissonSolver, J::AbstractArray{T,4}) where T
+function _fill_poisson_rhs!(
+        b::AbstractVector{FT}, J, boundary, c::Int,
+        nx::Int, ny::Int, nz::Int, inv_dx2::FT, inv_dy2::FT, inv_dz2::FT,
+        diag_val::FT, mu0::FT
+    ) where {FT}
+    fill!(b, zero(FT))
+    nx_ny = nx * ny
+    @inbounds for k in 1:nz, j in 1:ny, i in 1:nx
+        row = (k - 1) * nx_ny + (j - 1) * nx + i
+        if i == 1 || i == nx || j == 1 || j == ny || k == 1 || k == nz
+            if boundary !== nothing
+                b[row] = diag_val * FT(boundary[c, i, j, k])
+            end
+        else
+            val = mu0 * FT(J[c, i, j, k])
+            if boundary !== nothing
+                i == 2 && (val += inv_dx2 * FT(boundary[c, 1, j, k]))
+                i == nx - 1 && (val += inv_dx2 * FT(boundary[c, nx, j, k]))
+                j == 2 && (val += inv_dy2 * FT(boundary[c, i, 1, k]))
+                j == ny - 1 && (val += inv_dy2 * FT(boundary[c, i, ny, k]))
+                k == 2 && (val += inv_dz2 * FT(boundary[c, i, j, 1]))
+                k == nz - 1 && (val += inv_dz2 * FT(boundary[c, i, j, nz]))
+            end
+            b[row] = val
+        end
+    end
+    return b
+end
 
-Solve ∇²**A** = −μ₀ **J** on the grid defined by `solver`.
-Grid spacings are derived automatically from `solver.xs`, `solver.ys`, `solver.zs`,
-supporting anisotropic grids (dx ≠ dy ≠ dz).
+function _copy_boundary_faces!(A, boundary, nx::Int, ny::Int, nz::Int)
+    @inbounds for k in 1:nz, j in 1:ny, i in 1:nx
+        if i == 1 || i == nx || j == 1 || j == ny || k == 1 || k == nz
+            A[1, i, j, k] = boundary[1, i, j, k]
+            A[2, i, j, k] = boundary[2, i, j, k]
+            A[3, i, j, k] = boundary[3, i, j, k]
+        end
+    end
+    return A
+end
 
-# Arguments
-- `J`: 4-D array of size `(3, nx, ny, nz)` (same convention as `FFTSolver`).
+function _solve_poisson_dst!(
+        A::Array{FT, 4}, J, boundary, xs, ys, zs, nx::Int, ny::Int, nz::Int
+    ) where {FT}
+    nix, niy, niz = nx - 2, ny - 2, nz - 2
+    dx, dy, dz = FT(step(xs)), FT(step(ys)), FT(step(zs))
+    inv_dx2, inv_dy2, inv_dz2 = inv(dx)^2, inv(dy)^2, inv(dz)^2
+    lx = [FT(4) * inv_dx2 * sin(FT(π) * p / (2 * (nx - 1)))^2 for p in 1:nix]
+    ly = [FT(4) * inv_dy2 * sin(FT(π) * q / (2 * (ny - 1)))^2 for q in 1:niy]
+    lz = [FT(4) * inv_dz2 * sin(FT(π) * r / (2 * (nz - 1)))^2 for r in 1:niz]
+    norm_fac = inv(FT(8) * (nx - 1) * (ny - 1) * (nz - 1))
+    mu0 = FT(μ₀)
 
-# Returns
-- `A`: 4-D array of size `(3, nx, ny, nz)` with the vector potential.
-"""
-function solve(solver::PoissonSolver, J::AbstractArray{T, 4}) where {T}
-    @assert size(J, 1) == 3 "First dimension of J must be 3"
-    _, nx, ny, nz = size(J)
-    n = nx * ny * nz
-
-    L = solver.L
-    A = zeros(T, 3, nx, ny, nz)
+    buf = Array{FT, 3}(undef, nix, niy, niz)
+    plan = FFTW.plan_r2r!(buf, FFTW.RODFT00)
 
     for c in 1:3
-        b = fill(zero(T), n)
-        for k in 1:nz, j in 1:ny, i in 1:nx
-            # Boundary nodes: b stays zero (Dirichlet)
-            if i > 1 && i < nx && j > 1 && j < ny && k > 1 && k < nz
-                row = (k - 1) * (nx * ny) + (j - 1) * nx + i
-                b[row] = μ₀ * J[c, i, j, k]
+        @inbounds for k in 1:niz, j in 1:niy, i in 1:nix
+            val = mu0 * FT(J[c, i + 1, j + 1, k + 1])
+            if boundary !== nothing
+                i == 1 && (val += inv_dx2 * FT(boundary[c, 1, j + 1, k + 1]))
+                i == nix && (val += inv_dx2 * FT(boundary[c, nx, j + 1, k + 1]))
+                j == 1 && (val += inv_dy2 * FT(boundary[c, i + 1, 1, k + 1]))
+                j == niy && (val += inv_dy2 * FT(boundary[c, i + 1, ny, k + 1]))
+                k == 1 && (val += inv_dz2 * FT(boundary[c, i + 1, j + 1, 1]))
+                k == niz && (val += inv_dz2 * FT(boundary[c, i + 1, j + 1, nz]))
+            end
+            buf[i, j, k] = val
+        end
+        plan * buf
+        @inbounds for k in 1:niz
+            lzk = lz[k]
+            for j in 1:niy
+                lyjk = ly[j] + lzk
+                for i in 1:nix
+                    buf[i, j, k] *= norm_fac / (lx[i] + lyjk)
+                end
             end
         end
-        prob = LinearProblem(L, b)
-        sol = LinearSolve.solve(prob, solver.alg)
-        A[c, :, :, :] = reshape(sol.u, nx, ny, nz)
+        plan * buf
+        @inbounds A[c, 2:(nx - 1), 2:(ny - 1), 2:(nz - 1)] .= buf
+    end
+    return A
+end
+
+"""
+    solve(solver::PoissonSolver, J::AbstractArray{T, 4}; boundary = nothing) where T
+
+Solve ∇²**A** = −μ₀ **J** on the grid defined by `solver`.
+Grid spacings are derived from `solver.xs`, `solver.ys`, `solver.zs`.
+Pass `boundary` as a `(3, nx, ny, nz)` array to enforce inhomogeneous Dirichlet
+conditions on the 6 domain boundary faces (homogeneous zero if `nothing`).
+"""
+function solve(
+        solver::PoissonSolver, J::AbstractArray{T, 4};
+        boundary::Union{Nothing, AbstractArray{<:Real, 4}} = nothing
+    ) where {T <: Real}
+    size(J, 1) == 3 || throw(ArgumentError("First dimension of J must be 3"))
+    _, nx, ny, nz = size(J)
+    (length(solver.xs) == nx && length(solver.ys) == ny && length(solver.zs) == nz) ||
+        throw(ArgumentError("J grid dimensions must match solver grid"))
+    if boundary !== nothing
+        size(boundary) == size(J) ||
+            throw(ArgumentError("boundary array must have the same size as J"))
+    end
+
+    FT = float(T)
+    A = zeros(FT, 3, nx, ny, nz)
+    boundary !== nothing && _copy_boundary_faces!(A, boundary, nx, ny, nz)
+    (nx < 3 || ny < 3 || nz < 3) && return A
+
+    if solver.alg isa DSTFactorization
+        return _solve_poisson_dst!(
+            A, J, boundary, solver.xs, solver.ys, solver.zs, nx, ny, nz
+        )
+    end
+
+    dx, dy, dz = FT(step(solver.xs)), FT(step(solver.ys)), FT(step(solver.zs))
+    inv_dx2, inv_dy2, inv_dz2 = inv(dx)^2, inv(dy)^2, inv(dz)^2
+    diag_val = 2 * (inv_dx2 + inv_dy2 + inv_dz2)
+    mu0 = FT(μ₀)
+    n = nx * ny * nz
+    b = Vector{FT}(undef, n)
+
+    _fill_poisson_rhs!(
+        b, J, boundary, 1, nx, ny, nz, inv_dx2, inv_dy2, inv_dz2, diag_val, mu0
+    )
+    cache = LinearSolve.init(LinearProblem(solver.L, b), solver.alg)
+    sol = LinearSolve.solve!(cache)
+    @inbounds A[1, :, :, :] .= reshape(sol.u, nx, ny, nz)
+
+    for c in 2:3
+        _fill_poisson_rhs!(
+            cache.b, J, boundary, c, nx, ny, nz, inv_dx2, inv_dy2, inv_dz2, diag_val, mu0
+        )
+        fill!(cache.u, zero(FT))
+        sol = LinearSolve.solve!(cache)
+        @inbounds A[c, :, :, :] .= reshape(sol.u, nx, ny, nz)
     end
 
     return A
+end
+
+"""
+    multipole_boundary(J, xs, ys, zs; order::Int = 2)
+
+Compute Dirichlet boundary values for `PoissonSolver` on the 6 grid faces from the
+multipole expansion (`order` in `0:2`) of the localized current distribution `J`.
+"""
+function multipole_boundary(
+        J::AbstractArray{T, 4}, xs::AbstractRange, ys::AbstractRange, zs::AbstractRange;
+        order::Int = 2
+    ) where {T <: Real}
+    size(J, 1) == 3 || throw(ArgumentError("First dimension of J must be 3"))
+    0 <= order <= 2 || throw(ArgumentError("order must be 0, 1, or 2"))
+    _, nx, ny, nz = size(J)
+    (length(xs) == nx && length(ys) == ny && length(zs) == nz) ||
+        throw(ArgumentError("Grid coordinate lengths must match J dimensions"))
+
+    FT = float(T)
+    dx, dy, dz = FT(step(xs)), FT(step(ys)), FT(step(zs))
+    dV = dx * dy * dz
+    xc = FT(first(xs) + last(xs)) / 2
+    yc = FT(first(ys) + last(ys)) / 2
+    zc = FT(first(zs) + last(zs)) / 2
+
+    m0 = zeros(FT, 3)
+    m1 = zeros(FT, 3, 3)
+    m2 = zeros(FT, 3, 3, 3)
+
+    @inbounds for k in 1:nz
+        rz = FT(zs[k]) - zc
+        rz2 = rz * rz
+        for j in 1:ny
+            ry = FT(ys[j]) - yc
+            ry2 = ry * ry
+            for i in 1:nx
+                jx, jy, jz = FT(J[1, i, j, k]), FT(J[2, i, j, k]), FT(J[3, i, j, k])
+                (iszero(jx) && iszero(jy) && iszero(jz)) && continue
+                rx = FT(xs[i]) - xc
+                wx, wy, wz = jx * dV, jy * dV, jz * dV
+                m0[1] += wx; m0[2] += wy; m0[3] += wz
+                if order >= 1
+                    m1[1, 1] += wx * rx; m1[1, 2] += wx * ry; m1[1, 3] += wx * rz
+                    m1[2, 1] += wy * rx; m1[2, 2] += wy * ry; m1[2, 3] += wy * rz
+                    m1[3, 1] += wz * rx; m1[3, 2] += wz * ry; m1[3, 3] += wz * rz
+                end
+                if order >= 2
+                    r2 = rx * rx + ry2 + rz2
+                    q11, q22, q33 = 3 * rx * rx - r2, 3 * ry2 - r2, 3 * rz2 - r2
+                    q12, q13, q23 = 3 * rx * ry, 3 * rx * rz, 3 * ry * rz
+                    for (c, wc) in ((1, wx), (2, wy), (3, wz))
+                        m2[c, 1, 1] += wc * q11; m2[c, 2, 2] += wc * q22
+                        m2[c, 3, 3] += wc * q33
+                        m2[c, 1, 2] += wc * q12; m2[c, 2, 1] += wc * q12
+                        m2[c, 1, 3] += wc * q13; m2[c, 3, 1] += wc * q13
+                        m2[c, 2, 3] += wc * q23; m2[c, 3, 2] += wc * q23
+                    end
+                end
+            end
+        end
+    end
+
+    A_bc = zeros(FT, 3, nx, ny, nz)
+    pref = FT(μ₀) / FT(4π)
+
+    @inbounds for k in 1:nz, j in 1:ny, i in 1:nx
+        (i == 1 || i == nx || j == 1 || j == ny || k == 1 || k == nz) || continue
+        Rx = FT(xs[i]) - xc
+        Ry = FT(ys[j]) - yc
+        Rz = FT(zs[k]) - zc
+        r2 = Rx * Rx + Ry * Ry + Rz * Rz
+        iszero(r2) && continue
+        inv_r = inv(sqrt(r2))
+        inv_r3 = inv_r / r2
+        inv_r5 = inv_r3 / r2
+        for c in 1:3
+            val = m0[c] * inv_r
+            if order >= 1
+                val += (m1[c, 1] * Rx + m1[c, 2] * Ry + m1[c, 3] * Rz) * inv_r3
+            end
+            if order >= 2
+                q = Rx * (m2[c, 1, 1] * Rx + m2[c, 1, 2] * Ry + m2[c, 1, 3] * Rz) +
+                    Ry * (m2[c, 2, 1] * Rx + m2[c, 2, 2] * Ry + m2[c, 2, 3] * Rz) +
+                    Rz * (m2[c, 3, 1] * Rx + m2[c, 3, 2] * Ry + m2[c, 3, 3] * Rz)
+                val += FT(0.5) * q * inv_r5
+            end
+            A_bc[c, i, j, k] = pref * val
+        end
+    end
+
+    return A_bc
 end
