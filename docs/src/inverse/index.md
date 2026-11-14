@@ -25,10 +25,11 @@ Laplacian and requires pressure data and a supplied crossing frame.
 | | Axisymmetric | Three-dimensional |
 |:--|:--|:--|
 | Domain | `(Rmin, Rmax, Zmin, Zmax)`, with `Rmin > 0` | `(xmin, xmax, ymin, ymax, zmin, zmax)` |
-| Representation | Poloidal-flux RBFs and optional vacuum, filament, and current-element modes; independent toroidal fit | Uniform field plus curl of a vector-potential RBF expansion |
+| Representation | Poloidal-flux RBFs and optional vacuum, filament, and current-element modes; independent toroidal fit | Uniform field plus curl of a vector-potential RBF expansion (`model = :div_free`), or pure current-free solid harmonics/virtual dipoles/source templates (`model = :curl_free`), or hybrid combinations |
 | Boundary data | Poloidal **flux**, `boundary_flux` | Normal **field**, `boundary_values = n dot B` |
-| Current data | Toroidal `J_phi` | Cartesian `(J_x, J_y, J_z)` |
-| Background treatment | Vacuum/filament modes fitted from data | Optional fixed `reference_field` |
+| Current data | Toroidal `J_phi` | Cartesian `(J_x, J_y, J_z)` (disallowed when `model = :curl_free` without `source_fields`) |
+| Background treatment | Vacuum/filament modes fitted from data | Optional fixed `reference_field`, fitted external 3D `dipole_positions`, solid harmonics `vacuum_degree`, and `source_fields` |
+| Diagnostics & uncertainty | `field.diagnostics` + optional `store_covariance = true` with [`field_covariance`](@ref) | `field.diagnostics` + optional `store_covariance = true` with [`field_covariance`](@ref) |
 
 Both spatial-probe methods accept exact boundary samples or uncertainty-weighted
 boundary observations. Exactness applies at supplied sample locations, not to
@@ -57,8 +58,14 @@ the entire boundary. Neither infers a wall condition from the reconstruction box
 - Compare with held-out probes and boundary locations that were not used to fit.
 - Repeat fits with plausible priors and numerical resolutions. For GSR, also vary
   continuation width, spatial degree, and step size.
-- Inspect available diagnostics and warnings. The 3D and GSR models expose
-  `field.diagnostics`; these residuals are not posterior uncertainty estimates.
+- Inspect available diagnostics and warnings. All three reconstruction types expose
+  `field.diagnostics`; training residuals are not by themselves calibrated posterior
+  uncertainty estimates, though [`reconstruct_axisymmetric_field`](@ref) and
+  [`reconstruct_field_3d`](@ref) support `store_covariance = true` with
+  [`field_covariance`](@ref) for conditional linear-Gaussian noise propagation.
+- Inspect magnetic topology using [`field_jacobian`](@ref),
+  [`classify_magnetic_null`](@ref), [`locate_magnetic_null`](@ref), and
+  [`locate_poloidal_critical_point`](@ref).
 - Keep synthetic truth out of the fit unless it represents genuinely known
   information, such as an explicitly supplied background field.
 
@@ -84,11 +91,11 @@ separatrices, small field errors can change inferred connections substantially.
 
 ### What the present methods establish
 
-The existing methods cover flexible divergence-free spatial fitting,
-source-informed axisymmetric fitting, and planar equilibrium continuation.
-They can generate candidate topologies under their respective assumptions.
-They do not currently quantify how uniquely sparse measurements determine
-those topologies.
+The existing methods provide flexible divergence-free and current-free 3D spatial fitting,
+source-informed axisymmetric and 3D fitting (`source_fields`, external dipoles, and solid
+harmonics), planar equilibrium continuation, null/X/O-point locators, and linear-Gaussian
+conditional covariance propagation. What remains fundamentally non-unique is sparse-probe
+identifiability of unmeasured interior current topology outside the chosen basis.
 
 Even complete normal-field data on a closed boundary do not determine an
 arbitrary current-carrying interior field. A divergence-free perturbation

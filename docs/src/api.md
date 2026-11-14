@@ -12,6 +12,16 @@ AbstractSolver
 solve
 ```
 
+### Field algebra and transformations
+
+```@docs
+CompositeField
+ScaledField
+TransformedField
+translate_field
+rotate_field
+```
+
 ## Forward construction
 
 ### Current sources
@@ -23,6 +33,7 @@ TorusKnot
 TrefoilKnot
 InfiniteWire
 SurfaceCurrentMesh
+MultiSource
 ```
 
 ### Analytical fields and configurations
@@ -32,6 +43,12 @@ UniformField
 NullField
 Dipole
 CurrentLoopAnalytic
+Solenoid
+HelmholtzCoil
+AntiHelmholtzCoil
+SphereMagnet
+CylinderMagnet
+CuboidMagnet
 HarrisSheet
 AsymmetricHarrisSheet
 ForceFreeHarrisSheet
@@ -66,6 +83,8 @@ BiotSavart
 FFTSolver
 VectorPotential
 PoissonSolver
+GridMagneticField
+DSTFactorization
 vector_potential
 ```
 
@@ -78,6 +97,7 @@ PeriodicBoundary
 ConductingWall
 ConductingSphere
 PrescribedBoundary
+multipole_boundary
 sphere_mesh
 compute_surface_current
 image_source
@@ -147,6 +167,16 @@ drift_velocities
 mirror_ratio
 loss_cone_angle
 magnetic_helicity
+```
+
+### Topology and covariance
+
+```@docs
+field_jacobian
+classify_magnetic_null
+locate_magnetic_null
+locate_poloidal_critical_point
+field_covariance
 ```
 
 ## Utilities

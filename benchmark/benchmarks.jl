@@ -32,6 +32,8 @@ fft_solver, J, dx = let
 end
 
 SUITE["solvers"]["fft"]["small_grid"] = @benchmarkable solve($fft_solver, $J, $dx)
+fft_open_solver = FFTSolver(OpenBoundary())
+SUITE["solvers"]["fft"]["open_grid"] = @benchmarkable solve($fft_open_solver, $J, $dx)
 
 # Vector Potential
 SUITE["solvers"]["potential"] = BenchmarkGroup()
@@ -64,18 +66,41 @@ end
 
 SUITE["solvers"]["analytical"]["dipole"] = @benchmarkable ($dipole)($r_dipole)
 
+solenoid_thin = Solenoid(0.5, 1.0, 1000.0)
+solenoid_thick = Solenoid(0.5, 1.0, 1000.0; thickness = 0.1)
+cuboid_mag = CuboidMagnet(SVector(0.2, 0.3, 0.4), SVector(0.0, 0.0, 1.0e6))
+SUITE["solvers"]["analytical"]["solenoid_thin"] = @benchmarkable ($solenoid_thin)($r_dipole)
+SUITE["solvers"]["analytical"]["solenoid_thick"] =
+    @benchmarkable ($solenoid_thick)($r_dipole)
+SUITE["solvers"]["analytical"]["cuboid_magnet"] = @benchmarkable ($cuboid_mag)($r_dipole)
+
 # Poisson Solver
 SUITE["solvers"]["poisson"] = BenchmarkGroup()
-poisson_solver, poisson_J = let
+poisson_solver, poisson_dst_solver, poisson_J = let
     xs = range(0.0, 1.0; length = 16)
     ys = range(0.0, 1.0; length = 16)
     zs = range(0.0, 1.0; length = 16)
     solver = PoissonSolver(xs, ys, zs)
+    dst_solver = PoissonSolver(xs, ys, zs; alg = DSTFactorization())
     J = rand(3, 16, 16, 16)
-    solver, J
+    solver, dst_solver, J
 end
 
-SUITE["solvers"]["poisson"]["small_grid"] = @benchmarkable solve($poisson_solver, $poisson_J)
+SUITE["solvers"]["poisson"]["small_grid"] =
+    @benchmarkable solve($poisson_solver, $poisson_J)
+SUITE["solvers"]["poisson"]["dst_grid"] =
+    @benchmarkable solve($poisson_dst_solver, $poisson_J)
+
+# Interpolated Grid Magnetic Field
+SUITE["solvers"]["grid_field"] = BenchmarkGroup()
+grid_field, grid_field_r = let
+    gs = range(0.0, 1.0; length = 16)
+    gf = GridMagneticField(rand(3, 16, 16, 16), gs, gs, gs)
+    gf, SVector(0.35, 0.52, 0.61)
+end
+SUITE["solvers"]["grid_field"]["eval_B"] = @benchmarkable ($grid_field)($grid_field_r)
+SUITE["solvers"]["grid_field"]["eval_J"] =
+    @benchmarkable current_density($grid_field, $grid_field_r)
 
 # Axisymmetric field reconstruction from sparse probes: FLARE coils sampled on a
 # 12 × 11 probe array, with virtual filaments for the coil field and a loose
@@ -267,3 +292,8 @@ SUITE["grad_shafranov"]["current_density"] =
     @benchmarkable current_density($gsr_field, $gsr_r)
 SUITE["grad_shafranov"]["flux"] = @benchmarkable flux_function($gsr_field, $gsr_r)
 SUITE["grad_shafranov"]["pressure"] = @benchmarkable thermal_pressure($gsr_field, $gsr_r)
+
+SUITE["topology"] = BenchmarkGroup()
+topo_ah_coil = AntiHelmholtzCoil(1.0, 10.0)
+SUITE["topology"]["locate_null"] =
+    @benchmarkable locate_magnetic_null($topo_ah_coil, SA[0.08, -0.05, 0.06])

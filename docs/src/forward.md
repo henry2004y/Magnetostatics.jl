@@ -11,16 +11,16 @@ If the inputs are measured fields rather than known sources, start with
 
 | Known input | Method | Assumptions and scope | Worked example |
 |:--|:--|:--|:--|
-| Parameters of a supported field model | Analytical fields such as [`Dipole`](@ref), [`CurrentLoopAnalytic`](@ref), and [`HarrisSheet`](@ref) | Geometry and physics are fixed by the selected model | [Dipole](@ref dipole_example), [current sheets](examples/current_sheet.md) |
-| Discretized wire geometry and current | [`BiotSavart`](@ref) | Numerical line integration; accuracy depends on wire discretization | [Biot-Savart solver](@ref biot_savart_example) |
-| Volumetric current on a uniform grid | [`FFTSolver`](@ref) | Periodic spectral solution by default; zero-padded free-space convolution with `OpenBoundary()` | [FFT solver](examples/fft.md) |
-| Volumetric current on a Cartesian grid with prescribed vector-potential boundary values | [`PoissonSolver`](@ref) | Finite-difference solution of the vector-potential Poisson equation with Dirichlet boundaries | [Poisson solver](examples/poisson.md) |
-| Wire, loop, or dipole source for a vector potential | [`VectorPotential`](@ref), [`vector_potential`](@ref) | Source-dependent potential representation | [Current loop](examples/current_loop.md), [Biot-Savart solver](@ref biot_savart_example) |
+| Parameters of a supported field model | Analytical fields such as [`Dipole`](@ref), [`CurrentLoopAnalytic`](@ref), [`Solenoid`](@ref), [`HelmholtzCoil`](@ref), [`AntiHelmholtzCoil`](@ref), permanent magnets ([`SphereMagnet`](@ref), [`CylinderMagnet`](@ref), [`CuboidMagnet`](@ref)), and [`HarrisSheet`](@ref) | Geometry and physics are fixed by the selected model; combine/transform models with `+`, `-`, `*`, `/`, [`translate_field`](@ref), and [`rotate_field`](@ref) | [Dipole](@ref dipole_example), [current sheets](examples/current_sheet.md) |
+| Discretized wire geometry, loops, or multi-source collections | [`BiotSavart`](@ref), [`MultiSource`](@ref) | Numerical line integration with optional `core_radius` regularization and [`PeriodicBoundary`](@ref) image summation; accuracy depends on wire discretization | [Biot-Savart solver](@ref biot_savart_example) |
+| Volumetric current on a uniform grid | [`FFTSolver`](@ref) | Periodic spectral solution by default; exact free-space Coulomb kernel with [`OpenBoundary`](@ref) (`rfft`-accelerated; supports both `B` and [`vector_potential`](@ref)) | [FFT solver](examples/fft.md) |
+| Volumetric current on a Cartesian grid with Dirichlet boundaries | [`PoissonSolver`](@ref) | SPD finite-difference solve of the vector-potential Poisson equation with [`PrescribedBoundary`](@ref), [`multipole_boundary`](@ref), or fast zero-Dirichlet [`DSTFactorization`](@ref); wrap gridded output in [`GridMagneticField`](@ref) for continuous pointwise interpolation and `current_density` | [Poisson solver](examples/poisson.md) |
+| Wire, loop, solenoid, or analytical field for a vector potential | [`VectorPotential`](@ref), [`vector_potential`](@ref) | Source-dependent potential representation | [Current loop](examples/current_loop.md), [Biot-Savart solver](@ref biot_savart_example) |
 
 Boundary types are not interchangeable options for every solver. Check the
 selected [`solve`](@ref) method before supplying a boundary. The
-[Biot-Savart example](@ref biot_savart_example) covers image-source and surface-current
-constructions for supported conducting boundaries.
+[Biot-Savart example](@ref biot_savart_example) covers image-source, periodic,
+and surface-current constructions for supported boundaries.
 
 ## Basic workflow
 
