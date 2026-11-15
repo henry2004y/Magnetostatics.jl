@@ -23,11 +23,19 @@ include("solvers/reconstruction3d.jl")
 include("solvers/grad_shafranov.jl")
 include("geometry.jl")
 include("utils.jl")
+include("composition.jl")
+include("grid_field.jl")
+include("topology.jl")
 
 # Core types
 export AbstractMagneticField, AbstractCurrentSource, AbstractSolver, AbstractBoundary
+export CompositeField, ScaledField, TransformedField, GridMagneticField
+export translate_field, rotate_field
+export field_jacobian, classify_magnetic_null, locate_magnetic_null,
+    locate_poloidal_critical_point, field_covariance
 # Solvers
-export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, solve
+export BiotSavart, FFTSolver, VectorPotential, PoissonSolver, DSTFactorization, solve
+export multipole_boundary
 export AxisymmetricFieldReconstruction, reconstruct_axisymmetric_field
 export FieldReconstruction3D, reconstruct_field_3d
 export GradShafranovReconstruction, reconstruct_grad_shafranov
@@ -38,7 +46,8 @@ export vector_potential, current_density, compute_curl!, compute_curl
 export b_unit, field_magnitude, grad_b, magnetic_curvature, drift_velocities,
     mirror_ratio, loss_cone_angle, magnetic_helicity
 # Source geometries
-export Wire, CurrentLoop, TorusKnot, TrefoilKnot, InfiniteWire, SurfaceCurrentMesh
+export Wire, CurrentLoop, TorusKnot, TrefoilKnot, InfiniteWire, SurfaceCurrentMesh,
+    MultiSource
 # Analytical fields
 export HarrisSheet, AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarrisSheet,
     FadeevIsland, Dipole, CurrentLoopAnalytic, UniformField, NullField
@@ -51,7 +60,8 @@ export AnalyticalMagnetosphere, draped_imf_field,
     ZPinch, getB_zpinch,
     SolovevEquilibrium, poloidal_flux, TaylorState, ScrewPinch,
     ParkerSpiral, GuideFieldHarrisSheet, GoldHoyleFluxTube,
-    FLARECoils
+    FLARECoils, Solenoid, HelmholtzCoil, AntiHelmholtzCoil,
+    SphereMagnet, CylinderMagnet, CuboidMagnet
 
 
 # Utilities

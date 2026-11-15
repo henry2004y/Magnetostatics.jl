@@ -20,10 +20,22 @@ Periodic boundary condition: sources are replicated at integer multiples of the 
 period in each Cartesian direction before field summation.
 
 # Fields
-- `period::SVector{3,Float64}`: box side lengths (Lx, Ly, Lz) [m].
+- `period::SVector{3, Float64}`: box side lengths (Lx, Ly, Lz) [m].
+- `n_images::NTuple{3, Int}`: number of periodic image layers `(nx, ny, nz)` summed in
+  each direction for direct `BiotSavart` summation (axes with `period[k] <= 0` are
+  treated as non-periodic).
 """
 struct PeriodicBoundary <: AbstractBoundary
     period::SVector{3, Float64}
+    n_images::NTuple{3, Int}
+end
+
+function PeriodicBoundary(period; n_images = (1, 1, 1))
+    length(period) >= 3 || throw(ArgumentError("period must have 3 components"))
+    imgs = (Int(n_images[1]), Int(n_images[2]), Int(n_images[3]))
+    all(>=(0), imgs) || throw(ArgumentError("n_images must be non-negative"))
+    p = SVector{3, Float64}(period[1], period[2], period[3])
+    return PeriodicBoundary(p, imgs)
 end
 
 """

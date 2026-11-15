@@ -6,7 +6,7 @@ on:
     paths:
       - "src/**"
       - "Project.toml"
-      - "benchmarks/**"
+      - "benchmark/**"
 permissions:
   pull-requests: write    # action needs to post a comment
 

@@ -439,6 +439,21 @@ end
     @test sum(J_elements) * dA ≈ sum(J_ref) * dA rtol = 0.03
     @test sum(with_elements.element_currents) ≈ 15.0e3 rtol = 0.05
     @test norm(J_elements - J_ref) / norm(J_ref) < 0.25
+
+    with_elements_qr = reconstruct_axisymmetric_field(
+        position_matrix, field_matrix;
+        domain, length_scale = 0.12, basis_centers = grid(0.06),
+        regularization = 1.0e2,
+        uncertainties = fill(5.0e-4, size(field_matrix)),
+        filament_positions = rectangle_points(domain, 0.1, 48),
+        current_element_positions = grid(0.05),
+        current_positions = collocation,
+        current_density = zeros(size(collocation, 1)),
+        current_uncertainties = fill(1.0e5, size(collocation, 1)),
+        algorithm = QRFactorization()
+    )
+    @test with_elements_qr(SVector(0.9, 0.0, 0.02)) ≈
+        with_elements(SVector(0.9, 0.0, 0.02)) rtol = 1.0e-3
 end
 
 @testset "Current element kernel" begin
@@ -484,6 +499,92 @@ end
         positions, zeros(4, 3); kw...,
         current_element_positions = [0.8 0.0], current_element_width = -1.0
     )
+end
+
+@testset "Axisymmetric zero-allocation query and diagnostics" begin
+    let
+        dom = (0.4, 1.3, -0.6, 0.6)
+        centers_2d = zeros(16, 2)
+        idx = 0
+        for R in range(0.45, 1.25; length = 4), Z in range(-0.5, 0.5; length = 4)
+            idx += 1
+            centers_2d[idx, 1] = R
+            centers_2d[idx, 2] = Z
+        end
+        loop_src = CurrentLoop(0.3, 1.0e4, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
+        pts = zeros(20, 2)
+        Bs = zeros(20, 3)
+        p = 0
+        for R in range(0.5, 1.2; length = 5), Z in range(-0.4, 0.4; length = 4)
+            p += 1
+            pts[p, 1] = R
+            pts[p, 2] = Z
+            B = getB_loop(SVector(R, 0.0, Z), loop_src)
+            Bs[p, 1] = B[1]
+            Bs[p, 2] = B[2]
+            Bs[p, 3] = B[3]
+        end
+        fit_wend = reconstruct_axisymmetric_field(
+            pts, Bs; domain = dom, length_scale = 0.35, basis_centers = centers_2d,
+            kernel = :wendland_c2, regularization = 1.0e-8
+        )
+        fit_wend_qr = reconstruct_axisymmetric_field(
+            pts, Bs; domain = dom, length_scale = 1.5, basis_centers = centers_2d,
+            kernel = :wendland_c2, regularization = 1.0e-8,
+            algorithm = QRFactorization()
+        )
+        @test isfinite(fit_wend_qr.diagnostics.weighted_rms)
+        rq = SVector(0.85, 0.15, 0.1)
+        eval_B(f, r) = (f(r); @allocated f(r))
+        eval_J(f, r) = (current_density(f, r); @allocated current_density(f, r))
+        eval_psi(f, r) = (poloidal_flux(f, r); @allocated poloidal_flux(f, r))
+        @test eval_B(fit_wend, rq) == 0
+        @test eval_J(fit_wend, rq) == 0
+        @test eval_psi(fit_wend, rq) == 0
+        @test fit_wend.diagnostics !== nothing
+        @test fit_wend.diagnostics.observation_count == size(pts, 1) * 3
+        @test isfinite(fit_wend.diagnostics.weighted_rms)
+        @test_throws ArgumentError field_covariance(fit_wend, rq)
+
+        fit_cov = reconstruct_axisymmetric_field(
+            pts, Bs; domain = dom, length_scale = 0.35, basis_centers = centers_2d,
+            kernel = :wendland_c2, uncertainties = fill(1.0e-4, size(Bs)),
+            regularization = 1.0e-8, store_covariance = true
+        )
+        cov3 = field_covariance(fit_cov, rq)
+        cov2 = field_covariance(fit_cov, SA[0.85, 0.1])
+        @test issymmetric(cov3)
+        @test issymmetric(cov2)
+        @test minimum(eigvals(Symmetric(cov3))) >= -1.0e-18
+        fit_cov2 = reconstruct_axisymmetric_field(
+            pts, Bs; domain = dom, length_scale = 0.35, basis_centers = centers_2d,
+            kernel = :wendland_c2, uncertainties = fill(2.0e-4, size(Bs)),
+            regularization = 1.0e-8, store_covariance = true
+        )
+        @test field_covariance(fit_cov2, rq) ≈ 4 * cov3 rtol = 1.0e-10
+        @test_throws DomainError field_covariance(fit_cov, SVector(0.1, 0.0, 0.0))
+
+        # 15-argument constructor, full-rank exact constraint nullspace, invalid kernel
+        legacy_15 = AxisymmetricFieldReconstruction(
+            fit_cov.centers, fit_cov.psi_coefficients, fit_cov.toroidal_coefficients,
+            fit_cov.length_scale, fit_cov.domain, fit_cov.kernel, fit_cov.center_bins,
+            fit_cov.vacuum_coefficients, fit_cov.vacuum_degree, fit_cov.vacuum_scale,
+            fit_cov.filament_positions, fit_cov.filament_currents,
+            fit_cov.element_positions, fit_cov.element_currents, fit_cov.element_width
+        )
+        @test legacy_15(rq) ≈ fit_cov(rq)
+        @test_throws ArgumentError Magnetostatics._rbf_kernel_terms(
+            0.1, 0.1, 1.0, 0.3, 1.0, :invalid
+        )
+        fit_fullrank = reconstruct_axisymmetric_field(
+            [0.85 0.0], zeros(1, 3);
+            domain = dom, length_scale = 0.3, basis_centers = [0.85 0.0],
+            boundary_positions = [0.85 0.0], boundary_flux = [0.25],
+            store_covariance = true
+        )
+        @test poloidal_flux(fit_fullrank, SA[0.85, 0.0]) ≈ 0.25
+        @test iszero(fit_fullrank.diagnostics.coefficient_covariance.psi)
+    end
 end
 
 end # module test_reconstruction

@@ -81,4 +81,80 @@
     @test isapprox(Bz_open_c, Bz_analytical, rtol = 0.05)
     @test abs(B_open[1, c_i, c_j, c_k]) < 1.0e-8
     @test abs(B_open[2, c_i, c_j, c_k]) < 1.0e-8
+
+    # Point-current discrete Biot-Savart exactness (open boundary)
+    let N = 16, h = (0.1, 0.12, 0.15)
+        J_pt = zeros(Float64, 3, N, N, N)
+        src_ijk = (2, 4, 3)
+        dV = prod(h)
+        J_pt[1, src_ijk...] = 0.5 / dV
+        J_pt[2, src_ijk...] = -0.3 / dV
+        J_pt[3, src_ijk...] = 1.2 / dV
+        I_vec = SVector(0.5, -0.3, 1.2)
+        s_open = FFTSolver(OpenBoundary())
+        B_pt = solve(s_open, J_pt, h)
+        s_cached = FFTSolver(OpenBoundary(), (N, N, N), h)
+        B_pt_cached = solve(s_cached, J_pt, h)
+        @test isapprox(B_pt, B_pt_cached; atol = 1.0e-15, rtol = 1.0e-13)
+        for k in (1, 14), j in (2, 15), i in (1, 13)
+            dr = SVector(
+                (i - src_ijk[1]) * h[1],
+                (j - src_ijk[2]) * h[2],
+                (k - src_ijk[3]) * h[3]
+            )
+            r = norm(dr)
+            B_exact = (Magnetostatics.μ₀ / (4π)) * cross(I_vec, dr) / r^3
+            @test isapprox(SVector{3}(B_pt[:, i, j, k]), B_exact; rtol = 1.0e-12)
+        end
+        A_pt = vector_potential(s_open, J_pt, h)
+        A_pt_cached = vector_potential(s_cached, J_pt, h)
+        @test isapprox(A_pt, A_pt_cached; atol = 1.0e-15, rtol = 1.0e-13)
+        probe = (14, 15, 13)
+        dr = SVector(
+            (probe[1] - src_ijk[1]) * h[1],
+            (probe[2] - src_ijk[2]) * h[2],
+            (probe[3] - src_ijk[3]) * h[3]
+        )
+        A_exact = (Magnetostatics.μ₀ / (4π)) * I_vec / norm(dr)
+        @test isapprox(SVector{3}(A_pt[:, probe...]), A_exact; rtol = 1.0e-12)
+    end
+
+    # Cached periodic solver, range dispatch, and Coulomb-gauge vector potential
+    let Nx = 24, Ny = 20, Nz = 16
+        xs = range(-1.0, 1.0; length = Nx + 1)[1:Nx]
+        ys = range(-0.8, 0.8; length = Ny + 1)[1:Ny]
+        zs = range(-0.6, 0.6; length = Nz + 1)[1:Nz]
+        J_smooth = zeros(Float64, 3, Nx, Ny, Nz)
+        kx0 = 2π / (Nx * step(xs))
+        ky0 = 2π / (Ny * step(ys))
+        kz0 = 2π / (Nz * step(zs))
+        for k in 1:Nz, j in 1:Ny, i in 1:Nx
+            s = sin(kx0 * xs[i] + ky0 * ys[j])
+            c = cos(kz0 * zs[k])
+            J_smooth[1, i, j, k] = -ky0 * cos(kx0 * xs[i] + ky0 * ys[j]) * c
+            J_smooth[2, i, j, k] = kx0 * cos(kx0 * xs[i] + ky0 * ys[j]) * c
+            J_smooth[3, i, j, k] = s * sin(kz0 * zs[k])
+        end
+        p_uncached = FFTSolver()
+        p_cached = FFTSolver(
+            PeriodicBoundary(SVector(0.0, 0.0, 0.0)),
+            (Nx, Ny, Nz), (step(xs), step(ys), step(zs))
+        )
+        B_u = solve(p_uncached, J_smooth, xs, ys, zs)
+        B_c = solve(p_cached, J_smooth, xs, ys, zs)
+        @test isapprox(B_u, B_c; atol = 1.0e-14, rtol = 1.0e-13)
+        A_u = vector_potential(p_uncached, J_smooth, xs, ys, zs)
+        A_c = vector_potential(p_cached, J_smooth, xs, ys, zs)
+        @test isapprox(A_u, A_c; atol = 1.0e-14, rtol = 1.0e-13)
+        B_curl = compute_curl(A_u, xs, ys, zs)
+        @test isapprox(
+            B_curl[:, 3:(Nx - 2), 3:(Ny - 2), 3:(Nz - 2)],
+            B_u[:, 3:(Nx - 2), 3:(Ny - 2), 3:(Nz - 2)];
+            rtol = 5.0e-2
+        )
+    end
+
+    p_bc = PeriodicBoundary(SVector(0.0, 0.0, 0.0))
+    @test FFTSolver(p_bc, (16, 16, 16), 0.1).cache.spacing == (0.1, 0.1, 0.1)
+    @test iszero(vector_potential(FFTSolver(), zeros(3, 8, 8, 8), 0.1))
 end

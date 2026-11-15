@@ -17,3 +17,8 @@ end
 @inline function (field::UniformField)(r)
     return field.B0
 end
+
+@inline function current_density(field::UniformField{T}, r) where {T}
+    R = promote_type(T, eltype(r))
+    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
+end

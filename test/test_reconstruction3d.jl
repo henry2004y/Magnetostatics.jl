@@ -95,7 +95,8 @@ end
         for p in (SVector(0.13, -0.17, 0.29), SVector(-0.81, 0.41, 0.08))
             @test reconstructed(p) ≈ truth(p) atol = 1.0e-9
             @test abs(divergence(reconstructed, p)) < 1.0e-8
-            @test current_density(reconstructed, p) ≈ current_density(truth, p) rtol = 1.0e-7
+            @test current_density(reconstructed, p) ≈
+                current_density(truth, p) rtol = 1.0e-7
             h = 1.0e-5
             gradient = hcat(
                 [
@@ -466,6 +467,185 @@ end
     )
     @test ridge_fit(SVector(0.13, -0.17, 0.29)) ≈
         gaussian_truth(SVector(0.13, -0.17, 0.29)) atol = 1.0e-7
+
+    let
+        eval_B(f, r) = (f(r); @allocated f(r))
+        eval_J(f, r) = (current_density(f, r); @allocated current_density(f, r))
+        rq = SVector(0.1, 0.1, 0.1)
+        @test eval_B(fit, rq) == 0
+        @test eval_J(fit, rq) == 0
+        @test eval_B(ridge_fit, rq) == 0
+        @test eval_J(ridge_fit, rq) == 0
+    end
+end
+
+@testset "Curl-free harmonics, virtual dipoles, sources and covariance" begin
+    let box = (-0.5, 0.5, -0.5, 0.5, -0.5, 0.5),
+            eval_B(f, r) = (f(r); @allocated f(r)),
+            eval_J(f, r) = (current_density(f, r); @allocated current_density(f, r))
+        probes = point_matrix(
+            Iterators.product(
+                range(-0.4, 0.4; length = 4), range(-0.4, 0.4; length = 4),
+                range(-0.4, 0.4; length = 4)
+            )
+        )
+        held = point_matrix(
+            Iterators.product((-0.31, 0.23), (-0.27, 0.19), (-0.29, 0.21))
+        )
+
+        # Pure curl-free solid harmonics on an off-domain dipole
+        dip_ext = Dipole(SVector(1.5e4, -0.8e4, 2.2e4), SVector(0.15, -0.2, 2.1))
+        cf_fit = reconstruct_field_3d(
+            probes, samples(dip_ext, probes);
+            domain = box, model = :curl_free, vacuum_degree = 6,
+            regularization = 1.0e-12
+        )
+        @test cf_fit.model === :curl_free
+        @test isempty(cf_fit.centers)
+        @test cf_fit.vacuum_degree == 6
+        @test length(cf_fit.vacuum_coefficients) == 60
+        err_cf = norm(samples(cf_fit, held) - samples(dip_ext, held)) /
+            norm(samples(dip_ext, held))
+        @test err_cf < 1.0e-3
+        pt = SVector(0.13, -0.17, 0.21)
+        @test abs(divergence(cf_fit, pt; h = 1.0e-6)) / norm(cf_fit(pt)) < 1.0e-9
+        @test current_density(cf_fit, pt) == SVector(0.0, 0.0, 0.0)
+        @test eval_B(cf_fit, pt) == 0
+        @test eval_J(cf_fit, pt) == 0
+        @test_throws ArgumentError reconstruct_field_3d(
+            probes, samples(dip_ext, probes);
+            domain = box, model = :curl_free,
+            current_positions = probes[1:2, :], current_density = zeros(2, 3)
+        )
+
+        # Virtual 3D external dipoles recover dipole moments accurately
+        d_pos = [0.2 -0.3 1.9; -1.8 0.4 -0.6]
+        d1 = Dipole(SVector(5.0e3, -2.0e3, 8.0e3), SVector(0.2, -0.3, 1.9))
+        d2 = Dipole(SVector(-3.0e3, 4.0e3, 1.0e3), SVector(-1.8, 0.4, -0.6))
+        truth_dips = d1 + d2
+        dip_fit = reconstruct_field_3d(
+            probes, samples(truth_dips, probes);
+            domain = box, model = :curl_free, dipole_positions = d_pos,
+            regularization = 1.0e-14, abstol = 1.0e-13, reltol = 1.0e-13
+        )
+        @test dip_fit.dipole_moments[1] ≈ d1.M rtol = 1.0e-7
+        @test dip_fit.dipole_moments[2] ≈ d2.M rtol = 1.0e-7
+        @test dip_fit(pt) ≈ truth_dips(pt) rtol = 1.0e-8
+        @test eval_B(dip_fit, pt) == 0
+        @test_throws ArgumentError reconstruct_field_3d(
+            probes, samples(truth_dips, probes);
+            domain = box, model = :curl_free, dipole_positions = [0.1 0.1 0.1]
+        )
+
+        # Parametric source_fields templates fit exact weights & current density
+        s1 = HarrisSheet(1.0, 0.35)
+        s2 = CurrentLoopAnalytic(
+            CurrentLoop(0.8, 1.0, SVector(0.0, 0.0, 1.4), SVector(0.0, 0.0, 1.0))
+        )
+        truth_src = 0.75 * s1 + 1200.0 * s2
+        src_fit = reconstruct_field_3d(
+            probes, samples(truth_src, probes);
+            domain = box, model = :curl_free, source_fields = (s1, s2),
+            regularization = 1.0e-14, abstol = 1.0e-13, reltol = 1.0e-13
+        )
+        @test src_fit.source_weights[1] ≈ 0.75 rtol = 1.0e-8
+        @test src_fit.source_weights[2] ≈ 1200.0 rtol = 1.0e-8
+        @test current_density(src_fit, pt) ≈ current_density(truth_src, pt) rtol = 1.0e-8
+        @test eval_B(src_fit, pt) == 0
+        @test eval_J(src_fit, pt) == 0
+
+        # Covariance propagation vs dense QR formula (unconstrained and constrained)
+        @test_throws ArgumentError field_covariance(cf_fit, pt)
+        sigma = 2.0e-5
+        surf, nrms = cube_surface((-0.35, 0.35))
+        surf_pts = 0.5 .* surf
+        b_vals = [dot(n, dip_ext(p)) for (p, n) in zip(eachrow(surf_pts), eachrow(nrms))]
+        fit_cov = reconstruct_field_3d(
+            probes, samples(dip_ext, probes);
+            domain = box, model = :curl_free, vacuum_degree = 3,
+            uncertainties = fill(sigma, size(probes)),
+            regularization = 1.0e-4 / sigma^2,
+            regularization_mode = :coefficients,
+            boundary_positions = surf_pts, boundary_normals = nrms,
+            boundary_values = b_vals,
+            boundary_uncertainties = fill(sigma / 2, length(b_vals)),
+            store_covariance = true
+        )
+        cov_pt = field_covariance(fit_cov, pt)
+        @test issymmetric(cov_pt)
+        @test minimum(eigvals(Symmetric(cov_pt))) > 0
+        # Double noise and rescale reg -> variance scales by 4x at matched reg
+        fit_cov2 = reconstruct_field_3d(
+            probes, samples(dip_ext, probes);
+            domain = box, model = :curl_free, vacuum_degree = 3,
+            uncertainties = fill(2 * sigma, size(probes)),
+            regularization = 1.0e-4 / (2 * sigma)^2,
+            regularization_mode = :coefficients,
+            boundary_positions = surf_pts, boundary_normals = nrms,
+            boundary_values = b_vals,
+            boundary_uncertainties = fill(sigma, length(b_vals)),
+            store_covariance = true
+        )
+        @test field_covariance(fit_cov2, pt) ≈ 4 * cov_pt rtol = 1.0e-10
+        @test_throws DomainError field_covariance(fit_cov, SVector(1.0, 0.0, 0.0))
+
+        # Exact boundary constraint covariance check (zero normal variance along normal)
+        fit_exact_cov = reconstruct_field_3d(
+            probes, samples(dip_ext, probes);
+            domain = box, model = :curl_free, vacuum_degree = 3,
+            uncertainties = fill(sigma, size(probes)),
+            boundary_positions = surf_pts[1:1, :],
+            boundary_normals = nrms[1:1, :],
+            boundary_values = b_vals[1:1],
+            regularization = 1.0e-8,
+            regularization_mode = :coefficients,
+            store_covariance = true
+        )
+        n1 = SVector{3}(nrms[1, :])
+        p1 = SVector{3}(surf_pts[1, :])
+        cov_bdy = field_covariance(fit_exact_cov, p1)
+        @test dot(n1, cov_bdy * n1) < 1.0e-20
+
+        # Directional and boundary constraints combined with virtual dipoles & sources
+        truth_ext = d1 + 500.0 * s2
+        dir_vecs = [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0]
+        dir_pts = [0.2 -0.1 0.05; -0.15 0.25 -0.1; 0.05 0.1 -0.25]
+        dir_vals = [
+            dot(SVector{3}(d), truth_ext(SVector{3}(p)))
+                for (p, d) in zip(eachrow(dir_pts), eachrow(dir_vecs))
+        ]
+        bdy_vals_ext = [
+            dot(SVector{3}(n), truth_ext(SVector{3}(p)))
+                for (p, n) in zip(eachrow(surf_pts), eachrow(nrms))
+        ]
+        fit_ext_dir = reconstruct_field_3d(
+            probes, samples(truth_ext, probes);
+            domain = box, model = :curl_free, vacuum_degree = 3,
+            dipole_positions = d_pos[1:1, :], source_fields = (s2,),
+            directional_positions = dir_pts, directional_directions = dir_vecs,
+            directional_values = dir_vals, directional_uncertainties = fill(1.0e-3, 3),
+            boundary_positions = surf_pts, boundary_normals = nrms,
+            boundary_values = bdy_vals_ext,
+            boundary_uncertainties = fill(1.0e-3, length(bdy_vals_ext)),
+            regularization = 1.0e-14, algorithm = QRFactorization()
+        )
+        @test fit_ext_dir(pt) ≈ truth_ext(pt) rtol = 1.0e-4
+
+        fit_def_vac = reconstruct_field_3d(
+            probes, samples(dip_ext, probes); domain = box, model = :curl_free
+        )
+        @test fit_def_vac.vacuum_degree == 3
+        @test_throws ArgumentError reconstruct_field_3d(
+            probes, samples(dip_ext, probes); domain = box
+        )
+        @test_throws ArgumentError reconstruct_field_3d(
+            probes, samples(dip_ext, probes);
+            domain = box, model = :curl_free, basis_centers = probes[1:2, :]
+        )
+        @test_throws ArgumentError reconstruct_field_3d(
+            probes, samples(dip_ext, probes); domain = box, model = :invalid
+        )
+    end
 end
 
 end # module test_reconstruction3d

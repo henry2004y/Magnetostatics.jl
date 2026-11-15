@@ -3,23 +3,73 @@ using LinearSolve: QRFactorization
 using Magnetostatics
 using StaticArrays
 
+function eval_vec_batch(f::F, points::Vector{SVector{3, Float64}}) where {F}
+    acc = zero(SVector{3, Float64})
+    @inbounds for p in points
+        acc += f(p)
+    end
+    return acc
+end
+
+function eval_vec_batch(f::F, arg::A, points::Vector{SVector{3, Float64}}) where {F, A}
+    acc = zero(SVector{3, Float64})
+    @inbounds for p in points
+        acc += f(arg, p)
+    end
+    return acc
+end
+
+function eval_scalar_batch(
+        f::F, arg::A, points::Vector{SVector{3, Float64}}
+    ) where {F, A}
+    acc = 0.0
+    @inbounds for p in points
+        acc += f(arg, p)
+    end
+    return acc
+end
+
+function eval_solve_batch(
+        solver::S, source::C, points::Vector{SVector{3, Float64}}
+    ) where {S, C}
+    acc = zero(SVector{3, Float64})
+    @inbounds for p in points
+        acc += solve(solver, source, p)
+    end
+    return acc
+end
+
+function eval_loop_batch(loop::L, points::Vector{SVector{3, Float64}}) where {L}
+    acc = zero(SVector{3, Float64})
+    @inbounds for p in points
+        acc += getB_loop(p, loop)
+    end
+    return acc
+end
+
 const SUITE = BenchmarkGroup()
 
 SUITE["solvers"] = BenchmarkGroup()
 
 # Biot-Savart
 SUITE["solvers"]["biot_savart"] = BenchmarkGroup()
-solver, wire, r = let
-    r = SVector(0.5, 0.5, 0.0)
+solver, wire, biot_points = let
+    points = vec(
+        [
+            SVector(x, y, z) for x in (-0.45, 0.45), y in (-0.45, 0.45),
+                z in (-0.35, -0.1, 0.1, 0.35)
+        ]
+    )
     loop = CurrentLoop(1.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
     # creates a 100-segment wire
     wire = discretize_loop(loop, 100)
     solver = BiotSavart()
 
-    solver, wire, r
+    solver, wire, points
 end
 
-SUITE["solvers"]["biot_savart"]["discretized_loop"] = @benchmarkable solve($solver, $wire, $r)
+SUITE["solvers"]["biot_savart"]["discretized_loop"] =
+    @benchmarkable eval_solve_batch($solver, $wire, $biot_points)
 
 # FFT Solver
 SUITE["solvers"]["fft"] = BenchmarkGroup()
@@ -32,50 +82,116 @@ fft_solver, J, dx = let
 end
 
 SUITE["solvers"]["fft"]["small_grid"] = @benchmarkable solve($fft_solver, $J, $dx)
+fft_open_solver = FFTSolver(OpenBoundary())
+SUITE["solvers"]["fft"]["open_grid"] = @benchmarkable solve($fft_open_solver, $J, $dx)
 
 # Vector Potential
 SUITE["solvers"]["potential"] = BenchmarkGroup()
-pot_solver, pot_r, pot_loop = let
+loop_points = vec(
+    [
+        SVector(x, y, z) for x in (-0.75, -0.35, -0.15, 0.15, 0.35),
+            y in (-0.35, -0.15, 0.15, 0.35, 0.75), z in (-0.4, -0.15, 0.15, 0.4)
+    ]
+)
+pot_solver, pot_loop = let
     solver = VectorPotential()
-    r = SVector(0.5, 0.0, 0.1)
     loop = CurrentLoop(1.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
-    solver, r, loop
+    solver, loop
 end
 
-SUITE["solvers"]["potential"]["current_loop"] = @benchmarkable solve($pot_solver, $pot_loop, $pot_r)
+SUITE["solvers"]["potential"]["current_loop"] =
+    @benchmarkable eval_solve_batch($pot_solver, $pot_loop, $loop_points)
 
 # Analytical
 SUITE["solvers"]["analytical"] = BenchmarkGroup()
-r, loop = let
-    r = SVector(0.5, 0.0, 0.1)
-    # radius=3, current=1
-    loop = CurrentLoop(3.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
+loop = CurrentLoop(3.0, 1.0, SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0))
 
-    r, loop
+SUITE["solvers"]["analytical"]["current_loop"] =
+    @benchmarkable eval_loop_batch($loop, $loop_points)
+
+dipole = Dipole(SVector(0.0, 0.0, 1.0))
+dipole_points = vec(
+    [
+        SVector(x, y, z) for x in (-0.75, -0.25, 0.25, 0.75),
+            y in range(-0.7, 0.7; length = 8), z in range(-0.7, 0.7; length = 8)
+    ]
+)
+
+SUITE["solvers"]["analytical"]["dipole"] =
+    @benchmarkable eval_vec_batch($dipole, $dipole_points)
+
+solenoid_thin = Solenoid(0.5, 1.0, 1000.0)
+solenoid_thick = Solenoid(0.5, 1.0, 1000.0; thickness = 0.1)
+tokamak_coils = TokamakCoils(1.0, 1.0, 1.0e3, 1.0e3)
+cuboid_mag = CuboidMagnet(SVector(0.2, 0.3, 0.4), SVector(0.0, 0.0, 1.0e6))
+thick_points = vec(
+    [
+        SVector(x, y, z) for x in (-0.25, 0.25), y in (-0.25, 0.25),
+            z in (-0.35, -0.1, 0.1, 0.35)
+    ]
+)
+magnet_points = vec(
+    [
+        SVector(x, y, z) for x in (-0.35, -0.05, 0.05, 0.35),
+            y in (-0.45, -0.05, 0.05, 0.45), z in (-0.55, -0.05, 0.05, 0.55)
+    ]
+)
+SUITE["solvers"]["analytical"]["solenoid_thin"] =
+    @benchmarkable eval_vec_batch($solenoid_thin, $loop_points)
+SUITE["solvers"]["analytical"]["solenoid_thick"] =
+    @benchmarkable eval_vec_batch($solenoid_thick, $thick_points)
+SUITE["solvers"]["analytical"]["tokamak_coils"] =
+    @benchmarkable eval_vec_batch($tokamak_coils, $thick_points)
+SUITE["solvers"]["analytical"]["cuboid_magnet"] =
+    @benchmarkable eval_vec_batch($cuboid_mag, $magnet_points)
+
+# Field Composition
+SUITE["solvers"]["composition"] = BenchmarkGroup()
+composed_field = let
+    rot = SMatrix{3, 3, Float64}(
+        cos(0.3), 0.0, -sin(0.3),
+        0.0, 1.0, 0.0,
+        sin(0.3), 0.0, cos(0.3)
+    )
+    2.0 * translate_field(dipole, SVector(0.1, -0.2, 0.05)) + rotate_field(cuboid_mag, rot)
 end
-
-SUITE["solvers"]["analytical"]["current_loop"] = @benchmarkable getB_loop($r, $loop)
-
-r_dipole, dipole = let
-    r = SVector(0.5, 0.0, 0.1)
-    dipole = Dipole(SVector(0.0, 0.0, 1.0))
-    r, dipole
-end
-
-SUITE["solvers"]["analytical"]["dipole"] = @benchmarkable ($dipole)($r_dipole)
+SUITE["solvers"]["composition"]["transformed_sum"] =
+    @benchmarkable eval_vec_batch($composed_field, $magnet_points)
 
 # Poisson Solver
 SUITE["solvers"]["poisson"] = BenchmarkGroup()
-poisson_solver, poisson_J = let
+poisson_solver, poisson_dst_solver, poisson_J = let
     xs = range(0.0, 1.0; length = 16)
     ys = range(0.0, 1.0; length = 16)
     zs = range(0.0, 1.0; length = 16)
     solver = PoissonSolver(xs, ys, zs)
+    dst_solver = PoissonSolver(xs, ys, zs; alg = DSTFactorization())
     J = rand(3, 16, 16, 16)
-    solver, J
+    solver, dst_solver, J
 end
 
-SUITE["solvers"]["poisson"]["small_grid"] = @benchmarkable solve($poisson_solver, $poisson_J)
+SUITE["solvers"]["poisson"]["small_grid"] =
+    @benchmarkable solve($poisson_solver, $poisson_J)
+SUITE["solvers"]["poisson"]["dst_grid"] =
+    @benchmarkable solve($poisson_dst_solver, $poisson_J)
+
+# Interpolated Grid Magnetic Field
+SUITE["solvers"]["grid_field"] = BenchmarkGroup()
+grid_field, grid_points = let
+    gs = range(0.0, 1.0; length = 16)
+    gf = GridMagneticField(rand(3, 16, 16, 16), gs, gs, gs)
+    points = vec(
+        [
+            SVector(x, y, z) for x in (0.15, 0.35, 0.65, 0.85),
+                y in range(0.1, 0.9; length = 4), z in range(0.12, 0.88; length = 8)
+        ]
+    )
+    gf, points
+end
+SUITE["solvers"]["grid_field"]["eval_B"] =
+    @benchmarkable eval_vec_batch($grid_field, $grid_points)
+SUITE["solvers"]["grid_field"]["eval_J"] =
+    @benchmarkable eval_vec_batch(current_density, $grid_field, $grid_points)
 
 # Axisymmetric field reconstruction from sparse probes: FLARE coils sampled on a
 # 12 × 11 probe array, with virtual filaments for the coil field and a loose
@@ -148,14 +264,26 @@ recon_field = reconstruct_axisymmetric_field(
     recon_problem.positions, recon_problem.B; length_scale = 0.12,
     basis_centers = recon_problem.grid(0.06), recon_problem.common...
 )
-recon_r = SVector(0.9, 0.1, 0.05)
+recon_points = vec(
+    [
+        SVector(R * cos(phi), R * sin(phi), z) for R in range(0.52, 1.18; length = 4),
+            phi in (0.1, 0.4), z in range(-0.22, 0.22; length = 4)
+    ]
+)
+recon_j_points = vec(
+    [
+        SVector(R * cos(phi), R * sin(phi), z) for R in range(0.52, 1.18; length = 4),
+            phi in (0.05, 0.25, 0.45, 0.65), z in range(-0.22, 0.22; length = 4)
+    ]
+)
 
 SUITE["reconstruction"]["evaluate"] = BenchmarkGroup()
-SUITE["reconstruction"]["evaluate"]["field"] = @benchmarkable ($recon_field)($recon_r)
+SUITE["reconstruction"]["evaluate"]["field"] =
+    @benchmarkable eval_vec_batch($recon_field, $recon_points)
 SUITE["reconstruction"]["evaluate"]["poloidal_flux"] =
-    @benchmarkable poloidal_flux($recon_field, $recon_r)
+    @benchmarkable eval_scalar_batch(poloidal_flux, $recon_field, $recon_points)
 SUITE["reconstruction"]["evaluate"]["current_density"] =
-    @benchmarkable current_density($recon_field, $recon_r)
+    @benchmarkable eval_vec_batch(current_density, $recon_field, $recon_j_points)
 
 # 3D field reconstruction of a tilted external coil from a 4 × 4 × 4 probe array
 # and soft normal-field samples on the box surface.
@@ -211,11 +339,18 @@ recon3d_field = reconstruct_field_3d(
     recon3d_problem.common...
 )
 recon3d_r = SVector(0.1, -0.2, 0.3)
+recon3d_points = vec(
+    [
+        SVector(x, y, z) for x in (-0.35, 0.0, 0.35),
+            y in (-0.35, 0.0, 0.35), z in (-0.35, 0.0, 0.35)
+    ]
+)
 
 SUITE["reconstruction3d"]["evaluate"] = BenchmarkGroup()
-SUITE["reconstruction3d"]["evaluate"]["field"] = @benchmarkable ($recon3d_field)($recon3d_r)
+SUITE["reconstruction3d"]["evaluate"]["field"] =
+    @benchmarkable eval_vec_batch($recon3d_field, $recon3d_points)
 SUITE["reconstruction3d"]["evaluate"]["current_density"] =
-    @benchmarkable current_density($recon3d_field, $recon3d_r)
+    @benchmarkable eval_vec_batch(current_density, $recon3d_field, $recon3d_points)
 
 SUITE["reconstruction3d"]["assembly"] = BenchmarkGroup()
 SUITE["reconstruction3d"]["assembly"]["operators"] =
@@ -249,7 +384,7 @@ gsr_problem = let
     common = (;
         crossing_velocity = SVector(50.0e3, 0.0, 0.0),
         invariant_axis = SVector(0.0, 0.0, 1.0),
-        y = collect(range(-0.3L, 0.3L; length = 61)),
+        y = collect(range(-0.08L, 0.08L; length = 61)),
         spatial_degree = 10, pressure_degree = 6, axial_degree = 0,
     )
     (; times, B = [b[k] for b in B, k in 1:3], pressure, common)
@@ -261,9 +396,22 @@ SUITE["grad_shafranov"]["fit"] = @benchmarkable(
 gsr_field = reconstruct_grad_shafranov(
     gsr_problem.times, gsr_problem.B, gsr_problem.pressure; gsr_problem.common...
 )
-gsr_r = SVector(0.37e6, 0.17e6, 0.0)
-SUITE["grad_shafranov"]["field"] = @benchmarkable ($gsr_field)($gsr_r)
+gsr_points = vec(
+    [
+        SVector(x, y, 0.0) for x in range(-1.4e6, 1.4e6; length = 8),
+            y in range(-0.07e6, 0.07e6; length = 8)
+    ]
+)
+SUITE["grad_shafranov"]["field"] =
+    @benchmarkable eval_vec_batch($gsr_field, $gsr_points)
 SUITE["grad_shafranov"]["current_density"] =
-    @benchmarkable current_density($gsr_field, $gsr_r)
-SUITE["grad_shafranov"]["flux"] = @benchmarkable flux_function($gsr_field, $gsr_r)
-SUITE["grad_shafranov"]["pressure"] = @benchmarkable thermal_pressure($gsr_field, $gsr_r)
+    @benchmarkable eval_vec_batch(current_density, $gsr_field, $gsr_points)
+SUITE["grad_shafranov"]["flux"] =
+    @benchmarkable eval_scalar_batch(flux_function, $gsr_field, $gsr_points)
+SUITE["grad_shafranov"]["pressure"] =
+    @benchmarkable eval_scalar_batch(thermal_pressure, $gsr_field, $gsr_points)
+
+SUITE["topology"] = BenchmarkGroup()
+topo_ah_coil = AntiHelmholtzCoil(1.0, 10.0)
+SUITE["topology"]["locate_null"] =
+    @benchmarkable locate_magnetic_null($topo_ah_coil, SA[0.08, -0.05, 0.06])

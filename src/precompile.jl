@@ -34,12 +34,15 @@
             solve(vp_solver, mag, r)
             vector_potential(mag, r)
 
-            # Analytical Fields
+            # Analytical Fields & Field Algebra
             harris(r)
             dipole(r)
             loop_analytic(r)
             mag(r)
             getB_loop(r, loop)
+            solenoid = Solenoid(0.5, 1.0, 100.0)
+            solenoid(r)
+            (dipole + harris)(r)
 
             # Utilities
             getB_mirror(0.5, 0.0, 0.0, 1.0, 1.0, 1.0)
@@ -51,13 +54,18 @@
             solve(fft_solver, J_fft, dx)
 
             # Poisson Solver
-            p_solver = PoissonSolver(
-                range(-1.0, 1.0; length = 4),
-                range(-1.0, 1.0; length = 4),
-                range(-1.0, 1.0; length = 4)
-            )
+            p_grid = range(-1.0, 1.0; length = 4)
+            p_solver = PoissonSolver(p_grid, p_grid, p_grid)
             J_p = zeros(3, 4, 4, 4)
             solve(p_solver, J_p)
+            dst_solver = PoissonSolver(p_grid, p_grid, p_grid; alg = DSTFactorization())
+            solve(dst_solver, J_p)
+
+            # Grid Field & Topology
+            gf = GridMagneticField(zeros(3, 4, 4, 4), p_grid, p_grid, p_grid)
+            gf(SVector(0.1, 0.1, 0.1))
+            current_density(gf, SVector(0.1, 0.1, 0.1))
+            locate_magnetic_null(AntiHelmholtzCoil(1.0, 1.0), SVector(0.05, -0.04, 0.03))
 
             # Helper set_current_wire!
             J_wire = zeros(3, 10, 10, 10)

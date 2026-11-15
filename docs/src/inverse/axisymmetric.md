@@ -50,6 +50,11 @@ at probes alone does not establish the inferred plasma-current distribution.
 Exact flux constraints use a dense null-space reduction, while uncertain
 boundary data permit the sparse iterative path.
 
+Inspect `field.diagnostics` for fit residuals, convergence, and support
+coverage. Pass `store_covariance = true` to store `coefficient_covariance` for
+[`field_covariance`](@ref), and use [`locate_poloidal_critical_point`](@ref)
+to locate magnetic axes and poloidal X-points.
+
 ## Example and API
 
 The [FLARE example](@ref flare_example) starts from known coils and then fits

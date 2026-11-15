@@ -10,12 +10,19 @@ It fits Cartesian vector measurements using
 
 ```math
 \mathbf B = \mathbf B_{\rm ref} + \mathbf b_0
-  + \nabla\times\left[\ell\sum_j\phi_j(\mathbf x)\mathbf a_j\right].
+  + \nabla\times\left[\ell\sum_j\phi_j(\mathbf x)\mathbf a_j\right]
+  + \nabla\Phi_{\rm vac}(\mathbf x)
+  + \sum_d \mathbf B_{\rm dip}(\mathbf x;\mathbf r_d,\mathbf m_d)
+  + \sum_k w_k \mathbf S_k(\mathbf x).
 ```
 
-The fitted correction is divergence-free throughout the evaluation box, not
-only at probe locations. A supplied reference field must also be divergence-free.
-The uniform mode captures background fields that localized bases represent poorly.
+With `model = :div_free` (default), the fitted field includes vector-potential RBFs and
+any optional vacuum, dipole, or parametric source terms, remaining divergence-free
+throughout the evaluation box. With `model = :curl_free`, vector-potential RBFs are
+omitted (so `length_scale` may be omitted and `vacuum_degree` defaults to `3` unless
+`dipole_positions` or `source_fields` are provided), yielding a strictly current-free
+representation when `source_fields` is empty. A supplied `reference_field` must satisfy
+the same physical assumptions.
 
 ## Basic workflow
 
@@ -67,10 +74,15 @@ Physical constraints are supplied independently:
 - **Current measurements:** `current_positions`, `current_density`, and
   `current_uncertainties`, with three Cartesian components in A/m². These use
   analytic derivatives of the fitted potential, not finite-difference currents.
-- **Known background:** `reference_field`, whose contribution is subtracted from
-  observations before fitting a correction. Current observations/evaluation
-  require a current-density method for this reference (null/uniform fields are
-  supported directly).
+- **Known background and fitted source modes:** `reference_field` subtracts a fixed
+  background; `vacuum_degree` adds current-free real solid harmonic scalar-potential modes;
+  `dipole_positions` fits external virtual 3D magnetic dipoles (stored in
+  `field.dipole_moments`); and `source_fields` fits scalar amplitudes for parametric
+  `AbstractMagneticField` templates (stored in `field.source_weights`).
+- **Covariance and topology:** pass `store_covariance = true` to populate
+  `field.diagnostics.coefficient_covariance` for [`field_covariance`](@ref), and use
+  [`locate_magnetic_null`](@ref) and [`classify_magnetic_null`](@ref) to inspect 3D
+  nulls.
 
 By default, regularization penalizes the volume-averaged correction-field energy
 and curl energy, with the curl term scaled by `length_scale²`. It does **not**

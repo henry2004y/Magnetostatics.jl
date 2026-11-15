@@ -59,7 +59,7 @@ end
     # B_R = -1/R * dpsi/dZ
     # B_Z =  1/R * dpsi/dR
     # B_phi = R0 * B0 / R
-    BR = -psi0 * inv_R04 * (2 * z) / (kappa^2)
+    BR = -psi0 * inv_R04 * (2 * R * z) / (kappa^2)
     BZ = psi0 * inv_R04 * ((2 * z^2) / (kappa^2) + (R^2 - R0^2))
     Bphi = (R0 * B0) / R
 
@@ -72,6 +72,18 @@ end
     Bz = BZ
 
     return SVector{3, T}(Bx, By, Bz)
+end
+
+function current_density(eq::SolovevEquilibrium{T}, pos) where {T}
+    x, y = pos[1], pos[2]
+    R = hypot(x, y)
+    if R < 1.0e-10
+        return zero(SVector{3, T})
+    end
+    (; R0, kappa, psi0) = eq
+    j_phi = -(2 * psi0 * R * (one(T) + inv(kappa^2))) / (T(μ₀) * R0^4)
+    inv_R = inv(R)
+    return SVector{3, T}(-j_phi * y * inv_R, j_phi * x * inv_R, zero(T))
 end
 
 """
@@ -124,11 +136,6 @@ end
 function current_density(field::TaylorState{T}, pos) where {T}
     B_vec = field(pos)
     return (field.alpha / T(μ₀)) * B_vec
-end
-
-function vector_potential(field::TaylorState{T}, pos) where {T}
-    B_vec = field(pos)
-    return inv(field.alpha) * B_vec
 end
 
 """

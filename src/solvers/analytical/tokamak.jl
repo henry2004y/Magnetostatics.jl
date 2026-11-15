@@ -32,14 +32,17 @@ end
     R_coil = a * 2
 
     Bx, By, Bz = zero(T), zero(T), zero(T)
+    R_major = b + R_coil
+    dtheta = T(2π) / n_coils
+    theta0 = T(π) / n_coils
 
     for i in 0:(n_coils - 1)
-        θ = π / n_coils + i * 2π / n_coils
-        R_major = b + R_coil
-        center = SVector(R_major * cos(θ), R_major * sin(θ), zero(T))
-        normal = SVector(-sin(θ), cos(θ), zero(T))
+        θ = theta0 + i * dtheta
+        sinθ, cosθ = sincos(θ)
+        center = SVector(R_major * cosθ, R_major * sinθ, zero(T))
+        normal = SVector(-sinθ, cosθ, zero(T))
 
-        cl = CurrentLoop(R_coil, ICoils, center, normal)
+        cl = _current_loop_unchecked(R_coil, ICoils, center, normal)
         B_coil = getB_loop(r, cl)
 
         Bx += B_coil[1]
@@ -48,13 +51,12 @@ end
     end
 
     σ = R_coil / 3
-    ϕ = atan(y, x)
     R_p = R_coil + b
-    dist_val = √(z^2 + (x - R_p * cos(ϕ))^2 + (y - R_p * sin(ϕ))^2)
+    dist_val = hypot(hypot(x, y) - R_p, z)
 
     if dist_val > 1.0e-4
         I2_r_plasma = IPlasma * erf(dist_val / (σ * √2))
-        cl_plasma = CurrentLoop(
+        cl_plasma = _current_loop_unchecked(
             R_p, I2_r_plasma,
             SVector(zero(T), zero(T), zero(T)), SVector(zero(T), zero(T), one(T))
         )

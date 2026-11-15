@@ -124,4 +124,18 @@
                 isapprox(B[3, 2, 4, 2], 0.0; atol = 1.0e-12)
         end
     end
+
+    @testset "Elliptic Integrals (_ellipke and _cel)" begin
+        @test Magnetostatics._ellipke(0) == (π / 2, π / 2)
+        @test Magnetostatics._ellipke(1.0) == (Inf, 1.0)
+        @test Magnetostatics._ellipke(1.5) == (Inf, 1.0)
+        @test isnan(Magnetostatics._cel(0.0, 1.0, 1.0, 1.0))
+
+        K_06, _ = Magnetostatics._ellipke(1 - 0.6^2)
+        @test Magnetostatics._cel(0.6, 0.0, 1.0, 0.0) ≈ K_06 rtol = 1.0e-12
+        @test Magnetostatics._cel(0.6, -0.4, 1.0, -0.4) ≈ K_06 rtol = 1.0e-12
+        @test Magnetostatics._cel(1.0, -0.4, 1.0, 0.0) ≈ π / (2 * 1.4) rtol = 1.0e-12
+        @test Magnetostatics._cel(1, -1, 1, -1) ≈ π / 2 rtol = 1.0e-12
+        @test Magnetostatics.sph2cart(SA[1.0, π / 2, 0.0]) ≈ SA[1.0, 0.0, 0.0]
+    end
 end

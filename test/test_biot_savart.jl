@@ -49,4 +49,29 @@
     B_batch = solve(solver, loop_wire, positions)
     @test length(B_batch) == 3
     @test B_batch[2] ≈ B_loop
+    @test isempty(solve(solver, loop_wire, SVector{3, Float64}[]))
+
+    # Test 4: Regularized loop on-axis and MultiSource boundaries
+    loop_a = CurrentLoop(1.0, 2.0, SVector(0.0, 0.0, 0.3), SVector(0.0, 0.0, 1.0))
+    loop_b = CurrentLoop(1.0, -2.0, SVector(0.0, 0.0, -0.3), SVector(0.0, 0.0, 1.0))
+    bs_reg = BiotSavart(; core_radius = 0.05)
+    @test solve(bs_reg, loop_a, SVector(0.0, 0.0, 0.3)) ≈ SVector(
+        0.0, 0.0, Magnetostatics.μ₀ * 2.0 / (2 * (1.0 + 0.05^2)^1.5)
+    )
+    ms_tup = MultiSource(loop_a, loop_b)
+    ms_vec = MultiSource([loop_a, loop_b])
+    pt_ms = SVector(0.2, -0.1, 0.15)
+    @test solve(solver, ms_tup, Tuple(pt_ms)) ≈ solve(solver, ms_tup, pt_ms)
+    @test solve(solver, ms_vec, Tuple(pt_ms)) ≈ solve(solver, ms_tup, pt_ms)
+    @test solve(solver, ms_vec, pt_ms) ≈ solve(solver, ms_tup, pt_ms)
+    wall = ConductingWall(3, 0.0)
+    @test solve(BiotSavart(wall), ms_tup, pt_ms) ≈
+        solve(BiotSavart(wall), loop_a, pt_ms) + solve(BiotSavart(wall), loop_b, pt_ms)
+    @test solve(BiotSavart(wall), ms_vec, pt_ms) ≈
+        solve(BiotSavart(wall), ms_tup, pt_ms)
+    @test solve(BiotSavart(wall), [loop_a, loop_b], pt_ms) ≈
+        solve(BiotSavart(wall), ms_tup, pt_ms)
+    @test_throws ArgumentError MultiSource(())
+    @test_throws ArgumentError MultiSource(CurrentLoop{Float64}[])
+    @test_throws ArgumentError BiotSavart(; core_radius = -0.1)
 end

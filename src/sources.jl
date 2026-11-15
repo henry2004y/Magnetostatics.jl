@@ -36,6 +36,19 @@ struct CurrentLoop{T} <: AbstractCurrentSource
         n_hat = normalize(SVector{3, T}(normal))
         return new{T}(T(radius), T(current), SVector{3, T}(center), n_hat)
     end
+
+    function CurrentLoop{T}(
+            radius::T, current::T, center::SVector{3, T},
+            normal::SVector{3, T}, ::Val{false}
+        ) where {T}
+        return new{T}(radius, current, center, normal)
+    end
+end
+
+@inline function _current_loop_unchecked(
+        radius::T, current::T, center::SVector{3, T}, n_hat::SVector{3, T}
+    ) where {T}
+    return CurrentLoop{T}(radius, current, center, n_hat, Val(false))
 end
 
 """
@@ -104,4 +117,29 @@ A convenience constructor for a (2,3) torus knot, also known as a trefoil knot.
 """
 function TrefoilKnot(R, r, current, center = [0, 0, 0], normal = [0, 0, 1], up = [1, 0, 0])
     return TorusKnot(R, r, 2, 3, current, center, normal, up)
+end
+
+"""
+    MultiSource{S} <: AbstractCurrentSource
+
+Container grouping multiple `AbstractCurrentSource` objects (as a heterogeneous `Tuple` or
+`AbstractVector`) so solvers such as `BiotSavart`, `VectorPotential`, and
+`compute_surface_current` evaluate their combined field cleanly without concatenating wires.
+"""
+struct MultiSource{S} <: AbstractCurrentSource
+    sources::S
+
+    function MultiSource{S}(sources::S) where {S}
+        !isempty(sources) ||
+            throw(ArgumentError("MultiSource requires at least one source"))
+        return new{S}(sources)
+    end
+end
+
+function MultiSource(sources::Tuple{Vararg{AbstractCurrentSource}})
+    return MultiSource{typeof(sources)}(sources)
+end
+MultiSource(sources::AbstractCurrentSource...) = MultiSource(sources)
+function MultiSource(sources::AbstractVector{<:AbstractCurrentSource})
+    return MultiSource{typeof(sources)}(sources)
 end
