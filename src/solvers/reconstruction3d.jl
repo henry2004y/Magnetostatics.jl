@@ -137,37 +137,7 @@ function _bins_3d(centers, domain, scale)
     return bins
 end
 
-function _foreach_kernel_3d(
-        f::F, pos, centers, scale, kernel, domain, bins
-    ) where {F}
-    if kernel === :gaussian
-        for j in axes(centers, 1)
-            _kernel_term_3d(f, j, pos, centers, scale, kernel)
-        end
-        return nothing
-    end
-    cell = ntuple(k -> floor(Int, (pos[k] - domain[2k - 1]) / scale), 3)
-    for offset in Iterators.product(-1:1, -1:1, -1:1)
-        bin = get(bins, cell .+ offset, nothing)
-        bin === nothing && continue
-        for j in bin
-            _kernel_term_3d(f, j, pos, centers, scale, kernel)
-        end
-    end
-    return nothing
-end
-
-@inline function _kernel_term_3d(f::F, j, pos, centers, scale, kernel) where {F}
-    T = promote_type(eltype(pos), eltype(centers), typeof(scale))
-    displacement = SVector{3, T}(pos) -
-        SVector{3, T}(ntuple(k -> centers[j, k], 3))
-    kernel === :wendland_c2 && norm(displacement) >= scale && return nothing
-    gradient, hessian = _kernel_derivatives_3d(displacement, scale, kernel)
-    f(j, gradient, hessian)
-    return nothing
-end
-
-function _kernel_derivatives_3d(displacement, scale, kernel)
+@inline function _kernel_derivatives_3d(displacement, scale, kernel)
     T = eltype(displacement)
     r = norm(displacement)
     inv_scale2 = inv(scale^2)
@@ -190,46 +160,6 @@ function _kernel_derivatives_3d(displacement, scale, kernel)
         end
     end
     return gradient, hessian
-end
-
-function _operators_3d(pos, centers, scale, kernel, domain, bins)
-    T = promote_type(eltype(pos), eltype(centers), typeof(scale))
-    ncoefficients = 3 + 3size(centers, 1)
-    field_indices = ntuple(k -> [k], 3)
-    field_values = ntuple(_ -> T[1], 3)
-    curl_indices = ntuple(_ -> Int[], 3)
-    curl_values = ntuple(_ -> T[], 3)
-    support_count = Ref(0)
-    _foreach_kernel_3d(pos, centers, scale, kernel, domain, bins) do j, gradient, hessian
-        support_count[] += 1
-        # Scaling A by the support radius gives all coefficients field units.
-        curl_block = scale * (hessian - tr(hessian) * one(hessian))
-        for k in 1:3
-            direction = SVector{3, T}(ntuple(i -> T(i == k), 3))
-            field_column = scale * cross(gradient, direction)
-            column = 3 + 3(j - 1) + k
-            for i in 1:3
-                if !iszero(field_column[i])
-                    push!(field_indices[i], column)
-                    push!(field_values[i], field_column[i])
-                end
-                if !iszero(curl_block[i, k])
-                    push!(curl_indices[i], column)
-                    push!(curl_values[i], curl_block[i, k])
-                end
-            end
-        end
-    end
-    field_rows = [sparsevec(field_indices[k], field_values[k], ncoefficients) for k in 1:3]
-    curl_rows = [sparsevec(curl_indices[k], curl_values[k], ncoefficients) for k in 1:3]
-    return field_rows, curl_rows, support_count[]
-end
-
-function _operators_3d(field::FieldReconstruction3D, pos)
-    return _operators_3d(
-        pos, field.centers, field.length_scale, field.kernel,
-        field.domain, field.center_bins
-    )
 end
 
 function _harmonic_count(vac_deg::Int)
@@ -565,18 +495,44 @@ function current_density(field::FieldReconstruction3D, pos)
 end
 
 function _matrix_3d(rows, ncoefficients, ::Type{T}) where {T}
-    nentries = sum(nnz, rows; init = 0)
-    I, J, V = Vector{Int}(undef, nentries), Vector{Int}(undef, nentries),
-        Vector{T}(undef, nentries)
-    entry = 0
-    for (i, row) in enumerate(rows)
-        indices, values = findnz(row)
-        for k in eachindex(indices)
-            entry += 1
-            I[entry], J[entry], V[entry] = i, indices[k], values[k]
+    nrows = length(rows)
+    colptr = zeros(Int, ncoefficients + 1)
+    @inbounds for row in rows
+        nzind = SparseArrays.nonzeroinds(row)
+        nzval = nonzeros(row)
+        for k in eachindex(nzind, nzval)
+            iszero(nzval[k]) || (colptr[nzind[k]] += 1)
         end
     end
-    return sparse(I, J, V, length(rows), ncoefficients)
+    pos = 1
+    @inbounds for j in 1:ncoefficients
+        c = colptr[j]
+        colptr[j] = pos
+        pos += c
+    end
+    colptr[ncoefficients + 1] = pos
+    nnz_total = pos - 1
+    rowval = Vector{Int}(undef, nnz_total)
+    nzval_out = Vector{T}(undef, nnz_total)
+    @inbounds for i in 1:nrows
+        row = rows[i]
+        nzind = SparseArrays.nonzeroinds(row)
+        nzval = nonzeros(row)
+        for k in eachindex(nzind, nzval)
+            v = nzval[k]
+            iszero(v) && continue
+            col = nzind[k]
+            p = colptr[col]
+            rowval[p] = i
+            nzval_out[p] = T(v)
+            colptr[col] = p + 1
+        end
+    end
+    @inbounds for j in ncoefficients:-1:1
+        colptr[j + 1] = colptr[j]
+    end
+    colptr[1] = 1
+    return SparseMatrixCSC(nrows, ncoefficients, colptr, rowval, nzval_out)
 end
 
 mutable struct _TripletRows3D{T}
@@ -654,6 +610,64 @@ function _collect_kernel_3d!(
         end
     end
     return length(scratch.indices)
+end
+
+@inline function _push_sparse_entry!(
+        indices::Vector{Int}, values::Vector{T}, col::Int, val::T
+    ) where {T}
+    if !iszero(val)
+        push!(indices, col)
+        push!(values, val)
+    end
+    return nothing
+end
+
+function _operators_3d(pos, centers, scale, kernel, domain, grid_bins::_GridBins3D)
+    T = promote_type(eltype(pos), eltype(centers), typeof(scale))
+    scale_T = T(scale)
+    point = SVector{3, T}(pos)
+    ncoefficients = 3 + 3 * size(centers, 1)
+    scratch = _KernelScratch3D{T}()
+    support_count = _collect_kernel_3d!(
+        scratch, point, centers, scale_T, kernel, domain, grid_bins
+    )
+    field_cap = 1 + 2 * support_count
+    curl_cap = 3 * support_count
+    field_indices = ntuple(k -> push!(sizehint!(Int[], field_cap), k), 3)
+    field_values = ntuple(_ -> push!(sizehint!(T[], field_cap), one(T)), 3)
+    curl_indices = ntuple(_ -> sizehint!(Int[], curl_cap), 3)
+    curl_values = ntuple(_ -> sizehint!(T[], curl_cap), 3)
+    perm = sortperm(scratch.indices; alg = InsertionSort)
+    @inbounds for p in perm
+        off = 3 + 3 * (scratch.indices[p] - 1)
+        g = scratch.grads[p]
+        _push_sparse_entry!(field_indices[1], field_values[1], off + 2, -scale_T * g[3])
+        _push_sparse_entry!(field_indices[1], field_values[1], off + 3, scale_T * g[2])
+        _push_sparse_entry!(field_indices[2], field_values[2], off + 1, scale_T * g[3])
+        _push_sparse_entry!(field_indices[2], field_values[2], off + 3, -scale_T * g[1])
+        _push_sparse_entry!(field_indices[3], field_values[3], off + 1, -scale_T * g[2])
+        _push_sparse_entry!(field_indices[3], field_values[3], off + 2, scale_T * g[1])
+        h = scratch.hessians[p]
+        tr_h = tr(h)
+        for m in 1:3, k in 1:3
+            val = scale_T * (m == k ? h[m, m] - tr_h : h[m, k])
+            _push_sparse_entry!(curl_indices[m], curl_values[m], off + k, val)
+        end
+    end
+    field_rows = SparseVector{T, Int}[
+        SparseVector(ncoefficients, field_indices[m], field_values[m]) for m in 1:3
+    ]
+    curl_rows = SparseVector{T, Int}[
+        SparseVector(ncoefficients, curl_indices[m], curl_values[m]) for m in 1:3
+    ]
+    return field_rows, curl_rows, support_count
+end
+
+function _operators_3d(field::FieldReconstruction3D, pos)
+    return _operators_3d(
+        pos, field.centers, field.length_scale, field.kernel,
+        field.domain, field.grid_bins
+    )
 end
 
 function _push_field_component_row!(
