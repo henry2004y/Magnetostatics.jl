@@ -119,8 +119,8 @@ end
     R = sqrt(x^2 + y^2)
     dR = R - R₀
     r2 = dR^2 + z^2
-    r2 > a^2 && throw(OverflowError("out of vacuum vessel"))
     r = r2 > zero(FT) ? sqrt(r2) : zero(FT)
+    r > a && throw(OverflowError("out of vacuum vessel"))
     Bζ = Bζ0 * R₀ / R
     fac_theta = Bζ / (R₀ * q_profile(r / a))
     b_theta_sin = fac_theta * z
