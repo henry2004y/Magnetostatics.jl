@@ -55,11 +55,12 @@ function _solve_bs(
         ::OpenBoundary, core_radius::Float64, source::Wire{T},
         r_in::SVector{3}
     ) where {T}
-    r = SVector{3, T}(r_in[1], r_in[2], r_in[3])
-    B = @SVector zeros(T, 3)
+    FT = float(promote_type(T, eltype(r_in)))
+    r = SVector{3, FT}(r_in[1], r_in[2], r_in[3])
+    B = zero(SVector{3, FT})
     points = source.points
     I = source.current
-    rc2 = T(core_radius * core_radius)
+    rc2 = FT(core_radius * core_radius)
 
     @inbounds for i in 1:(length(points) - 1)
         r1 = points[i]
@@ -71,15 +72,17 @@ function _solve_bs(
         cross_sq = dot(cross_prod, cross_prod)
         if core_radius > 0.0
             dl_sq = dot(dl, dl)
-            dl_sq < T(1.0e-30) && continue
+            dl_sq < FT(1.0e-30) && continue
             na = sqrt(dot(a, a) + rc2)
             nb = sqrt(dot(b, b) + rc2)
             term = dot(dl, a) / na - dot(dl, b) / nb
-            B += (T(μ0_4π) * I) * (cross_prod / (cross_sq + rc2 * dl_sq)) * term
+            B += (FT(μ0_4π) * I) * (cross_prod / (cross_sq + rc2 * dl_sq)) * term
         else
-            cross_sq < T(1.0e-20) && continue
-            term = dot(dl, a) / norm(a) - dot(dl, b) / norm(b)
-            B += (T(μ0_4π) * I) * (cross_prod / cross_sq) * term
+            cross_sq < FT(1.0e-20) && continue
+            na = sqrt(dot(a, a))
+            nb = sqrt(dot(b, b))
+            term = dot(dl, a) / na - dot(dl, b) / nb
+            B += (FT(μ0_4π) * I) * (cross_prod / cross_sq) * term
         end
     end
 
@@ -90,31 +93,31 @@ function _solve_bs(
         ::OpenBoundary, core_radius::Float64, loop::CurrentLoop{T},
         r::SVector{3}
     ) where {T}
+    FT = float(promote_type(T, eltype(r)))
     if core_radius <= 0.0
-        return SVector{3, T}(getB_loop(r[1], r[2], r[3], loop))
+        return SVector{3, FT}(getB_loop(r[1], r[2], r[3], loop))
     end
     (; radius, current, center, normal) = loop
-    r_rel = SVector{3, T}(r[1] - center[1], r[2] - center[2], r[3] - center[3])
+    r_rel = SVector{3, FT}(r[1] - center[1], r[2] - center[2], r[3] - center[3])
     z_local = dot(r_rel, normal)
     rho_vec = r_rel - z_local * normal
-    rho = norm(rho_vec)
-    rc2 = T(core_radius * core_radius)
-    if rho < T(1.0e-10) * radius
-        b_mag = T(μ₀) * current * radius^2 / (2 * (radius^2 + z_local^2 + rc2)^T(1.5))
-        return b_mag * normal
+    rho_sq = dot(rho_vec, rho_vec)
+    rc2 = FT(core_radius * core_radius)
+    if rho_sq < (FT(1.0e-8) * radius)^2
+        d2 = radius^2 + z_local^2 + rc2
+        b_z = FT(μ₀) * current * radius^2 / (2 * d2 * sqrt(d2))
+        b_perp_fac = (3 * z_local / (2 * d2)) * b_z
+        return b_perp_fac * rho_vec + b_z * normal
     end
+    rho = sqrt(rho_sq)
     denom_sq = (radius + rho)^2 + z_local^2 + rc2
     denom_diff_sq = (radius - rho)^2 + z_local^2 + rc2
     k_sq = 4 * radius * rho / denom_sq
     K_val, E_val = _ellipke(k_sq)
-    factor = T(μ₀) * current / (2 * T(π) * sqrt(denom_sq))
-    b_z = factor * (K_val + (radius^2 - rho^2 - z_local^2 - rc2) / denom_diff_sq * E_val)
-    b_rho = if abs(z_local) < T(1.0e-15)
-        zero(T)
-    else
-        factor * (z_local / rho) *
-            (-K_val + (radius^2 + rho^2 + z_local^2 + rc2) / denom_diff_sq * E_val)
-    end
+    factor = FT(μ₀) * current / (2 * FT(π) * sqrt(denom_sq))
+    b_z = factor * (K_val + (radius^2 - rho_sq - z_local^2 - rc2) / denom_diff_sq * E_val)
+    b_rho = factor * (z_local / rho) *
+        (-K_val + (radius^2 + rho_sq + z_local^2 + rc2) / denom_diff_sq * E_val)
     rho_hat = rho_vec / rho
     return b_rho * rho_hat + b_z * normal
 end
@@ -123,14 +126,16 @@ function _solve_bs(
         ::OpenBoundary, ::Float64, mesh::SurfaceCurrentMesh{T},
         r_in::SVector{3}
     ) where {T}
-    r = SVector{3, T}(r_in[1], r_in[2], r_in[3])
-    B = @SVector zeros(T, 3)
+    FT = float(promote_type(T, eltype(r_in)))
+    r = SVector{3, FT}(r_in[1], r_in[2], r_in[3])
+    B = zero(SVector{3, FT})
     @inbounds for i in eachindex(mesh.centers)
         R = r - mesh.centers[i]
-        R_norm = norm(R)
-        R_norm < T(1.0e-20) && continue
+        R_sq = dot(R, R)
+        R_sq < FT(1.0e-40) && continue
+        R_norm = sqrt(R_sq)
         K_vec = mesh.K[i][1] * mesh.tangents1[i] + mesh.K[i][2] * mesh.tangents2[i]
-        B += (T(μ0_4π) * mesh.areas[i] / R_norm^3) * cross(K_vec, R)
+        B += (FT(μ0_4π) * mesh.areas[i] / (R_sq * R_norm)) * cross(K_vec, R)
     end
     return B
 end
@@ -155,7 +160,7 @@ function _solve_bs(
         ::OpenBoundary, core_radius::Float64,
         sources::AbstractVector{<:AbstractCurrentSource}, r::SVector{3, T}
     ) where {T}
-    out_T = promote_type(T, _source_eltype(sources))
+    out_T = float(promote_type(T, _source_eltype(sources)))
     B = zero(SVector{3, out_T})
     for s in sources
         B += _solve_bs(OpenBoundary(), core_radius, s, r)
@@ -187,8 +192,8 @@ function _solve_bs(
         bc::PrescribedBoundary, core_radius::Float64, source, r::SVector{3}
     )
     B_source = _solve_bs(OpenBoundary(), core_radius, source, r)
-    B_bg = convert(typeof(B_source), bc.field_func(r))
-    return B_source + B_bg
+    B_bg = bc.field_func(r)
+    return B_source + SVector{3}(B_bg)
 end
 
 function _solve_bs(
@@ -225,8 +230,11 @@ function solve(solver::BiotSavart, source::_BiotSavartSource, r::SVector{3})
 end
 
 function solve(solver::BiotSavart, source::_BiotSavartSource, r)
-    T = _source_eltype(source)
-    return _solve_bs(solver.bc, solver.core_radius, source, SVector{3, T}(r))
+    @boundscheck length(r) >= 3 ||
+        throw(ArgumentError("Input must have at least 3 elements."))
+    FT = _promote_float(_source_eltype(source), r)
+    @inbounds r_sv = SVector{3, FT}(r[1], r[2], r[3])
+    return _solve_bs(solver.bc, solver.core_radius, source, r_sv)
 end
 
 function solve(

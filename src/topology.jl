@@ -8,7 +8,7 @@ function field_jacobian(field::AbstractMagneticField, r; h::Real = 1.0e-5)
     @boundscheck length(r) >= 3 ||
         throw(ArgumentError("Input must have at least 3 elements."))
     isfinite(h) && h > 0 || throw(ArgumentError("h must be finite and positive"))
-    T = eltype(r) <: AbstractFloat ? eltype(r) : Float64
+    T = _promote_float(r)
     h_T = T(h)
     inv2h = inv(T(2) * h_T)
     @inbounds p = SVector{3, T}(T(r[1]), T(r[2]), T(r[3]))

@@ -43,7 +43,7 @@ struct Solenoid{T} <: AbstractMagneticField
             typeof(radius), typeof(length), typeof(current),
             typeof(turns), typeof(thickness), eltype(center), eltype(normal)
         )
-        T = T_raw <: AbstractFloat ? T_raw : Float64
+        T = float(T_raw)
         R = T(radius)
         L = T(length)
         th = T(thickness)
@@ -59,7 +59,7 @@ end
 
 @inline function _solenoid_sheet_b_rz(
         R::T, L::T, I_tot::T, rho::T, z::T
-    ) where {T <: AbstractFloat}
+    ) where {T <: Real}
     b0 = T(μ₀) * I_tot / L
     half_l = T(0.5) * L
     zp = z + half_l
@@ -90,15 +90,15 @@ end
     return b_rho, b_z
 end
 
-@inline function _solenoid_a_kernel(kc::T, p::T) where {T <: AbstractFloat}
+@inline function _solenoid_a_kernel(kc::T, p::T) where {T <: Real}
     c1 = _cel(kc, one(T), zero(T), one(T))
-    iszero(p) && return c1
+    !(abs(p) > zero(T)) && return c1
     return c1 - _cel(kc, p, zero(T), p)
 end
 
 @inline function _solenoid_sheet_a_phi(
         R::T, L::T, I_tot::T, rho::T, z::T
-    ) where {T <: AbstractFloat}
+    ) where {T <: Real}
     rho <= T(1.0e-12) * R && return zero(T)
     b0 = T(μ₀) * I_tot / L
     half_l = T(0.5) * L
@@ -121,21 +121,60 @@ end
     return (b0 * R / T(π)) * term
 end
 
+@inline function _solenoid_sheet_b_cyl(
+        R::T, L::T, I_tot::T, rho_sq::T, z::T
+    ) where {T <: Real}
+    if rho_sq <= (T(1.0e-8) * R)^2
+        b0 = T(μ₀) * I_tot / L
+        half_l = T(0.5) * L
+        zp = z + half_l
+        zm = z - half_l
+        dp2 = zp * zp + R * R
+        dm2 = zm * zm + R * R
+        dp = sqrt(dp2)
+        dm = sqrt(dm2)
+        bz = T(0.5) * b0 * (zp / dp - zm / dm)
+        b_over_rho = T(0.25) * b0 * R * R * (inv(dm2 * dm) - inv(dp2 * dp))
+        return b_over_rho, bz
+    end
+    rho = sqrt(rho_sq)
+    b_rho, bz = _solenoid_sheet_b_rz(R, L, I_tot, rho, z)
+    return b_rho / rho, bz
+end
+
+@inline function _solenoid_sheet_a_over_rho(
+        R::T, L::T, I_tot::T, rho_sq::T, z::T
+    ) where {T <: Real}
+    if rho_sq <= (T(1.0e-8) * R)^2
+        b0 = T(μ₀) * I_tot / L
+        half_l = T(0.5) * L
+        zp = z + half_l
+        zm = z - half_l
+        dp = sqrt(zp * zp + R * R)
+        dm = sqrt(zm * zm + R * R)
+        bz = T(0.5) * b0 * (zp / dp - zm / dm)
+        return T(0.5) * bz
+    end
+    rho = sqrt(rho_sq)
+    return _solenoid_sheet_a_phi(R, L, I_tot, rho, z) / rho
+end
+
 @inline function _solenoid_local_cyl(field::Solenoid{T}, pos) where {T}
     @boundscheck length(pos) >= 3 ||
         throw(ArgumentError("Input must have at least 3 elements."))
-    @inbounds r_rel = SVector{3, T}(
+    FT = _promote_float(T, pos)
+    @inbounds r_rel = SVector{3, FT}(
         pos[1] - field.center[1], pos[2] - field.center[2], pos[3] - field.center[3]
     )
     z_loc = dot(r_rel, field.normal)
     rho_vec = r_rel - z_loc * field.normal
-    rho = norm(rho_vec)
-    return rho_vec, rho, z_loc
+    rho_sq = dot(rho_vec, rho_vec)
+    return rho_vec, rho_sq, z_loc
 end
 
-@inline function _gl8_b_rz(
-        a::T, b::T, L::T, I_tot::T, rho::T, z::T
-    ) where {T <: AbstractFloat}
+@inline function _gl8_b_cyl(
+        a::T, b::T, L::T, I_tot::T, rho_sq::T, z::T
+    ) where {T <: Real}
     mid = T(0.5) * (a + b)
     half = T(0.5) * (b - a)
     br = zero(T)
@@ -143,99 +182,101 @@ end
     @inbounds for q in 1:8
         r_q = mid + half * T(_GL8_NODES[q])
         w_q = T(0.5) * T(_GL8_WEIGHTS[q])
-        br_q, bz_q = _solenoid_sheet_b_rz(r_q, L, I_tot, rho, z)
+        br_q, bz_q = _solenoid_sheet_b_cyl(r_q, L, I_tot, rho_sq, z)
         br += w_q * br_q
         bz += w_q * bz_q
     end
     return br, bz
 end
 
-@inline function _solenoid_thick_b_rz(
-        R::T, L::T, I_tot::T, th::T, rho::T, z::T
-    ) where {T <: AbstractFloat}
+@inline function _solenoid_thick_b_cyl(
+        R::T, L::T, I_tot::T, th::T, rho_sq::T, z::T
+    ) where {T <: Real}
     r_in = R - T(0.5) * th
     r_out = R + T(0.5) * th
-    if r_in < rho && rho < r_out
-        br1, bz1 = _gl8_b_rz(r_in, rho, L, I_tot, rho, z)
-        br2, bz2 = _gl8_b_rz(rho, r_out, L, I_tot, rho, z)
+    if r_in^2 < rho_sq && rho_sq < r_out^2
+        rho = sqrt(rho_sq)
+        br1, bz1 = _gl8_b_cyl(r_in, rho, L, I_tot, rho_sq, z)
+        br2, bz2 = _gl8_b_cyl(rho, r_out, L, I_tot, rho_sq, z)
         inv_th = inv(th)
         w1 = (rho - r_in) * inv_th
         w2 = (r_out - rho) * inv_th
         return w1 * br1 + w2 * br2, w1 * bz1 + w2 * bz2
     end
-    return _gl8_b_rz(r_in, r_out, L, I_tot, rho, z)
+    return _gl8_b_cyl(r_in, r_out, L, I_tot, rho_sq, z)
 end
 
-@inline function _gl8_a_phi(
-        a::T, b::T, L::T, I_tot::T, rho::T, z::T
-    ) where {T <: AbstractFloat}
+@inline function _gl8_a_over_rho(
+        a::T, b::T, L::T, I_tot::T, rho_sq::T, z::T
+    ) where {T <: Real}
     mid = T(0.5) * (a + b)
     half = T(0.5) * (b - a)
-    a_phi = zero(T)
+    a_over_rho = zero(T)
     @inbounds for q in 1:8
         r_q = mid + half * T(_GL8_NODES[q])
         w_q = T(0.5) * T(_GL8_WEIGHTS[q])
-        a_phi += w_q * _solenoid_sheet_a_phi(r_q, L, I_tot, rho, z)
+        a_over_rho += w_q * _solenoid_sheet_a_over_rho(r_q, L, I_tot, rho_sq, z)
     end
-    return a_phi
+    return a_over_rho
 end
 
-@inline function _solenoid_thick_a_phi(
-        R::T, L::T, I_tot::T, th::T, rho::T, z::T
-    ) where {T <: AbstractFloat}
+@inline function _solenoid_thick_a_over_rho(
+        R::T, L::T, I_tot::T, th::T, rho_sq::T, z::T
+    ) where {T <: Real}
     r_in = R - T(0.5) * th
     r_out = R + T(0.5) * th
-    if r_in < rho && rho < r_out
-        a1 = _gl8_a_phi(r_in, rho, L, I_tot, rho, z)
-        a2 = _gl8_a_phi(rho, r_out, L, I_tot, rho, z)
+    if r_in^2 < rho_sq && rho_sq < r_out^2
+        rho = sqrt(rho_sq)
+        a1 = _gl8_a_over_rho(r_in, rho, L, I_tot, rho_sq, z)
+        a2 = _gl8_a_over_rho(rho, r_out, L, I_tot, rho_sq, z)
         inv_th = inv(th)
         return (rho - r_in) * inv_th * a1 + (r_out - rho) * inv_th * a2
     end
-    return _gl8_a_phi(r_in, r_out, L, I_tot, rho, z)
+    return _gl8_a_over_rho(r_in, r_out, L, I_tot, rho_sq, z)
 end
 
 function (field::Solenoid{T})(pos) where {T}
-    rho_vec, rho, z_loc = _solenoid_local_cyl(field, pos)
-    (; radius, length, current, thickness, normal) = field
-    if thickness <= zero(T)
-        b_rho, b_z = _solenoid_sheet_b_rz(radius, length, current, rho, z_loc)
+    rho_vec, rho_sq, z_loc = _solenoid_local_cyl(field, pos)
+    FT = eltype(rho_vec)
+    R, L, I_tot, th = FT(field.radius), FT(field.length), FT(field.current),
+        FT(field.thickness)
+    if th <= zero(FT)
+        b_over_rho, b_z = _solenoid_sheet_b_cyl(R, L, I_tot, rho_sq, z_loc)
     else
-        b_rho, b_z = _solenoid_thick_b_rz(radius, length, current, thickness, rho, z_loc)
+        b_over_rho, b_z = _solenoid_thick_b_cyl(R, L, I_tot, th, rho_sq, z_loc)
     end
-    if rho <= T(1.0e-12) * radius
-        return b_z * normal
-    end
-    rho_hat = rho_vec / rho
-    return b_rho * rho_hat + b_z * normal
+    return b_over_rho * rho_vec + b_z * field.normal
 end
 
 function poloidal_flux(field::Solenoid{T}, pos) where {T}
-    _, rho, z_loc = _solenoid_local_cyl(field, pos)
-    rho <= T(1.0e-12) * field.radius && return zero(T)
-    if field.thickness <= zero(T)
-        a_phi = _solenoid_sheet_a_phi(
-            field.radius, field.length, field.current, rho, z_loc
-        )
-        return rho * a_phi
+    rho_vec, rho_sq, z_loc = _solenoid_local_cyl(field, pos)
+    FT = eltype(rho_vec)
+    R, L, I_tot, th = FT(field.radius), FT(field.length), FT(field.current),
+        FT(field.thickness)
+    if th <= zero(FT)
+        a_over_rho = _solenoid_sheet_a_over_rho(R, L, I_tot, rho_sq, z_loc)
+    else
+        a_over_rho = _solenoid_thick_a_over_rho(R, L, I_tot, th, rho_sq, z_loc)
     end
-    a_phi = _solenoid_thick_a_phi(
-        field.radius, field.length, field.current, field.thickness, rho, z_loc
-    )
-    return rho * a_phi
+    return rho_sq * a_over_rho
 end
 
 function current_density(field::Solenoid{T}, pos) where {T}
+    FT = _promote_float(T, pos)
     (; radius, length, current, thickness, normal) = field
-    thickness <= zero(T) && return zero(SVector{3, T})
-    rho_vec, rho, z_loc = _solenoid_local_cyl(field, pos)
-    half_l = T(0.5) * length
-    half_th = T(0.5) * thickness
-    if abs(z_loc) <= half_l && abs(rho - radius) <= half_th && rho > T(1.0e-12) * radius
-        j_mag = current / (length * thickness)
-        phi_hat = cross(normal, rho_vec / rho)
-        return j_mag * phi_hat
+    thickness <= zero(T) && return zero(SVector{3, FT})
+    rho_vec, rho_sq, z_loc = _solenoid_local_cyl(field, pos)
+    half_l = FT(0.5) * length
+    half_th = FT(0.5) * thickness
+    if abs(z_loc) <= half_l && rho_sq > (FT(1.0e-12) * radius)^2
+        rho = sqrt(rho_sq)
+        if abs(rho - radius) <= half_th
+            j_mag = current / (length * thickness)
+            phi_hat = cross(normal, rho_vec / rho)
+            return j_mag * phi_hat
+        end
     end
-    return zero(SVector{3, T})
+    return zero(SVector{3, FT})
 end
 
 """
@@ -272,7 +313,7 @@ struct AntiHelmholtzCoil{T} <: AbstractMagneticField
             typeof(radius), typeof(current), typeof(distance),
             eltype(center), eltype(normal)
         )
-        T = T_raw <: AbstractFloat ? T_raw : Float64
+        T = float(T_raw)
         R = T(radius)
         I_c = T(current)
         half_d = T(0.5) * T(distance)
@@ -289,6 +330,5 @@ end
 end
 
 @inline function current_density(::AntiHelmholtzCoil{T}, r) where {T}
-    R = promote_type(T, eltype(r))
-    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
+    return zero(SVector{3, _promote_float(T, r)})
 end

@@ -10,22 +10,28 @@ Magnetic field of a Harris current sheet: B(z) = B0 * tanh(z/L) * x_hat.
 struct HarrisSheet{T} <: AbstractMagneticField
     B0::T
     L::T
+
+    function HarrisSheet(B0::Real, L::Real)
+        T = float(promote_type(typeof(B0), typeof(L)))
+        return new{T}(T(B0), T(L))
+    end
+    HarrisSheet{T}(B0::Real, L::Real) where {T} = new{T}(T(B0), T(L))
 end
 
-function (field::HarrisSheet)(r)
+function (field::HarrisSheet{T})(r) where {T}
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
-    T = eltype(r)
+    FT = _promote_float(T, r)
     (; B0, L) = field
-    return SVector(B0 * tanh(r[3] / L), zero(T), zero(T))
+    return SVector{3, FT}(B0 * tanh(r[3] / L), zero(FT), zero(FT))
 end
 
-function current_density(field::HarrisSheet, r)
+function current_density(field::HarrisSheet{T}, r) where {T}
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
-    T = eltype(r)
+    FT = _promote_float(T, r)
     z = r[3]
     (; B0, L) = field
-    j_y = B0 / (μ₀ * L) * sech(z / L)^2
-    return SVector(zero(T), j_y, zero(T))
+    j_y = B0 / (FT(μ₀) * L) * sech(z / L)^2
+    return SVector{3, FT}(zero(FT), j_y, zero(FT))
 end
 
 """
@@ -38,24 +44,31 @@ struct AsymmetricHarrisSheet{T} <: AbstractMagneticField
     B1::T
     B2::T
     L::T
+
+    function AsymmetricHarrisSheet(B1::Real, B2::Real, L::Real)
+        T = float(promote_type(typeof(B1), typeof(B2), typeof(L)))
+        return new{T}(T(B1), T(B2), T(L))
+    end
+    AsymmetricHarrisSheet{T}(B1::Real, B2::Real, L::Real) where {T} =
+        new{T}(T(B1), T(B2), T(L))
 end
 
-function (field::AsymmetricHarrisSheet)(r)
+function (field::AsymmetricHarrisSheet{T})(r) where {T}
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
-    T = eltype(r)
+    FT = _promote_float(T, r)
     z = r[3]
     (; B1, B2, L) = field
     B_x = (B1 + B2) / 2 + (B1 - B2) / 2 * tanh(z / L)
-    return SVector(B_x, zero(T), zero(T))
+    return SVector{3, FT}(B_x, zero(FT), zero(FT))
 end
 
-function current_density(field::AsymmetricHarrisSheet, r)
+function current_density(field::AsymmetricHarrisSheet{T}, r) where {T}
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
-    T = eltype(r)
+    FT = _promote_float(T, r)
     z = r[3]
     (; B1, B2, L) = field
-    j_y = (B1 - B2) / (2 * μ₀ * L) * sech(z / L)^2
-    return SVector(zero(T), j_y, zero(T))
+    j_y = (B1 - B2) / (2 * FT(μ₀) * L) * sech(z / L)^2
+    return SVector{3, FT}(zero(FT), j_y, zero(FT))
 end
 
 """
@@ -68,27 +81,33 @@ By(z) = B0 * sech(z/L)
 struct ForceFreeHarrisSheet{T} <: AbstractMagneticField
     B0::T
     L::T
+
+    function ForceFreeHarrisSheet(B0::Real, L::Real)
+        T = float(promote_type(typeof(B0), typeof(L)))
+        return new{T}(T(B0), T(L))
+    end
+    ForceFreeHarrisSheet{T}(B0::Real, L::Real) where {T} = new{T}(T(B0), T(L))
 end
 
-function (field::ForceFreeHarrisSheet)(r)
+function (field::ForceFreeHarrisSheet{T})(r) where {T}
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
-    T = eltype(r)
+    FT = _promote_float(T, r)
     z = r[3]
     (; B0, L) = field
     B_x = B0 * tanh(z / L)
     B_y = B0 * sech(z / L)
-    return SVector(B_x, B_y, zero(T))
+    return SVector{3, FT}(B_x, B_y, zero(FT))
 end
 
-function current_density(field::ForceFreeHarrisSheet, r)
+function current_density(field::ForceFreeHarrisSheet{T}, r) where {T}
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
-    T = eltype(r)
+    FT = _promote_float(T, r)
     z = r[3]
     (; B0, L) = field
     sech_zL = sech(z / L)
-    j_x = B0 / (μ₀ * L) * sech_zL * tanh(z / L)
-    j_y = B0 / (μ₀ * L) * sech_zL^2
-    return SVector(j_x, j_y, zero(T))
+    j_x = B0 / (FT(μ₀) * L) * sech_zL * tanh(z / L)
+    j_y = B0 / (FT(μ₀) * L) * sech_zL^2
+    return SVector{3, FT}(j_x, j_y, zero(FT))
 end
 
 """
@@ -101,24 +120,31 @@ struct BifurcatedHarrisSheet{T} <: AbstractMagneticField
     B0::T
     L::T
     d::T
+
+    function BifurcatedHarrisSheet(B0::Real, L::Real, d::Real)
+        T = float(promote_type(typeof(B0), typeof(L), typeof(d)))
+        return new{T}(T(B0), T(L), T(d))
+    end
+    BifurcatedHarrisSheet{T}(B0::Real, L::Real, d::Real) where {T} =
+        new{T}(T(B0), T(L), T(d))
 end
 
-function (field::BifurcatedHarrisSheet)(r)
+function (field::BifurcatedHarrisSheet{T})(r) where {T}
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
-    T = eltype(r)
+    FT = _promote_float(T, r)
     z = r[3]
     (; B0, L, d) = field
     B_x = B0 / 2 * (tanh((z - d) / L) + tanh((z + d) / L))
-    return SVector(B_x, zero(T), zero(T))
+    return SVector{3, FT}(B_x, zero(FT), zero(FT))
 end
 
-function current_density(field::BifurcatedHarrisSheet, r)
+function current_density(field::BifurcatedHarrisSheet{T}, r) where {T}
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
-    T = eltype(r)
+    FT = _promote_float(T, r)
     z = r[3]
     (; B0, L, d) = field
-    j_y = B0 / (2 * μ₀ * L) * (sech((z - d) / L)^2 + sech((z + d) / L)^2)
-    return SVector(zero(T), j_y, zero(T))
+    j_y = B0 / (2 * FT(μ₀) * L) * (sech((z - d) / L)^2 + sech((z + d) / L)^2)
+    return SVector{3, FT}(zero(FT), j_y, zero(FT))
 end
 
 """
@@ -134,11 +160,18 @@ struct FadeevIsland{T} <: AbstractMagneticField
     L::T
     Lx::T
     ε::T
+
+    function FadeevIsland(B0::Real, L::Real, Lx::Real, ε::Real)
+        T = float(promote_type(typeof(B0), typeof(L), typeof(Lx), typeof(ε)))
+        return new{T}(T(B0), T(L), T(Lx), T(ε))
+    end
+    FadeevIsland{T}(B0::Real, L::Real, Lx::Real, ε::Real) where {T} =
+        new{T}(T(B0), T(L), T(Lx), T(ε))
 end
 
-function (field::FadeevIsland)(r)
+function (field::FadeevIsland{T})(r) where {T}
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
-    T = eltype(r)
+    FT = _promote_float(T, r)
     x, z = r[1], r[3]
     (; B0, L, Lx, ε) = field
 
@@ -146,12 +179,12 @@ function (field::FadeevIsland)(r)
     B_x = -B0 * sinh(z / L) / denom
     B_z = -B0 * L * ε * sin(x / Lx) / Lx / denom
 
-    return SVector(B_x, zero(T), B_z)
+    return SVector{3, FT}(B_x, zero(FT), B_z)
 end
 
-function current_density(field::FadeevIsland, r)
+function current_density(field::FadeevIsland{T}, r) where {T}
     @boundscheck length(r) >= 3 || throw(ArgumentError("Input must have at least 3 elements."))
-    T = eltype(r)
+    FT = _promote_float(T, r)
     x, z = r[1], r[3]
     (; B0, L, Lx, ε) = field
 
@@ -164,7 +197,7 @@ function current_density(field::FadeevIsland, r)
     # Following the derivation for general L, Lx:
     term1 = (1 / L) * (1 + ε * prod)
     term2 = (L * ε / Lx^2) * (ε + prod)
-    j_y = B0 / (μ₀ * f^2) * (term1 - term2)
+    j_y = B0 / (FT(μ₀) * f^2) * (term1 - term2)
 
-    return SVector(zero(T), j_y, zero(T))
+    return SVector{3, FT}(zero(FT), j_y, zero(FT))
 end

@@ -59,9 +59,11 @@ using LinearAlgebra
         I_ef = 10.0e3,
         I_p = 5.0e3
     )
-    B_plasma = flare_plasma(r_mid)
+    r_off_p = SVector(0.8, 0.0, 0.0)
+    B_plasma = flare_plasma(r_off_p)
     # Plasma current alters Bz at the midplane
-    @test B_plasma != B_mid
+    @test all(isfinite, flare_plasma(r_mid))
+    @test B_plasma[3] != flare(r_off_p)[3]
 end
 
 end # module test_flare

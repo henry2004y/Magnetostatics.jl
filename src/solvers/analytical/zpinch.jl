@@ -15,31 +15,35 @@ struct ZPinch{T} <: AbstractMagneticField
 
     function ZPinch(I, a; center = SA[0.0, 0.0])
         T = promote_type(typeof(I), typeof(a), eltype(center))
-        T_float = T <: AbstractFloat ? T : Float64
+        T_float = float(T)
         return new{T_float}(T_float(I), T_float(a), SVector{2, T_float}(center))
     end
 end
 
 @inline function (field::ZPinch{T})(pos) where {T}
-    x = pos[1] - field.center[1]
-    y = pos[2] - field.center[2]
-    r = hypot(x, y)
+    FT = _promote_float(T, pos)
+    x = FT(pos[1]) - field.center[1]
+    y = FT(pos[2]) - field.center[2]
+    r2 = x * x + y * y
     (; I, a) = field
 
-    if r < 1.0e-15
-        return SVector{3, T}(zero(T), zero(T), zero(T))
+    if a > zero(T) && r2 <= a^2
+        factor = (FT(μ₀) * I) / (2 * FT(π) * a^2)
+        return SVector{3, FT}(-factor * y, factor * x, zero(FT))
     end
-
-    factor = r <= a ? (T(μ₀) * I) / (2π * a^2) : (T(μ₀) * I) / (2π * r^2)
-    return SVector{3, T}(-factor * y, factor * x, zero(T))
+    r2 < 1.0e-30 && return zero(SVector{3, FT})
+    factor = (FT(μ₀) * I) / (2 * FT(π) * r2)
+    return SVector{3, FT}(-factor * y, factor * x, zero(FT))
 end
 
 function current_density(field::ZPinch{T}, pos) where {T}
-    x = pos[1] - field.center[1]
-    y = pos[2] - field.center[2]
-    r = hypot(x, y)
-    jz = r <= field.a ? field.I / (π * field.a^2) : zero(T)
-    return SVector{3, T}(zero(T), zero(T), jz)
+    FT = _promote_float(T, pos)
+    x = FT(pos[1]) - field.center[1]
+    y = FT(pos[2]) - field.center[2]
+    r2 = x * x + y * y
+    jz = (r2 <= field.a^2 && field.a > zero(T)) ? FT(field.I / (FT(π) * field.a^2)) :
+        zero(FT)
+    return SVector{3, FT}(zero(FT), zero(FT), jz)
 end
 
 """

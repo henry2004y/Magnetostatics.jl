@@ -274,9 +274,9 @@ function compute_curl(
 end
 
 # Fused AGM evaluation of complete elliptic integrals K(m) and E(m) for 0 <= m < 1.
-@inline _ellipke(m::Real) = _ellipke(float(m))
+@inline _ellipke(m::Real) = _ellipke_impl(float(m))
 
-@inline function _ellipke(m::T) where {T <: AbstractFloat}
+@inline function _ellipke_impl(m::T) where {T <: Real}
     m <= zero(T) && return (T(π) / 2, T(π) / 2)
     m >= one(T) && return (T(Inf), one(T))
     b = sqrt(one(T) - m)
@@ -301,14 +301,12 @@ end
 
 # Bulirsch generalized complete elliptic integral cel(kc, p, c, s) without branch cuts.
 @inline function _cel(kc::Real, p::Real, c::Real, s::Real)
-    return _cel(promote(float(kc), float(p), float(c), float(s))...)
+    return _cel_impl(promote(float(kc), float(p), float(c), float(s))...)
 end
 
-@inline function _cel(
-        kc_in::T, p_in::T, c_in::T, s_in::T
-    ) where {T <: AbstractFloat}
+@inline function _cel_impl(kc_in::T, p_in::T, c_in::T, s_in::T) where {T <: Real}
     kc = abs(kc_in)
-    iszero(kc) && return T(NaN)
+    !(kc > zero(T)) && return T(NaN)
     e = kc
     m = one(T)
     p = p_in

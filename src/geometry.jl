@@ -5,11 +5,13 @@
 Compute the unit vector `b = B / |B|` along the magnetic field.
 """
 @inline function b_unit(B::AbstractVector{T}) where {T}
-    B_mag = norm(B)
-    if B_mag < 1.0e-15
-        return SVector{3, T}(zero(T), zero(T), zero(T))
+    FT = float(T)
+    B_sq = dot(B, B)
+    if B_sq < 1.0e-30
+        return zero(SVector{3, FT})
     end
-    return SVector{3, T}(B[1] / B_mag, B[2] / B_mag, B[3] / B_mag)
+    B_mag = sqrt(B_sq)
+    return SVector{3, FT}(B[1] / B_mag, B[2] / B_mag, B[3] / B_mag)
 end
 
 @inline b_unit(field::AbstractMagneticField, r) = b_unit(field(r))
@@ -28,18 +30,25 @@ Compute the gradient ∇|B| of the magnetic field magnitude at position `r`
 using central differences with step size `h`.
 """
 function grad_b(field::AbstractMagneticField, r; h = 1.0e-5)
-    r_vec = SVector{3, Float64}(r[1], r[2], r[3])
-    inv_2h = inv(2 * h)
+    @boundscheck length(r) >= 3 ||
+        throw(ArgumentError("Input must have at least 3 elements."))
+    FT = _promote_float(r)
+    @inbounds r_vec = SVector{3, FT}(r[1], r[2], r[3])
+    h_T = FT(h)
+    inv_2h = inv(2 * h_T)
 
-    dx = SVector(h, 0.0, 0.0)
-    dy = SVector(0.0, h, 0.0)
-    dz = SVector(0.0, 0.0, h)
+    dx = SVector{3, FT}(h_T, zero(FT), zero(FT))
+    dy = SVector{3, FT}(zero(FT), h_T, zero(FT))
+    dz = SVector{3, FT}(zero(FT), zero(FT), h_T)
 
-    gx = (field_magnitude(field, r_vec + dx) - field_magnitude(field, r_vec - dx)) * inv_2h
-    gy = (field_magnitude(field, r_vec + dy) - field_magnitude(field, r_vec - dy)) * inv_2h
-    gz = (field_magnitude(field, r_vec + dz) - field_magnitude(field, r_vec - dz)) * inv_2h
+    gx = (field_magnitude(field, r_vec + dx) - field_magnitude(field, r_vec - dx)) *
+        inv_2h
+    gy = (field_magnitude(field, r_vec + dy) - field_magnitude(field, r_vec - dy)) *
+        inv_2h
+    gz = (field_magnitude(field, r_vec + dz) - field_magnitude(field, r_vec - dz)) *
+        inv_2h
 
-    return SVector(gx, gy, gz)
+    return SVector{3, FT}(gx, gy, gz)
 end
 
 """
@@ -49,15 +58,19 @@ Compute the field line curvature vector κ = (b · ∇)b at position `r`
 using directional central differences along the local unit vector `b`.
 """
 function magnetic_curvature(field::AbstractMagneticField, r; h = 1.0e-5)
-    r_vec = SVector{3, Float64}(r[1], r[2], r[3])
+    @boundscheck length(r) >= 3 ||
+        throw(ArgumentError("Input must have at least 3 elements."))
+    FT = _promote_float(r)
+    @inbounds r_vec = SVector{3, FT}(r[1], r[2], r[3])
     b0 = b_unit(field, r_vec)
-    norm(b0) < 1.0e-15 && return SVector(0.0, 0.0, 0.0)
+    dot(b0, b0) < 1.0e-30 && return zero(SVector{3, FT})
 
-    dr = h * b0
+    h_T = FT(h)
+    dr = h_T * b0
     b_plus = b_unit(field, r_vec + dr)
     b_minus = b_unit(field, r_vec - dr)
 
-    return (b_plus - b_minus) / (2 * h)
+    return (b_plus - b_minus) / (2 * h_T)
 end
 
 """
@@ -79,19 +92,21 @@ function drift_velocities(
         field::AbstractMagneticField, r;
         q = 1.0, m = 1.0, v_perp = 1.0, v_par = 1.0, h = 1.0e-5
     )
-    B_vec = SVector{3, Float64}(field(r))
-    B_mag = norm(B_vec)
-    B_mag < 1.0e-15 && return (;
-        v_gradB = SVector(0.0, 0.0, 0.0),
-        v_curv = SVector(0.0, 0.0, 0.0),
-        v_drift = SVector(0.0, 0.0, 0.0),
+    FT = _promote_float(r)
+    B_vec = SVector{3}(field(r))
+    B_sq = dot(B_vec, B_vec)
+    B_sq < 1.0e-30 && return (;
+        v_gradB = zero(SVector{3, FT}),
+        v_curv = zero(SVector{3, FT}),
+        v_drift = zero(SVector{3, FT}),
     )
 
+    B_mag = sqrt(B_sq)
     b = B_vec / B_mag
     ∇B = grad_b(field, r; h = h)
     κ = magnetic_curvature(field, r; h = h)
 
-    coeff_gradB = (m * v_perp^2) / (2 * q * B_mag^2)
+    coeff_gradB = (m * v_perp^2) / (2 * q * B_sq)
     v_gradB = coeff_gradB * cross(b, ∇B)
 
     coeff_curv = (m * v_par^2) / (q * B_mag)

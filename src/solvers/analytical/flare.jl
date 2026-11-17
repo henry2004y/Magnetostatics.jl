@@ -51,7 +51,7 @@ struct FLARECoils{T} <: AbstractMagneticField
             typeof(R_ef), typeof(z_ef), typeof(I_ef),
             typeof(R_p), typeof(I_p), typeof(B_guide)
         )
-        T_float = T <: AbstractFloat ? T : Float64
+        T_float = float(T)
         return new{T_float}(
             T_float(R_pf), T_float(z_pf), T_float(I_pf),
             T_float(R_ef), T_float(z_ef), T_float(I_ef),
@@ -61,8 +61,9 @@ struct FLARECoils{T} <: AbstractMagneticField
 end
 
 @inline function (field::FLARECoils{T})(pos) where {T}
-    x, y, z = pos[1], pos[2], pos[3]
-    R = hypot(x, y)
+    FT = _promote_float(T, pos)
+    x, y = FT(pos[1]), FT(pos[2])
+    R2 = x * x + y * y
     (; R_pf, z_pf, I_pf, R_ef, z_ef, I_ef, R_p, I_p, B_guide) = field
 
     z_hat = SVector(zero(T), zero(T), one(T))
@@ -96,20 +97,16 @@ end
     end
 
     # Toroidal guide field B_phi = B_guide * (R_p / R)
-    if abs(B_guide) > 0.0 && R > 1.0e-10
-        Bphi = B_guide * (R_p / R)
-        inv_R = inv(R)
-        Bx_guide = -Bphi * (y * inv_R)
-        By_guide = Bphi * (x * inv_R)
-        B += SVector{3, T}(Bx_guide, By_guide, zero(T))
+    if abs(B_guide) > 0.0 && R2 > 1.0e-20
+        fac_g = (B_guide * R_p) / R2
+        B += SVector{3, FT}(-fac_g * y, fac_g * x, zero(FT))
     end
 
     return B
 end
 
 function current_density(::FLARECoils{T}, pos) where {T}
-    R = promote_type(T, eltype(pos))
-    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
+    return zero(SVector{3, _promote_float(T, pos)})
 end
 
 """
@@ -118,11 +115,8 @@ end
 Compute the poloidal flux function ψ(R, z) = R · A_ϕ(R, z) for the FLARE device.
 Contour levels of ψ correspond to magnetic field lines in the poloidal plane.
 """
-function poloidal_flux(field::FLARECoils, pos)
-    R = hypot(pos[1], pos[2])
-    R < 1.0e-10 && return 0.0
+function poloidal_flux(field::FLARECoils{T}, pos) where {T}
+    FT = _promote_float(T, pos)
     A = vector_potential(field, pos)
-    # A_phi = cross(z_hat, R_hat) · A = (-y * Ax + x * Ay) / R
-    A_phi = (-pos[2] * A[1] + pos[1] * A[2]) / R
-    return R * A_phi
+    return FT(-pos[2] * A[1] + pos[1] * A[2])
 end

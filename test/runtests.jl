@@ -31,4 +31,5 @@ end
     @testset "Spacecraft Grad-Shafranov reconstruction" include("test_grad_shafranov.jl")
     @testset "Topology and covariance" include("test_topology.jl")
     @testset "FieldTracer integration" include("test_fieldtracer.jl")
+    @testset "ForwardDiff" include("test_forwarddiff.jl")
 end

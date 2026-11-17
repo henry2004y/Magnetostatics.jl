@@ -26,7 +26,7 @@ struct MagneticMirror{T} <: AbstractMagneticField
             typeof(distance), typeof(radius), typeof(current),
             eltype(center), eltype(normal)
         )
-        T_float = T <: AbstractFloat ? T : Float64
+        T_float = float(T)
         n_hat = normalize(SVector{3, T_float}(normal))
         return new{T_float}(
             T_float(distance), T_float(radius), T_float(current),
@@ -35,18 +35,17 @@ struct MagneticMirror{T} <: AbstractMagneticField
     end
 end
 
-@inline function (field::MagneticMirror)(r)
+@inline function (field::MagneticMirror{T})(r) where {T}
     (; distance, radius, current, center, normal) = field
-    c1 = center - 0.5 * distance * normal
-    c2 = center + 0.5 * distance * normal
+    c1 = center - T(0.5) * distance * normal
+    c2 = center + T(0.5) * distance * normal
     cl1 = _current_loop_unchecked(radius, current, c1, normal)
     cl2 = _current_loop_unchecked(radius, current, c2, normal)
     return getB_loop(r, cl1) + getB_loop(r, cl2)
 end
 
 @inline function current_density(::MagneticMirror{T}, pos) where {T}
-    R = promote_type(T, eltype(pos))
-    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
+    return zero(SVector{3, _promote_float(T, pos)})
 end
 
 """
@@ -99,7 +98,7 @@ struct MagneticBottle{T} <: AbstractMagneticField
             typeof(current_side), typeof(current_center),
             eltype(center), eltype(normal)
         )
-        T_float = T <: AbstractFloat ? T : Float64
+        T_float = float(T)
         n_hat = normalize(SVector{3, T_float}(normal))
         return new{T_float}(
             T_float(distance), T_float(radius_side), T_float(radius_center),
@@ -109,10 +108,10 @@ struct MagneticBottle{T} <: AbstractMagneticField
     end
 end
 
-@inline function (field::MagneticBottle)(r)
+@inline function (field::MagneticBottle{T})(r) where {T}
     (; distance, radius_side, radius_center, current_side, current_center, center, normal) =
         field
-    half_d = 0.5 * distance * normal
+    half_d = T(0.5) * distance * normal
     cl1 = _current_loop_unchecked(radius_side, current_side, center - half_d, normal)
     cl2 = _current_loop_unchecked(radius_side, current_side, center + half_d, normal)
     cl3 = _current_loop_unchecked(radius_center, current_center, center, normal)
@@ -120,8 +119,7 @@ end
 end
 
 @inline function current_density(::MagneticBottle{T}, pos) where {T}
-    R = promote_type(T, eltype(pos))
-    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
+    return zero(SVector{3, _promote_float(T, pos)})
 end
 
 """

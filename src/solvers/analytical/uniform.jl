@@ -10,15 +10,15 @@ struct UniformField{T} <: AbstractMagneticField
     B0::SVector{3, T}
 end
 
-@inline function (field::UniformField)(x, y, z)
-    return field.B0
+@inline function (field::UniformField{T})(x, y, z) where {T}
+    FT = float(promote_type(T, typeof(x), typeof(y), typeof(z)))
+    return SVector{3, FT}(field.B0)
 end
 
-@inline function (field::UniformField)(r)
-    return field.B0
+@inline function (field::UniformField{T})(r) where {T}
+    return SVector{3, _promote_float(T, r)}(field.B0)
 end
 
 @inline function current_density(field::UniformField{T}, r) where {T}
-    R = promote_type(T, eltype(r))
-    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
+    return zero(SVector{3, _promote_float(T, r)})
 end

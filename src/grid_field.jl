@@ -46,7 +46,7 @@ function GridMagneticField(
     extrapolate in (:throw, :clamp, :zero) ||
         throw(ArgumentError("extrapolate must be :throw, :clamp, or :zero"))
 
-    FT = T <: AbstractFloat ? T : Float64
+    FT = float(T)
     B_arr = B isa AbstractArray{FT, 4} ? B : FT.(B)
     dx = FT(step(xs))
     dy = FT(step(ys))
@@ -63,9 +63,10 @@ end
     ) where {T}
     @boundscheck length(r) >= 3 ||
         throw(ArgumentError("Input must have at least 3 elements."))
-    x = T(r[1])
-    y = T(r[2])
-    z = T(r[3])
+    FT = _promote_float(T, r)
+    @inbounds x = FT(r[1])
+    @inbounds y = FT(r[2])
+    @inbounds z = FT(r[3])
     xmin, xmax = T(first(field.xs)), T(last(field.xs))
     ymin, ymax = T(first(field.ys)), T(last(field.ys))
     zmin, zmax = T(first(field.zs)), T(last(field.zs))
@@ -80,7 +81,7 @@ end
                 )
             )
         elseif field.extrapolate === :zero
-            return (false, 1, 1, 1, zero(T), zero(T), zero(T))
+            return (false, 1, 1, 1, zero(FT), zero(FT), zero(FT))
         end
         x = clamp(x, xmin, xmax)
         y = clamp(y, ymin, ymax)
@@ -117,12 +118,13 @@ end
 
 function (field::GridMagneticField{T})(r) where {T}
     ok, ix, iy, iz, tx, ty, tz = _grid_coords(field, r)
-    ok || return zero(SVector{3, T})
+    FT = typeof(tx)
+    ok || return zero(SVector{3, FT})
     B = field.B
     if field.interpolation === :linear
-        wx0, wx1 = one(T) - tx, tx
-        wy0, wy1 = one(T) - ty, ty
-        wz0, wz1 = one(T) - tz, tz
+        wx0, wx1 = one(FT) - tx, tx
+        wy0, wy1 = one(FT) - ty, ty
+        wz0, wz1 = one(FT) - tz, tz
         c00 = wx0 * _grid_b(B, ix, iy, iz) + wx1 * _grid_b(B, ix + 1, iy, iz)
         c10 = wx0 * _grid_b(B, ix, iy + 1, iz) + wx1 * _grid_b(B, ix + 1, iy + 1, iz)
         c01 = wx0 * _grid_b(B, ix, iy, iz + 1) + wx1 * _grid_b(B, ix + 1, iy, iz + 1)
@@ -147,13 +149,13 @@ function (field::GridMagneticField{T})(r) where {T}
     js = (iym, iy, iy + 1, iyp)
     ks = (izm, iz, iz + 1, izp)
 
-    acc = zero(SVector{3, T})
+    acc = zero(SVector{3, FT})
     @inbounds for a in 1:4
         ka, wka = ks[a], wz[a]
-        acc_j = zero(SVector{3, T})
+        acc_j = zero(SVector{3, FT})
         for b in 1:4
             jb, wjb = js[b], wy[b]
-            acc_i = zero(SVector{3, T})
+            acc_i = zero(SVector{3, FT})
             for c in 1:4
                 acc_i += wx[c] * _grid_b(B, is[c], jb, ka)
             end
@@ -232,10 +234,11 @@ end
 
 function current_density(field::GridMagneticField{T}, r) where {T}
     ok, ix, iy, iz, tx, ty, tz = _grid_coords(field, r)
-    ok || return zero(SVector{3, T})
-    wx0, wx1 = one(T) - tx, tx
-    wy0, wy1 = one(T) - ty, ty
-    wz0, wz1 = one(T) - tz, tz
+    FT = typeof(tx)
+    ok || return zero(SVector{3, FT})
+    wx0, wx1 = one(FT) - tx, tx
+    wy0, wy1 = one(FT) - ty, ty
+    wz0, wz1 = one(FT) - tz, tz
     c00 = wx0 * _nodal_j(field, ix, iy, iz) + wx1 * _nodal_j(field, ix + 1, iy, iz)
     c10 = wx0 * _nodal_j(field, ix, iy + 1, iz) +
         wx1 * _nodal_j(field, ix + 1, iy + 1, iz)

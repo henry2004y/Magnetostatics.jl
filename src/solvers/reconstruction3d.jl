@@ -139,16 +139,17 @@ end
 
 @inline function _kernel_derivatives_3d(displacement, scale, kernel)
     T = eltype(displacement)
-    r = norm(displacement)
+    r2 = dot(displacement, displacement)
     inv_scale2 = inv(scale^2)
     identity = one(SMatrix{3, 3, T, 9})
     if kernel === :gaussian
-        value = exp(-r^2 * inv_scale2 / 2)
+        value = exp(-r2 * inv_scale2 / 2)
         gradient = -value * inv_scale2 * displacement
         hessian = value * (
             inv_scale2^2 * displacement * displacement' - inv_scale2 * identity
         )
     else
+        r = r2 > zero(T) ? sqrt(r2) : zero(T)
         q = r / scale
         q >= 1 && return zero(displacement), zero(identity)
         tangential = -20 * (1 - q)^3 * inv_scale2
@@ -166,7 +167,7 @@ function _harmonic_count(vac_deg::Int)
     return vac_deg < 1 ? 0 : (vac_deg + 2)^2 - 4
 end
 
-@inline function _harmonic_norm(l::Int, m::Int, ::Type{T}) where {T <: AbstractFloat}
+@inline function _harmonic_norm(l::Int, m::Int, ::Type{T}) where {T <: Real}
     p = one(T)
     for k in (l - m + 1):(l + m)
         p *= T(k)
