@@ -111,13 +111,12 @@ Base.:-(f::AbstractMagneticField) = ScaledField(-1, f)
 Base.:/(f::AbstractMagneticField, c::Real) = inv(c) * f
 
 """
-    TransformedField{T <: AbstractFloat, F <: AbstractMagneticField}
+    TransformedField{T <: Real, F <: AbstractMagneticField}
 
 Rigidly translated and rotated magnetic field: evaluates `field` in local coordinates
 `r_loc = rotation' * (r - origin)` and rotates output vectors back via `rotation`.
 """
-struct TransformedField{T <: AbstractFloat, F <: AbstractMagneticField} <:
-    AbstractMagneticField
+struct TransformedField{T <: Real, F <: AbstractMagneticField} <: AbstractMagneticField
     field::F
     origin::SVector{3, T}
     rotation::SMatrix{3, 3, T, 9}
@@ -126,8 +125,7 @@ struct TransformedField{T <: AbstractFloat, F <: AbstractMagneticField} <:
             field::F, origin::AbstractVector,
             rotation::AbstractMatrix = SMatrix{3, 3, Float64, 9}(I)
         ) where {F <: AbstractMagneticField}
-        T_raw = promote_type(eltype(origin), eltype(rotation))
-        T = T_raw <: AbstractFloat ? T_raw : Float64
+        T = float(promote_type(eltype(origin), eltype(rotation)))
         R = SMatrix{3, 3, T, 9}(rotation)
         orig = SVector{3, T}(origin[1], origin[2], origin[3])
         isapprox(R' * R, I; atol = 1.0e-6) ||
@@ -141,7 +139,8 @@ end
 @inline function _local_point(f::TransformedField{T}, r) where {T}
     @boundscheck length(r) >= 3 ||
         throw(ArgumentError("Input must have at least 3 elements."))
-    @inbounds dr = SVector{3, T}(
+    FT = _promote_float(T, r)
+    @inbounds dr = SVector{3, FT}(
         r[1] - f.origin[1], r[2] - f.origin[2], r[3] - f.origin[3]
     )
     return f.rotation' * dr
@@ -166,15 +165,14 @@ Return a field displaced by `offset` so that evaluating the result at `r` evalua
 at `r - offset`.
 """
 function translate_field(field::AbstractMagneticField, offset::AbstractVector)
-    T = eltype(offset) <: AbstractFloat ? eltype(offset) : Float64
+    T = float(eltype(offset))
     return TransformedField(field, SVector{3, T}(offset), SMatrix{3, 3, T, 9}(I))
 end
 
 translate_field(f::NullField, ::AbstractVector) = f
 
 function translate_field(f::TransformedField{T}, offset::AbstractVector) where {T}
-    R = promote_type(T, eltype(offset))
-    FT = R <: AbstractFloat ? R : Float64
+    FT = float(promote_type(T, eltype(offset)))
     new_orig = SVector{3, FT}(f.origin) + SVector{3, FT}(offset)
     return TransformedField(f.field, new_orig, SMatrix{3, 3, FT, 9}(f.rotation))
 end
@@ -188,8 +186,7 @@ function rotate_field(
         field::AbstractMagneticField, rotation::AbstractMatrix;
         center::AbstractVector = SVector(0.0, 0.0, 0.0)
     )
-    T_raw = promote_type(eltype(rotation), eltype(center))
-    T = T_raw <: AbstractFloat ? T_raw : Float64
+    T = float(promote_type(eltype(rotation), eltype(center)))
     Q = SMatrix{3, 3, T, 9}(rotation)
     c = SVector{3, T}(center[1], center[2], center[3])
     origin = c - Q * c
@@ -202,8 +199,7 @@ function rotate_field(
         f::TransformedField{T}, rotation::AbstractMatrix;
         center::AbstractVector = SVector(0.0, 0.0, 0.0)
     ) where {T}
-    T_raw = promote_type(T, eltype(rotation), eltype(center))
-    FT = T_raw <: AbstractFloat ? T_raw : Float64
+    FT = float(promote_type(T, eltype(rotation), eltype(center)))
     Q = SMatrix{3, 3, FT, 9}(rotation)
     c = SVector{3, FT}(center[1], center[2], center[3])
     new_orig = c + Q * (SVector{3, FT}(f.origin) - c)

@@ -14,7 +14,7 @@ struct SphereMagnet{T} <: AbstractMagneticField
             M::AbstractVector, radius, center::AbstractVector = SVector(0.0, 0.0, 0.0)
         )
         T_raw = promote_type(eltype(M), typeof(radius), eltype(center))
-        T = T_raw <: AbstractFloat ? T_raw : Float64
+        T = float(T_raw)
         R = T(radius)
         R > zero(T) || throw(ArgumentError("radius must be positive"))
         return new{T}(
@@ -28,22 +28,23 @@ end
 @inline function (field::SphereMagnet{T})(r) where {T}
     @boundscheck length(r) >= 3 ||
         throw(ArgumentError("Input must have at least 3 elements."))
-    @inbounds r_rel = SVector{3, T}(
+    FT = _promote_float(T, r)
+    @inbounds r_rel = SVector{3, FT}(
         r[1] - field.center[1], r[2] - field.center[2], r[3] - field.center[3]
     )
-    rmag = norm(r_rel)
+    r_sq = dot(r_rel, r_rel)
     (; M, radius) = field
-    if rmag <= radius
-        return (T(2) / T(3)) * T(μ₀) * M
+    if r_sq <= radius^2
+        return SVector{3, FT}((FT(2) / FT(3)) * FT(μ₀) * M)
     end
+    rmag = sqrt(r_sq)
     n = r_rel / rmag
-    m = (T(4) / T(3)) * T(π) * radius^3 * M
-    return (T(μ0_4π) / rmag^3) * (3 * dot(m, n) * n - m)
+    m = (FT(4) / FT(3)) * FT(π) * radius^3 * M
+    return (FT(μ0_4π) / (r_sq * rmag)) * (3 * dot(m, n) * n - m)
 end
 
 @inline function current_density(::SphereMagnet{T}, r) where {T}
-    R = promote_type(T, eltype(r))
-    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
+    return zero(SVector{3, _promote_float(T, r)})
 end
 
 """
@@ -68,7 +69,7 @@ struct CylinderMagnet{T} <: AbstractMagneticField
         T_raw = promote_type(
             typeof(radius), typeof(length), typeof(M), eltype(center), eltype(normal)
         )
-        T = T_raw <: AbstractFloat ? T_raw : Float64
+        T = float(T_raw)
         sol = Solenoid(
             T(radius), T(length), T(M) * T(length);
             center = SVector{3, T}(center[1], center[2], center[3]),
@@ -87,8 +88,7 @@ end
 end
 
 @inline function current_density(::CylinderMagnet{T}, r) where {T}
-    R = promote_type(T, eltype(r))
-    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
+    return zero(SVector{3, _promote_float(T, r)})
 end
 
 """
@@ -114,7 +114,7 @@ struct CuboidMagnet{T} <: AbstractMagneticField
         T_raw = promote_type(
             eltype(dimensions), eltype(M), eltype(center), eltype(rotation)
         )
-        T = T_raw <: AbstractFloat ? T_raw : Float64
+        T = float(T_raw)
         dims = SVector{3, T}(dimensions[1], dimensions[2], dimensions[3])
         all(>(zero(T)), dims) || throw(ArgumentError("dimensions must be positive"))
         R = SMatrix{3, 3, T, 9}(rotation)
@@ -131,18 +131,34 @@ struct CuboidMagnet{T} <: AbstractMagneticField
     end
 end
 
-@inline function _stable_log_minus(R::T, d::T, rp2::T) where {T <: AbstractFloat}
+@inline function _stable_log_minus(R::T, d::T, rp2::T) where {T <: Real}
+    fmin = floatmin(float(T))
     return if d > zero(T)
-        log(max(rp2 / (R + d), floatmin(T)))
+        log(max(rp2 / (R + d), fmin))
     else
-        log(max(R - d, floatmin(T)))
+        log(max(R - d, fmin))
     end
+end
+
+@inline function _cuboid_atan(num::T, den::T) where {T <: Real}
+    if abs(den) >= abs(num)
+        !(abs(den) > zero(T)) && return zero(T)
+        return atan(num / den)
+    end
+    half_pi = T(π) / 2
+    if den > zero(T)
+        return (num > zero(T) ? half_pi : -half_pi) - atan(den / num)
+    elseif den < zero(T)
+        return (num > zero(T) ? -half_pi : half_pi) - atan(den / num)
+    end
+    return -atan(den / num)
 end
 
 function (field::CuboidMagnet{T})(r) where {T}
     @boundscheck length(r) >= 3 ||
         throw(ArgumentError("Input must have at least 3 elements."))
-    @inbounds dr = SVector{3, T}(
+    FT = _promote_float(T, r)
+    @inbounds dr = SVector{3, FT}(
         r[1] - field.center[1], r[2] - field.center[2], r[3] - field.center[3]
     )
     r_loc = field.rotation' * dr
@@ -150,34 +166,34 @@ function (field::CuboidMagnet{T})(r) where {T}
     (; M) = field
     corner_tol = T(1.0e-14) * maximum(field.dimensions)
 
-    Hx = zero(T)
-    Hy = zero(T)
-    Hz = zero(T)
-    for sz in (-one(T), one(T)), sy in (-one(T), one(T)), sx in (-one(T), one(T))
+    Hx = zero(FT)
+    Hy = zero(FT)
+    Hz = zero(FT)
+    for sz in (-one(FT), one(FT)), sy in (-one(FT), one(FT)), sx in (-one(FT), one(FT))
         s = sx * sy * sz
         dx = r_loc[1] - sx * half[1]
         dy = r_loc[2] - sy * half[2]
         dz = r_loc[3] - sz * half[3]
-        R = sqrt(dx^2 + dy^2 + dz^2)
-        R <= corner_tol && continue
+        R2 = dx^2 + dy^2 + dz^2
+        R2 <= corner_tol^2 && continue
+        R = sqrt(R2)
         lx = _stable_log_minus(R, dx, dy^2 + dz^2)
         ly = _stable_log_minus(R, dy, dz^2 + dx^2)
         lz = _stable_log_minus(R, dz, dx^2 + dy^2)
-        tx = dx == zero(T) ? zero(T) : atan((dy * dz) / (dx * R))
-        ty = dy == zero(T) ? zero(T) : atan((dz * dx) / (dy * R))
-        tz = dz == zero(T) ? zero(T) : atan((dx * dy) / (dz * R))
+        tx = _cuboid_atan(dy * dz, dx * R)
+        ty = _cuboid_atan(dz * dx, dy * R)
+        tz = _cuboid_atan(dx * dy, dz * R)
         Hx += s * (M[1] * tx + M[2] * lz + M[3] * ly)
         Hy += s * (M[1] * lz + M[2] * ty + M[3] * lx)
         Hz += s * (M[1] * ly + M[2] * lx + M[3] * tz)
     end
-    H = SVector{3, T}(Hx, Hy, Hz) / (4 * T(π))
+    H = SVector{3, FT}(Hx, Hy, Hz) / (4 * FT(π))
     inside = abs(r_loc[1]) <= half[1] && abs(r_loc[2]) <= half[2] &&
         abs(r_loc[3]) <= half[3]
-    B_loc = T(μ₀) * (inside ? H + M : H)
+    B_loc = FT(μ₀) * (inside ? H + M : H)
     return field.rotation * B_loc
 end
 
 @inline function current_density(::CuboidMagnet{T}, r) where {T}
-    R = promote_type(T, eltype(r))
-    return zero(SVector{3, R <: AbstractFloat ? R : Float64})
+    return zero(SVector{3, _promote_float(T, r)})
 end

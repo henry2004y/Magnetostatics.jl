@@ -19,7 +19,7 @@ struct TokamakCoils{T} <: AbstractMagneticField
 
     function TokamakCoils(a, b, ICoils, IPlasma; n_coils = 16)
         T = promote_type(typeof(a), typeof(b), typeof(ICoils), typeof(IPlasma))
-        T_float = T <: AbstractFloat ? T : Float64
+        T_float = float(T)
         return new{T_float}(
             T_float(a), T_float(b), T_float(ICoils), T_float(IPlasma), Int(n_coils)
         )
@@ -27,11 +27,12 @@ struct TokamakCoils{T} <: AbstractMagneticField
 end
 
 @inline function (field::TokamakCoils{T})(r) where {T}
-    x, y, z = r[1], r[2], r[3]
+    FT = _promote_float(T, r)
+    x, y, z = FT(r[1]), FT(r[2]), FT(r[3])
     (; a, b, ICoils, IPlasma, n_coils) = field
     R_coil = a * 2
 
-    Bx, By, Bz = zero(T), zero(T), zero(T)
+    Bx, By, Bz = zero(FT), zero(FT), zero(FT)
     R_major = b + R_coil
     dtheta = T(2π) / n_coils
     theta0 = T(π) / n_coils
@@ -52,13 +53,16 @@ end
 
     σ = R_coil / 3
     R_p = R_coil + b
-    dist_val = hypot(hypot(x, y) - R_p, z)
+    rho2 = x^2 + y^2
+    rho = rho2 > zero(FT) ? sqrt(rho2) : zero(FT)
+    dist_sq = (rho - R_p)^2 + z^2
+    dist_val = dist_sq > zero(FT) ? sqrt(dist_sq) : zero(FT)
 
     if dist_val > 1.0e-4
-        I2_r_plasma = IPlasma * erf(dist_val / (σ * √2))
+        I2_r_plasma = FT(IPlasma * erf(dist_val / (σ * sqrt(FT(2)))))
         cl_plasma = _current_loop_unchecked(
-            R_p, I2_r_plasma,
-            SVector(zero(T), zero(T), zero(T)), SVector(zero(T), zero(T), one(T))
+            FT(R_p), I2_r_plasma,
+            zero(SVector{3, FT}), SVector{3, FT}(zero(FT), zero(FT), one(FT))
         )
         B_plasma = getB_loop(r, cl_plasma)
 
@@ -67,7 +71,7 @@ end
         Bz += B_plasma[3]
     end
 
-    return SVector{3, T}(Bx, By, Bz)
+    return SVector{3, FT}(Bx, By, Bz)
 end
 
 """
@@ -103,29 +107,34 @@ struct TokamakProfile{F, T} <: AbstractMagneticField
 
     function TokamakProfile(q_profile::F, a, R₀, Bζ0) where {F}
         T = promote_type(typeof(a), typeof(R₀), typeof(Bζ0))
-        T_float = T <: AbstractFloat ? T : Float64
+        T_float = float(T)
         return new{F, T_float}(q_profile, T_float(a), T_float(R₀), T_float(Bζ0))
     end
 end
 
 @inline function (field::TokamakProfile{F, T})(pos) where {F, T}
-    x, y, z = pos[1], pos[2], pos[3]
+    FT = _promote_float(T, pos)
+    x, y, z = FT(pos[1]), FT(pos[2]), FT(pos[3])
     (; q_profile, a, R₀, Bζ0) = field
-    R = √(x^2 + y^2)
-    r = √((R - R₀)^2 + z^2)
+    R = sqrt(x^2 + y^2)
+    dR = R - R₀
+    r2 = dR^2 + z^2
+    r = r2 > zero(FT) ? sqrt(r2) : zero(FT)
     r > a && throw(OverflowError("out of vacuum vessel"))
-    θ = atan(z, R - R₀)
     Bζ = Bζ0 * R₀ / R
-    Bθ = r * Bζ / R₀ / q_profile(r / a)
-    ζ = atan(y, x)
-    sinζ, cosζ = sincos(ζ)
-    sinθ, cosθ = sincos(θ)
+    fac_theta = Bζ / (R₀ * q_profile(r / a))
+    b_theta_sin = fac_theta * z
+    b_theta_cos = fac_theta * dR
+    inv_R = inv(R)
+    cosζ = x * inv_R
+    sinζ = y * inv_R
 
-    Bx = -Bζ * sinζ - Bθ * sinθ * cosζ
-    By = Bζ * cosζ - Bθ * sinθ * sinζ
-    Bz = Bθ * cosθ
+    Bx = -Bζ * sinζ - b_theta_sin * cosζ
+    By = Bζ * cosζ - b_theta_sin * sinζ
+    Bz = b_theta_cos
 
-    return SVector{3, T}(Bx, By, Bz)
+    FT_out = float(promote_type(FT, typeof(Bx), typeof(By), typeof(Bz)))
+    return SVector{3, FT_out}(Bx, By, Bz)
 end
 
 """

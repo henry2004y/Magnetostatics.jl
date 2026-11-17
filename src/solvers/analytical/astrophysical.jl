@@ -27,7 +27,7 @@ struct ParkerSpiral{T} <: AbstractMagneticField
             center = SA[0.0, 0.0, 0.0]
         )
         T = promote_type(typeof(B0), typeof(r0), typeof(v_sw), typeof(Omega), eltype(center))
-        T_float = T <: AbstractFloat ? T : Float64
+        T_float = float(T)
         return new{T_float}(
             T_float(B0), T_float(r0), T_float(v_sw), T_float(Omega),
             SVector{3, T_float}(center)
@@ -36,61 +36,47 @@ struct ParkerSpiral{T} <: AbstractMagneticField
 end
 
 @inline function (field::ParkerSpiral{T})(pos) where {T}
-    rx = pos[1] - field.center[1]
-    ry = pos[2] - field.center[2]
-    rz = pos[3] - field.center[3]
+    FT = _promote_float(T, pos)
+    rx = FT(pos[1]) - field.center[1]
+    ry = FT(pos[2]) - field.center[2]
+    rz = FT(pos[3]) - field.center[3]
+    r2 = rx^2 + ry^2 + rz^2
+    r2 < 1.0e-20 && return zero(SVector{3, FT})
 
-    r = sqrt(rx^2 + ry^2 + rz^2)
-    rho = hypot(rx, ry)
-
-    if r < 1.0e-10
-        return SVector{3, T}(zero(T), zero(T), zero(T))
-    end
-
-    (; B0, r0, v_sw, Omega) = field
-    r_ratio = r0 / r
-    Br = B0 * r_ratio^2
-
-    # Azimuthal magnetic field component
-    sin_theta = rho / r
-    Bphi = -Br * (Omega * (r - r0) / v_sw) * sin_theta
-
+    r = sqrt(r2)
     inv_r = inv(r)
-    r_hat = SVector{3, T}(rx * inv_r, ry * inv_r, rz * inv_r)
-
-    if rho < 1.0e-15
-        return Br * r_hat
-    end
-
-    inv_rho = inv(rho)
-    phi_hat = SVector{3, T}(-ry * inv_rho, rx * inv_rho, zero(T))
-
-    return Br * r_hat + Bphi * phi_hat
+    (; B0, r0, v_sw, Omega) = field
+    Br = B0 * (r0 * inv_r)^2
+    bphi_over_rho = -Br * (Omega * (r - r0) / v_sw) * inv_r
+    return SVector{3, FT}(
+        Br * rx * inv_r - bphi_over_rho * ry,
+        Br * ry * inv_r + bphi_over_rho * rx,
+        Br * rz * inv_r
+    )
 end
 
 function current_density(field::ParkerSpiral{T}, pos) where {T}
-    rx = pos[1] - field.center[1]
-    ry = pos[2] - field.center[2]
-    rz = pos[3] - field.center[3]
-    r = sqrt(rx^2 + ry^2 + rz^2)
-    r < 1.0e-10 && return zero(SVector{3, T})
-    (; B0, r0, v_sw, Omega) = field
-    rho = hypot(rx, ry)
-    sin_theta = rho / r
-    cos_theta = rz / r
-    pref = B0 * r0^2 * Omega / (T(μ₀) * v_sw * r^3)
-    jr = -2 * pref * (r - r0) * cos_theta
-    jtheta = pref * r0 * sin_theta
+    FT = _promote_float(T, pos)
+    rx = FT(pos[1]) - field.center[1]
+    ry = FT(pos[2]) - field.center[2]
+    rz = FT(pos[3]) - field.center[3]
+    rho2 = rx^2 + ry^2
+    r2 = rho2 + rz^2
+    r2 < 1.0e-20 && return zero(SVector{3, FT})
+
+    r = sqrt(r2)
     inv_r = inv(r)
-    r_hat = SVector{3, T}(rx * inv_r, ry * inv_r, rz * inv_r)
-    if rho < 1.0e-15
-        return jr * r_hat
-    end
-    inv_rho = inv(rho)
-    theta_hat = SVector{3, T}(
-        cos_theta * rx * inv_rho, cos_theta * ry * inv_rho, -sin_theta
+    (; B0, r0, v_sw, Omega) = field
+    cos_theta = rz * inv_r
+    pref = B0 * r0^2 * Omega / (FT(μ₀) * v_sw * r2 * r)
+    jr = -2 * pref * (r - r0) * cos_theta
+    jt_over_rho = pref * r0 * inv_r
+    j_perp_fac = jr * inv_r + jt_over_rho * cos_theta
+    return SVector{3, FT}(
+        j_perp_fac * rx,
+        j_perp_fac * ry,
+        jr * cos_theta - pref * r0 * rho2 / r2
     )
-    return jr * r_hat + jtheta * theta_hat
 end
 
 """
@@ -116,23 +102,25 @@ struct GuideFieldHarrisSheet{T} <: AbstractMagneticField
 
     function GuideFieldHarrisSheet(B0, L; Bg = 0.0, Bn = 0.0)
         T = promote_type(typeof(B0), typeof(L), typeof(Bg), typeof(Bn))
-        T_float = T <: AbstractFloat ? T : Float64
+        T_float = float(T)
         return new{T_float}(T_float(B0), T_float(L), T_float(Bg), T_float(Bn))
     end
 end
 
 @inline function (field::GuideFieldHarrisSheet{T})(pos) where {T}
-    z = pos[3]
+    FT = _promote_float(T, pos)
+    z = FT(pos[3])
     (; B0, L, Bg, Bn) = field
     bx = B0 * tanh(z / L)
-    return SVector{3, T}(bx, Bg, Bn)
+    return SVector{3, FT}(bx, Bg, Bn)
 end
 
 function current_density(field::GuideFieldHarrisSheet{T}, pos) where {T}
-    z = pos[3]
+    FT = _promote_float(T, pos)
+    z = FT(pos[3])
     (; B0, L) = field
-    jy = (B0 / (T(μ₀) * L)) * sech(z / L)^2
-    return SVector{3, T}(zero(T), jy, zero(T))
+    jy = (B0 / (FT(μ₀) * L)) * sech(z / L)^2
+    return SVector{3, FT}(zero(FT), jy, zero(FT))
 end
 
 """
@@ -155,35 +143,27 @@ struct GoldHoyleFluxTube{T} <: AbstractMagneticField
 
     function GoldHoyleFluxTube(B0, tau; center = SA[0.0, 0.0])
         T = promote_type(typeof(B0), typeof(tau), eltype(center))
-        T_float = T <: AbstractFloat ? T : Float64
+        T_float = float(T)
         return new{T_float}(T_float(B0), T_float(tau), SVector{2, T_float}(center))
     end
 end
 
 @inline function (field::GoldHoyleFluxTube{T})(pos) where {T}
-    x = pos[1] - field.center[1]
-    y = pos[2] - field.center[2]
-    r = hypot(x, y)
+    FT = _promote_float(T, pos)
+    x = FT(pos[1]) - field.center[1]
+    y = FT(pos[2]) - field.center[2]
+    r2 = x * x + y * y
     (; B0, tau) = field
 
-    denom = one(T) + (tau * r)^2
-    bz = B0 / denom
-
-    if r < 1.0e-15
-        return SVector{3, T}(zero(T), zero(T), bz)
-    end
-
-    b_theta = (B0 * tau * r) / denom
-    inv_r = inv(r)
-    bx = -b_theta * (y * inv_r)
-    by = b_theta * (x * inv_r)
-
-    return SVector{3, T}(bx, by, bz)
+    denom = one(FT) + tau^2 * r2
+    fac = (B0 * tau) / denom
+    return SVector{3, FT}(-fac * y, fac * x, B0 / denom)
 end
 
 function current_density(field::GoldHoyleFluxTube{T}, pos) where {T}
-    x = pos[1] - field.center[1]
-    y = pos[2] - field.center[2]
-    denom = one(T) + (field.tau * hypot(x, y))^2
-    return (2 * field.tau / (T(μ₀) * denom)) * field(pos)
+    FT = _promote_float(T, pos)
+    x = FT(pos[1]) - field.center[1]
+    y = FT(pos[2]) - field.center[2]
+    denom = one(FT) + field.tau^2 * (x * x + y * y)
+    return (2 * field.tau / (FT(μ₀) * denom)) * field(pos)
 end

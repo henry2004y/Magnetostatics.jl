@@ -367,6 +367,9 @@
         tok_prof = TokamakProfile(q_prof, 0.5, 1.0, 1.0)
         r_tok = SVector(1.1, 0.0, 0.1)
         @test tok_prof(r_tok) ≈ getB_tokamak_profile(r_tok, q_prof, 0.5, 1.0, 1.0)
+        tok_bdy = TokamakProfile(q_prof, 1.0, 3.0, 2.0)
+        @test all(isfinite, tok_bdy(SVector(3.6, 0.0, 0.8)))
+        @test_throws OverflowError tok_bdy(SVector(3.7, 0.0, 0.8))
 
         # ZPinch struct check
         zpinch = ZPinch(1.0, 0.1)

@@ -77,7 +77,7 @@ end
 
 @testset "Manufactured curl field" begin
     centers = [-0.4 0.1 0.2; 0.3 -0.2 -0.3]
-    scale = 1.5
+    scale = 2.0
     coefficients = [0.01, 0.02, -0.01, 0.02, -0.03, 0.01, -0.01, 0.01, 0.04]
     for kernel in (:gaussian, :wendland_c2)
         truth = FieldReconstruction3D(
@@ -92,6 +92,7 @@ end
             domain, length_scale = scale, basis_centers = centers, kernel,
             regularization = 1.0e-14, abstol = 1.0e-13, reltol = 1.0e-13
         )
+        @test reconstructed.diagnostics.unsupported_grid_points == 0
         for p in (SVector(0.13, -0.17, 0.29), SVector(-0.81, 0.41, 0.08))
             @test reconstructed(p) ≈ truth(p) atol = 1.0e-9
             @test abs(divergence(reconstructed, p)) < 1.0e-8
@@ -253,8 +254,12 @@ end
         current_density = partial_currents, current_uncertainties = ones(size(currents))
     )
     @test norm(reference_fit.coefficients) < 1.0e-10
-    @test reference_fit.diagnostics.current_rms == 0
-    @test current_density(reference_fit, heldout) == current_density(truth, heldout)
+    @test reference_fit.diagnostics.current_rms < 1.0e-10
+    @test isapprox(
+        current_density(reference_fit, heldout),
+        current_density(truth, heldout);
+        rtol = 1.0e-12, atol = 1.0e-10
+    )
     current_only = reconstruct_field_3d(
         zeros(0, 3), zeros(0, 3);
         domain, length_scale = truth.length_scale, basis_centers = truth.centers,

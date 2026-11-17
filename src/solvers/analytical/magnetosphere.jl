@@ -54,11 +54,13 @@ function AnalyticalMagnetosphere(;
         ms_compression = 3.0,
         has_shock = true
     )
-    S = promote_type(
-        typeof(mp_standoff), typeof(mp_thickness),
-        typeof(bs_standoff), typeof(bs_flaring),
-        typeof(bs_hyperboloid), typeof(bs_thickness),
-        typeof(ms_compression), eltype(shielding_dipole_pos)
+    S = float(
+        promote_type(
+            typeof(mp_standoff), typeof(mp_thickness),
+            typeof(bs_standoff), typeof(bs_flaring),
+            typeof(bs_hyperboloid), typeof(bs_thickness),
+            typeof(ms_compression), eltype(shielding_dipole_pos)
+        )
     )
     return AnalyticalMagnetosphere(
         intrinsic_dipole, shielding_dipole, tail_field, imf_field, magnetosphere_background,
@@ -71,9 +73,9 @@ end
 
 @inline function tanh_weight(dist, d)
     t = tanh(dist / d)
-    w = 0.5 * (1 - t)
+    w = (1 - t) / 2
     # dw/ddist = -0.5 * sech^2(dist/d) / d = -0.5 * (1 - t^2) / d
-    dw = -0.5 * (1 - t^2) / d
+    dw = -(1 - t^2) / (2 * d)
     return w, dw
 end
 
@@ -97,7 +99,7 @@ For other field types, it falls back to the original field.
 """
 @inline function draped_imf_field(imf::UniformField, r, mp_standoff)
     B_imf = imf.B0
-    bx = B_imf[1] - 0.5 * (B_imf[2] * r[2] + B_imf[3] * r[3]) / mp_standoff
+    bx = B_imf[1] - (B_imf[2] * r[2] + B_imf[3] * r[3]) / (2 * mp_standoff)
     return SVector(bx, B_imf[2], B_imf[3])
 end
 
@@ -115,7 +117,7 @@ end
     y2z2 = r[2]^2 + r[3]^2
     rad_term = sqrt(f.bs_flaring * y2z2 + f.bs_hyperboloid^2)
     dist_bs = r[1] - f.bs_standoff + rad_term - f.bs_hyperboloid
-    w_bs = 0.5 * (1 - tanh(dist_bs / f.bs_thickness))
+    w_bs = (1 - tanh(dist_bs / f.bs_thickness)) / 2
 
     return w_bs * A_sh + (1 - w_bs) * A_sw
 end
@@ -152,19 +154,22 @@ end
     return A_out, B_out
 end
 
-function (f::AnalyticalMagnetosphere)(r)
-    # Geometry and weighting function
-    x, y, z = r[1], r[2], r[3]
+function (f::AnalyticalMagnetosphere{D1, D2, T, U1, U2, S})(r) where {D1, D2, T, U1, U2, S}
+    @boundscheck length(r) >= 3 ||
+        throw(ArgumentError("Input must have at least 3 elements."))
+    FT = _promote_float(S, r)
+    @inbounds r_vec = SVector{3, FT}(r[1], r[2], r[3])
+    x, y, z = r_vec[1], r_vec[2], r_vec[3]
     dist_mp = x - f.mp_standoff + (y^2 + z^2) / (2 * f.mp_standoff)
     w_mp, dw_mp = tanh_weight(dist_mp, f.mp_thickness)
 
     # Gradient of weighting function
-    grad_dist = SVector(one(eltype(r)), y / f.mp_standoff, z / f.mp_standoff)
+    grad_dist = SVector(one(FT), y / f.mp_standoff, z / f.mp_standoff)
     grad_w_mp = dw_mp * grad_dist
 
     # Field and Potential evaluation
-    B_in, A_in = inner_field(f, r), inner_potential(f, r)
-    A_out, B_out = outer_region_eval(f, r, dist_mp)
+    B_in, A_in = inner_field(f, r_vec), inner_potential(f, r_vec)
+    A_out, B_out = outer_region_eval(f, r_vec, dist_mp)
 
     # Total B
     return w_mp * B_in + (1 - w_mp) * B_out + cross(grad_w_mp, A_in - A_out)

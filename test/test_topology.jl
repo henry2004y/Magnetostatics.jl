@@ -62,6 +62,16 @@ end
         @test res_b.kind === :B
         @test norm(res_b.point) < 1.0e-10
         @test res_b.residual < 1.0e-11
+        @test res_b.eigenvalues ≈
+            SVector{3, ComplexF64}(eigvals(Matrix(res_b.jacobian))) atol = 1.0e-12
+
+        function null_alloc(f, r)
+            locate_magnetic_null(f, r)
+            return @allocated locate_magnetic_null(f, r)
+        end
+        cls_alloc(J) = (classify_magnetic_null(J); @allocated classify_magnetic_null(J))
+        @test null_alloc(ah_b, SA[0.08, -0.05, 0.06]) == 0
+        @test cls_alloc(res_b.jacobian) == 0
 
         res_a = locate_magnetic_null(ah_a, SA[-0.05, 0.07, -0.06])
         @test res_a.status === :converged
@@ -86,6 +96,8 @@ end
         @test res_sp.status === :converged
         @test res_sp.kind === :As
         @test res_sp.point ≈ SA[0.2, -0.1, 0.3] atol = 1.0e-11
+        @test res_sp.eigenvalues ≈
+            SVector{3, ComplexF64}(eigvals(Matrix(res_sp.jacobian))) atol = 1.0e-12
 
         # 2D null line from FadeevIsland (both X at x=0 and O at x=π*Lx)
         fad = FadeevIsland(1.0, 0.5, 1.0, 0.4)

@@ -37,6 +37,16 @@ Return the current density vector [A/m²] at position `r` for the given magnetic
 """
 function current_density end
 
+# issue #79: float(...) preserves ForwardDiff.Dual<:Real while mapping Integer to Float64
+@inline _pos_eltype(::AbstractVector{T}) where {T} = T
+@inline function _pos_eltype(r::Tuple)
+    return promote_type(typeof(r[1]), typeof(r[2]), typeof(r[3]))
+end
+@inline _pos_eltype(r) = eltype(r)
+
+@inline _promote_float(::Type{T}, r) where {T} = float(promote_type(T, _pos_eltype(r)))
+@inline _promote_float(r) = float(_pos_eltype(r))
+
 """
     NullField <: AbstractMagneticField
 
@@ -44,12 +54,11 @@ A magnetic field that is zero everywhere.
 """
 struct NullField <: AbstractMagneticField end
 
-(::NullField)(r::AbstractVector{T}) where {T} = zero(SVector{3, T})
-(::NullField)(x, y, z) = zero(SVector{3, promote_type(typeof(x), typeof(y), typeof(z))})
-@inline current_density(::NullField, r::AbstractVector{T}) where {T} = zero(SVector{3, T})
-@inline function current_density(::NullField, r)
-    return zero(SVector{3, Float64})
+@inline (::NullField)(r) = zero(SVector{3, _promote_float(r)})
+@inline function (::NullField)(x, y, z)
+    return zero(SVector{3, float(promote_type(typeof(x), typeof(y), typeof(z)))})
 end
+@inline current_density(::NullField, r) = zero(SVector{3, _promote_float(r)})
 
 """
     vector_potential(field::AbstractMagneticField, r)

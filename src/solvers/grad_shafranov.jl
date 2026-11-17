@@ -27,8 +27,9 @@ struct GradShafranovReconstruction{T, D} <: AbstractMagneticField
 end
 
 function _chebyshev_sum(coefficients, u)
-    value = coefficients[1]
-    derivative, second = zero(value), zero(value)
+    T = promote_type(eltype(coefficients), typeof(u))
+    value = T(coefficients[1])
+    derivative, second = zero(T), zero(T)
     length(coefficients) == 1 && return value, derivative, second
     previous, term = one(u), u
     dprevious, dterm = zero(u), one(u)
