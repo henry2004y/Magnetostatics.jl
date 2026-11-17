@@ -35,12 +35,12 @@ end
             r_mag = SVector(5.0, 1.0, -1.0),
             r_tok = SVector(1.1, 0.15, 0.1),
             R_rot = @SMatrix(
-                [
-                    cos(0.4) 0.0 sin(0.4);
-                    0.0 1.0 0.0;
-                    -sin(0.4) 0.0 cos(0.4)
-                ]
-            )
+            [
+                cos(0.4) 0.0 sin(0.4);
+                0.0 1.0 0.0;
+                -sin(0.4) 0.0 cos(0.4)
+            ]
+        )
         loop = CurrentLoop(1.0, 2.5, SA[0.0, 0.0, 0.1], SA[0.1, 0.2, 1.0])
         mag = AnalyticalMagnetosphere(;
             intrinsic_dipole = Dipole(SA[0.0, 0.0, 1.0e4]),
@@ -153,8 +153,8 @@ end
     let r_z = SVector(0.0, 0.0, 0.25),
             r_mid = SVector(0.4, -0.3, 0.0),
             loop_ax = CurrentLoopAnalytic(
-                CurrentLoop(1.0, 2.5, SA[0.0, 0.0, 0.0], SA[0.0, 0.0, 1.0])
-            ),
+            CurrentLoop(1.0, 2.5, SA[0.0, 0.0, 0.0], SA[0.0, 0.0, 1.0])
+        ),
             sol = Solenoid(0.5, 1.2, 400.0),
             sol_thick = Solenoid(0.5, 1.0, 400.0; thickness = 0.2),
             mir = MagneticMirror(1.2, 0.8, 1.5),
@@ -226,12 +226,12 @@ end
             u1 = UniformField(SA[0.0, 0.0, 2.0e-6]),
             h1 = HarrisSheet(1.5e-5, 0.4),
             R = @SMatrix(
-                [
-                    cos(0.7) -sin(0.7) 0.0;
-                    sin(0.7) cos(0.7) 0.0;
-                    0.0 0.0 1.0
-                ]
-            ),
+            [
+                cos(0.7) -sin(0.7) 0.0;
+                sin(0.7) cos(0.7) 0.0;
+                0.0 0.0 1.0
+            ]
+        ),
             base_f = d1 + 2.0 * u1 - 0.5 * h1,
             comp = rotate_field(translate_field(base_f, SA[0.2, -0.4, 0.3]), R),
             pt = SVector(0.8, -0.3, 0.25)
@@ -280,21 +280,21 @@ end
     let dom_ax = (0.8, 1.7, -0.8, 0.8),
             sol_eq = SolovevEquilibrium(2.0, 1.5, 1.5, 1.2),
             pts_rz = reduce(
-                vcat, [
-                    reshape([R, Z], 1, 2)
-                        for R in range(0.85, 1.65; length = 6)
-                        for Z in range(-0.6, 0.6; length = 5)
-                ]
-            ),
+            vcat, [
+                reshape([R, Z], 1, 2)
+                    for R in range(0.85, 1.65; length = 6)
+                    for Z in range(-0.6, 0.6; length = 5)
+            ]
+        ),
             B_rz = reduce(
-                vcat, [
-                    reshape(collect(sol_eq(SVector(pts_rz[i, 1], 0.0, pts_rz[i, 2]))), 1, 3)
-                        for i in axes(pts_rz, 1)
-                ]
-            ),
+            vcat, [
+                reshape(collect(sol_eq(SVector(pts_rz[i, 1], 0.0, pts_rz[i, 2]))), 1, 3)
+                    for i in axes(pts_rz, 1)
+            ]
+        ),
             fit_ax = reconstruct_axisymmetric_field(
-                pts_rz, B_rz; domain = dom_ax, length_scale = 0.6, regularization = 1.0e-12
-            ),
+            pts_rz, B_rz; domain = dom_ax, length_scale = 0.6, regularization = 1.0e-12
+        ),
             pt_ax = SVector(1.25, 0.15, 0.12)
         JB = ForwardDiff.jacobian(fit_ax, pt_ax)
         @test all(isfinite, JB)
@@ -309,19 +309,19 @@ end
 
     let box = (-0.5, 0.5, -0.5, 0.5, -0.5, 0.5),
             probes = reduce(
-                vcat, [
-                    reshape([x, y, z], 1, 3)
-                        for x in range(-0.4, 0.4; length = 4)
-                        for y in range(-0.4, 0.4; length = 4)
-                        for z in range(-0.4, 0.4; length = 4)
-                ]
-            ),
+            vcat, [
+                reshape([x, y, z], 1, 3)
+                    for x in range(-0.4, 0.4; length = 4)
+                    for y in range(-0.4, 0.4; length = 4)
+                    for z in range(-0.4, 0.4; length = 4)
+            ]
+        ),
             truth = Dipole(SA[2.0e3, -1.0e3, 3.0e3], SA[0.1, -0.2, 1.8]) +
-                0.5 * HarrisSheet(1.0, 0.4),
+            0.5 * HarrisSheet(1.0, 0.4),
             B_obs = reduce(
-                vcat,
-                [reshape(collect(truth(SVector{3}(p))), 1, 3) for p in eachrow(probes)]
-            ),
+            vcat,
+            [reshape(collect(truth(SVector{3}(p))), 1, 3) for p in eachrow(probes)]
+        ),
             pt = SVector(0.12, -0.09, 0.15)
         for (model, kernel) in (
                 (:div_free, :wendland_c2),
@@ -354,18 +354,18 @@ end
             v = SVector(1.0, 0.0, 0.0),
             ez = SVector(0.0, 0.0, 1.0),
             B_obs = reduce(
-                vcat, [
-                    reshape([0.2 * (t - 1.0), cos(0.4 * (t - 1.0)), 0.3], 1, 3)
-                        for t in times
-                ]
-            ),
+            vcat, [
+                reshape([0.2 * (t - 1.0), cos(0.4 * (t - 1.0)), 0.3], 1, 3)
+                    for t in times
+            ]
+        ),
             p_obs = fill(0.1, n_gsr),
             ys = collect(range(-0.15, 0.15; length = 7)),
             gsr = reconstruct_grad_shafranov(
-                times, Matrix(B_obs), p_obs;
-                crossing_velocity = v, invariant_axis = ez, y = ys,
-                spatial_degree = 6, pressure_degree = 2, axial_degree = 2
-            ),
+            times, Matrix(B_obs), p_obs;
+            crossing_velocity = v, invariant_axis = ez, y = ys,
+            spatial_degree = 6, pressure_degree = 2, axial_degree = 2
+        ),
             pt_gsr = SVector(0.05, 0.03, 0.0)
         JB = ForwardDiff.jacobian(gsr, pt_gsr)
         @test all(isfinite, JB)
