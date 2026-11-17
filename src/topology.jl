@@ -21,6 +21,96 @@ function field_jacobian(field::AbstractMagneticField, r; h::Real = 1.0e-5)
     return hcat(c1, c2, c3)
 end
 
+@inline function _eigvals_3x3(M::SMatrix{3, 3, Float64, 9})
+    if !all(isfinite, M)
+        nan_c = ComplexF64(NaN, NaN)
+        return SVector{3, ComplexF64}(nan_c, nan_c, nan_c)
+    end
+    if norm(M - M') <= 1.0e-14 * norm(M)
+        ev = eigvals(Symmetric(M))
+        return SVector{3, ComplexF64}(
+            ComplexF64(ev[1], 0.0), ComplexF64(ev[2], 0.0), ComplexF64(ev[3], 0.0)
+        )
+    end
+    mu = tr(M) / 3.0
+    B = M - mu * one(SMatrix{3, 3, Float64, 9})
+    s = norm(B)
+    s == 0.0 && return SVector{3, ComplexF64}(mu, mu, mu)
+    C = B / s
+    c2 = tr(C)
+    c1 = (C[1, 1] * C[2, 2] - C[1, 2] * C[2, 1]) +
+        (C[1, 1] * C[3, 3] - C[1, 3] * C[3, 1]) +
+        (C[2, 2] * C[3, 3] - C[2, 3] * C[3, 2])
+    c0 = det(C)
+    p = c1 - (c2 * c2) / 3.0
+    q = -c0 + (c1 * c2) / 3.0 - (2.0 / 27.0) * (c2 * c2 * c2)
+    half_q = 0.5 * q
+    third_p = p / 3.0
+    disc = half_q * half_q + third_p * third_p * third_p
+    t1 = if disc > 0.0
+        u = cbrt(-half_q - copysign(sqrt(disc), half_q))
+        v = u == 0.0 ? 0.0 : -third_p / u
+        u + v
+    else
+        r = sqrt(max(0.0, -third_p))
+        theta = atan(sqrt(max(0.0, -disc)), -half_q) / 3.0
+        half_q <= 0.0 ? 2.0 * r * cos(theta) : 2.0 * r * cos(theta + 2.0 * pi / 3.0)
+    end
+    r1 = t1 + c2 / 3.0
+    for _ in 1:2
+        fval = ((r1 - c2) * r1 + c1) * r1 - c0
+        df = (3.0 * r1 - 2.0 * c2) * r1 + c1
+        abs(df) > 1.0e-12 && (r1 -= fval / df)
+    end
+    b1 = r1 - c2
+    b0 = r1 * r1 > abs(c0) ? c0 / r1 : c1 + r1 * b1
+    half_b1 = -0.5 * b1
+    disc_q = half_b1 * half_b1 - b0
+    e1 = ComplexF64(mu + s * r1, 0.0)
+    if disc_q >= 0.0
+        sq = sqrt(disc_q)
+        x_far = half_b1 + (half_b1 >= 0.0 ? sq : -sq)
+        x_near = x_far == 0.0 ? 0.0 : b0 / x_far
+        e2 = ComplexF64(mu + s * x_near, 0.0)
+        e3 = ComplexF64(mu + s * x_far, 0.0)
+    else
+        im_part = s * sqrt(-disc_q)
+        re_part = mu + s * half_b1
+        e2 = ComplexF64(re_part, -im_part)
+        e3 = ComplexF64(re_part, im_part)
+    end
+    less_eig(a, b) = real(a) < real(b) || (real(a) == real(b) && imag(a) < imag(b))
+    less_eig(e2, e1) && ((e1, e2) = (e2, e1))
+    less_eig(e3, e2) && ((e2, e3) = (e3, e2))
+    less_eig(e2, e1) && ((e1, e2) = (e2, e1))
+    return SVector{3, ComplexF64}(e1, e2, e3)
+end
+
+@inline function _classify_null_3d(
+        M::SMatrix{3, 3, Float64, 9}, sv::SVector{3, Float64},
+        vals::SVector{3, ComplexF64}, tol::Float64
+    )
+    all(isfinite, M) || return :degenerate
+    normM = norm(M)
+    normM == 0.0 && return :degenerate
+    abs(tr(M)) <= 0.25 * normM || return :degenerate
+    if sv[3] <= tol * sv[1]
+        sv[2] <= tol * sv[1] && return :degenerate
+        disc2 = tr(M * M)
+        thresh = (tol * normM)^2
+        disc2 > thresh && return :X
+        disc2 < -thresh && return :O
+        return :degenerate
+    end
+    detM = det(M)
+    max_im = max(abs(imag(vals[1])), abs(imag(vals[2])), abs(imag(vals[3])))
+    is_spiral = max_im > tol * normM
+    if detM > 0.0
+        return is_spiral ? :As : :A
+    end
+    return is_spiral ? :Bs : :B
+end
+
 """
     classify_magnetic_null(J::AbstractMatrix; tol::Real = 1.0e-6) -> Symbol
 
@@ -37,26 +127,7 @@ function classify_magnetic_null(J::AbstractMatrix; tol::Real = 1.0e-6)
     isfinite(tol) && tol >= 0 || throw(ArgumentError("tol must be finite and nonnegative"))
     M = SMatrix{3, 3, Float64, 9}(J)
     all(isfinite, M) || return :degenerate
-    normM = norm(M)
-    normM == 0 && return :degenerate
-    abs(tr(M)) <= 0.25 * normM || return :degenerate
-    M_dense = Matrix(M)
-    sv = svdvals(M_dense)
-    if sv[3] <= tol * sv[1]
-        sv[2] <= tol * sv[1] && return :degenerate
-        disc2 = tr(M * M)
-        thresh = (tol * normM)^2
-        disc2 > thresh && return :X
-        disc2 < -thresh && return :O
-        return :degenerate
-    end
-    detM = det(M)
-    vals = eigvals(M_dense)
-    is_spiral = maximum(abs ∘ imag, vals) > tol * normM
-    if detM > 0
-        return is_spiral ? :As : :A
-    end
-    return is_spiral ? :Bs : :B
+    return _classify_null_3d(M, svdvals(M), _eigvals_3x3(M), Float64(tol))
 end
 
 @inline function _in_bounds_3d(p::SVector{3, Float64}, bounds)
@@ -71,23 +142,35 @@ end
     return bounds[1] <= R <= bounds[2] && bounds[3] <= Z <= bounds[4]
 end
 
-function _degen_null_result(x, res, J, J_mat)
-    eigs = all(isfinite, J) ? eigvals(J_mat) : ComplexF64[NaN, NaN, NaN]
+function _degen_null_result(x, res, J::SMatrix{3, 3, Float64, 9})
+    eigs = _eigvals_3x3(J)
     return (;
         point = x, residual = res, status = :degenerate, kind = :degenerate,
-        jacobian = J, eigenvalues = SVector{3, ComplexF64}(eigs[1], eigs[2], eigs[3]),
+        jacobian = J, eigenvalues = eigs,
     )
 end
 
-function _newton_step_3d(
-        J_mat::Matrix{Float64}, sv::Vector{Float64}, f::SVector{3, Float64}
+@inline function _newton_step_3d(
+        J::SMatrix{3, 3, Float64, 9}, sv::SVector{3, Float64}, f::SVector{3, Float64}
     )
-    dx = if sv[3] > 1.0e-10 * sv[1]
-        -(J_mat \ Vector(f))
-    else
-        -pinv(J_mat; rtol = 1.0e-8) * Vector(f)
+    sv[3] > 1.0e-10 * sv[1] && return -(J \ f)
+    F = svd(J)
+    cutoff = 1.0e-8 * F.S[1]
+    s_inv = SVector{3, Float64}(
+        F.S[1] > cutoff ? inv(F.S[1]) : 0.0,
+        F.S[2] > cutoff ? inv(F.S[2]) : 0.0,
+        F.S[3] > cutoff ? inv(F.S[3]) : 0.0,
+    )
+    return -(F.V * (s_inv .* (F.U' * f)))
+end
+
+@inline function _try_eval_3d(field::F, cand::SVector{3, Float64}) where {F}
+    try
+        return SVector{3, Float64}(field(cand)), true
+    catch err
+        err isa DomainError && return zero(SVector{3, Float64}), false
+        rethrow()
     end
-    return SVector{3, Float64}(dx[1], dx[2], dx[3])
 end
 
 """
@@ -103,9 +186,9 @@ Returns a named tuple `(; point, residual, status, kind, jacobian, eigenvalues)`
 from [`classify_magnetic_null`](@ref) (or `:unconverged`).
 """
 function locate_magnetic_null(
-        field::AbstractMagneticField, start;
+        field::F, start;
         bounds = nothing, h::Real = 1.0e-5, tol::Real = 1.0e-11, maxiters::Integer = 30
-    )
+    ) where {F <: AbstractMagneticField}
     length(start) >= 3 || throw(ArgumentError("start must have 3 coordinates"))
     isfinite(h) && h > 0 || throw(ArgumentError("h must be finite and positive"))
     isfinite(tol) && tol > 0 || throw(ArgumentError("tol must be finite and positive"))
@@ -122,27 +205,23 @@ function locate_magnetic_null(
     all(isfinite, x) || throw(ArgumentError("start must be finite"))
     _in_bounds_3d(x, b_tup) || throw(ArgumentError("start must lie inside bounds"))
     h_f = Float64(h)
+    tol_f = Float64(tol)
 
+    f = SVector{3, Float64}(field(x))
+    res = norm(f)
     for _ in 1:maxiters
-        f = SVector{3, Float64}(field(x))
-        res = norm(f)
         J = field_jacobian(field, x; h = h_f)
-        J_mat = Matrix(J)
-        if !all(isfinite, J)
-            return _degen_null_result(x, res, J, J_mat)
-        end
-        sv = svdvals(J_mat)
-        if sv[1] <= 1.0e-14
-            return _degen_null_result(x, res, J, J_mat)
-        end
-        step_vec = _newton_step_3d(J_mat, sv, f)
+        all(isfinite, J) || return _degen_null_result(x, res, J)
+        sv = svdvals(J)
+        sv[1] <= 1.0e-14 && return _degen_null_result(x, res, J)
+        step_vec = _newton_step_3d(J, sv, f)
         x_scale = max(1.0, norm(x))
-        if res <= tol && norm(step_vec) <= tol * x_scale
-            eigs = eigvals(J_mat)
+        if res <= tol_f && norm(step_vec) <= tol_f * x_scale
+            eigs = _eigvals_3x3(J)
             return (;
                 point = x, residual = res, status = :converged,
-                kind = classify_magnetic_null(J), jacobian = J,
-                eigenvalues = SVector{3, ComplexF64}(eigs[1], eigs[2], eigs[3]),
+                kind = _classify_null_3d(J, sv, eigs, 1.0e-6),
+                jacobian = J, eigenvalues = eigs,
             )
         end
         accepted = false
@@ -150,15 +229,16 @@ function locate_magnetic_null(
         for _ in 1:16
             cand = x + alpha * step_vec
             if _in_bounds_3d(cand, b_tup)
-                try
-                    f_cand = SVector{3, Float64}(field(cand))
-                    if norm(f_cand) < res
+                f_cand, ok = _try_eval_3d(field, cand)
+                if ok
+                    res_cand = norm(f_cand)
+                    if res_cand < res
                         x = cand
+                        f = f_cand
+                        res = res_cand
                         accepted = true
                         break
                     end
-                catch err
-                    err isa DomainError || rethrow()
                 end
             end
             alpha *= 0.5
@@ -166,36 +246,45 @@ function locate_magnetic_null(
         accepted || break
     end
 
-    f_end = SVector{3, Float64}(field(x))
-    res_end = norm(f_end)
     J_end = field_jacobian(field, x; h = h_f)
-    J_end_mat = Matrix(J_end)
-    all(isfinite, J_end) || return _degen_null_result(x, res_end, J_end, J_end_mat)
-    sv_end = svdvals(J_end_mat)
-    sv_end[1] <= 1.0e-14 && return _degen_null_result(x, res_end, J_end, J_end_mat)
-    dx_end = _newton_step_3d(J_end_mat, sv_end, f_end)
-    eigs_end = eigvals(J_end_mat)
-    converged = res_end <= tol && norm(dx_end) <= 100.0 * tol * max(1.0, norm(x))
+    all(isfinite, J_end) || return _degen_null_result(x, res, J_end)
+    sv_end = svdvals(J_end)
+    sv_end[1] <= 1.0e-14 && return _degen_null_result(x, res, J_end)
+    dx_end = _newton_step_3d(J_end, sv_end, f)
+    eigs_end = _eigvals_3x3(J_end)
+    converged = res <= tol_f && norm(dx_end) <= 100.0 * tol_f * max(1.0, norm(x))
+    kind_end = converged ?
+        _classify_null_3d(J_end, sv_end, eigs_end, 1.0e-6) : :unconverged
     return (;
-        point = x, residual = res_end,
+        point = x, residual = res,
         status = converged ? :converged : :maxiters,
-        kind = converged ? classify_magnetic_null(J_end) : :unconverged,
-        jacobian = J_end,
-        eigenvalues = SVector{3, ComplexF64}(eigs_end[1], eigs_end[2], eigs_end[3]),
+        kind = kind_end,
+        jacobian = J_end, eigenvalues = eigs_end,
     )
 end
 
 @inline function _poloidal_br_bz(
-        field::AbstractMagneticField, R::Float64, Z::Float64, cphi::Float64, sphi::Float64
-    )
+        field::F, R::Float64, Z::Float64, cphi::Float64, sphi::Float64
+    ) where {F <: AbstractMagneticField}
     B = SVector{3, Float64}(field(SVector(R * cphi, R * sphi, Z)))
     return SVector{2, Float64}(B[1] * cphi + B[2] * sphi, B[3])
 end
 
+@inline function _try_poloidal_br_bz(
+        field::F, R::Float64, Z::Float64, cphi::Float64, sphi::Float64
+    ) where {F <: AbstractMagneticField}
+    try
+        return _poloidal_br_bz(field, R, Z, cphi, sphi), true
+    catch err
+        err isa DomainError && return zero(SVector{2, Float64}), false
+        rethrow()
+    end
+end
+
 function _poloidal_jacobian(
-        field::AbstractMagneticField, R::Float64, Z::Float64,
+        field::F, R::Float64, Z::Float64,
         cphi::Float64, sphi::Float64, h::Float64
-    )
+    ) where {F <: AbstractMagneticField}
     inv2h = inv(2.0 * h)
     cR = (
         _poloidal_br_bz(field, R + h, Z, cphi, sphi) -
@@ -226,10 +315,10 @@ Returns `(; R, Z, point, residual, status, kind, jacobian)` where `kind` is `:O_
 `:X_point`, `:degenerate`, or `:unconverged`.
 """
 function locate_poloidal_critical_point(
-        field::AbstractMagneticField, start;
+        field::F, start;
         phi::Union{Nothing, Real} = nothing, bounds = nothing,
         h::Real = 1.0e-5, tol::Real = 1.0e-11, maxiters::Integer = 30
-    )
+    ) where {F <: AbstractMagneticField}
     len = length(start)
     len == 2 || len == 3 ||
         throw(ArgumentError("start must have 2 coordinates (R, Z) or 3 coordinates"))
@@ -255,13 +344,20 @@ function locate_poloidal_critical_point(
     _in_bounds_2d(R, Z, b_tup) || throw(ArgumentError("start must lie inside bounds"))
     sphi, cphi = sincos(phi_val)
     h_f = Float64(h)
+    tol_f = Float64(tol)
 
+    f = _poloidal_br_bz(field, R, Z, cphi, sphi)
+    res = norm(f)
     for _ in 1:maxiters
-        f = _poloidal_br_bz(field, R, Z, cphi, sphi)
-        res = norm(f)
         J2 = _poloidal_jacobian(field, R, Z, cphi, sphi, h_f)
-        if !all(isfinite, J2) ||
-                svdvals(Matrix(J2))[2] <= 1.0e-12 * max(svdvals(Matrix(J2))[1], 1.0e-15)
+        if !all(isfinite, J2)
+            return (;
+                R, Z, point = SVector(R * cphi, R * sphi, Z), residual = res,
+                status = :degenerate, kind = :degenerate, jacobian = J2,
+            )
+        end
+        sv = svdvals(J2)
+        if sv[2] <= 1.0e-12 * max(sv[1], 1.0e-15)
             return (;
                 R, Z, point = SVector(R * cphi, R * sphi, Z), residual = res,
                 status = :degenerate, kind = :degenerate, jacobian = J2,
@@ -269,7 +365,7 @@ function locate_poloidal_critical_point(
         end
         step = -(J2 \ f)
         r_scale = max(1.0, hypot(R, Z))
-        if res <= tol && norm(step) <= tol * r_scale
+        if res <= tol_f && norm(step) <= tol_f * r_scale
             return (;
                 R, Z, point = SVector(R * cphi, R * sphi, Z), residual = res,
                 status = :converged, kind = _classify_poloidal(J2), jacobian = J2,
@@ -281,15 +377,16 @@ function locate_poloidal_critical_point(
             R_c = R + alpha * step[1]
             Z_c = Z + alpha * step[2]
             if R_c > h_f && _in_bounds_2d(R_c, Z_c, b_tup)
-                try
-                    f_c = _poloidal_br_bz(field, R_c, Z_c, cphi, sphi)
-                    if norm(f_c) < res
+                f_c, ok = _try_poloidal_br_bz(field, R_c, Z_c, cphi, sphi)
+                if ok
+                    res_c = norm(f_c)
+                    if res_c < res
                         R, Z = R_c, Z_c
+                        f = f_c
+                        res = res_c
                         accepted = true
                         break
                     end
-                catch err
-                    err isa DomainError || rethrow()
                 end
             end
             alpha *= 0.5
@@ -297,20 +394,24 @@ function locate_poloidal_critical_point(
         accepted || break
     end
 
-    f_end = _poloidal_br_bz(field, R, Z, cphi, sphi)
-    res_end = norm(f_end)
     J_end = _poloidal_jacobian(field, R, Z, cphi, sphi, h_f)
-    sv_end = all(isfinite, J_end) ? svdvals(Matrix(J_end)) : zeros(2)
-    if !all(isfinite, J_end) || sv_end[2] <= 1.0e-12 * max(sv_end[1], 1.0e-15)
+    if !all(isfinite, J_end)
         return (;
-            R, Z, point = SVector(R * cphi, R * sphi, Z), residual = res_end,
+            R, Z, point = SVector(R * cphi, R * sphi, Z), residual = res,
             status = :degenerate, kind = :degenerate, jacobian = J_end,
         )
     end
-    step_end = -(J_end \ f_end)
-    converged = res_end <= tol && norm(step_end) <= 100.0 * tol * max(1.0, hypot(R, Z))
+    sv_end = svdvals(J_end)
+    if sv_end[2] <= 1.0e-12 * max(sv_end[1], 1.0e-15)
+        return (;
+            R, Z, point = SVector(R * cphi, R * sphi, Z), residual = res,
+            status = :degenerate, kind = :degenerate, jacobian = J_end,
+        )
+    end
+    step_end = -(J_end \ f)
+    converged = res <= tol_f && norm(step_end) <= 100.0 * tol_f * max(1.0, hypot(R, Z))
     return (;
-        R, Z, point = SVector(R * cphi, R * sphi, Z), residual = res_end,
+        R, Z, point = SVector(R * cphi, R * sphi, Z), residual = res,
         status = converged ? :converged : :maxiters,
         kind = converged ? _classify_poloidal(J_end) : :unconverged,
         jacobian = J_end,

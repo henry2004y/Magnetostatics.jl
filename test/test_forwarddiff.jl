@@ -24,6 +24,8 @@ end
         @test all(isfinite, JA)
         @test isapprox(_ad_curl(r -> vector_potential(dip, r), r0), dip(r0); rtol = 1.0e-12)
     end
+    @test ForwardDiff.derivative(m -> first(Magnetostatics._ellipke(m)), 0.0) ≈ π / 8
+    @test ForwardDiff.derivative(m -> last(Magnetostatics._ellipke(m)), 0.0) ≈ -π / 8
 end
 
 @testset "Analytical Fields ForwardDiff" begin
@@ -355,11 +357,17 @@ end
             ez = SVector(0.0, 0.0, 1.0),
             B_obs = reduce(
             vcat, [
-                reshape([0.2 * (t - 1.0), cos(0.4 * (t - 1.0)), 0.3], 1, 3)
-                    for t in times
+                reshape(
+                    [
+                        0.2 * (t - 1.0),
+                        cos(0.4 * (t - 1.0)),
+                        0.3 + 0.1 * sin(0.4 * (t - 1.0)),
+                    ],
+                    1, 3
+                ) for t in times
             ]
         ),
-            p_obs = fill(0.1, n_gsr),
+            p_obs = [5.0e5 + 1.0e5 * cos(0.4 * (t - 1.0)) for t in times],
             ys = collect(range(-0.15, 0.15; length = 7)),
             gsr = reconstruct_grad_shafranov(
             times, Matrix(B_obs), p_obs;
@@ -375,8 +383,8 @@ end
         @test isapprox(
             _ad_curl(gsr, pt_gsr),
             Magnetostatics.μ₀ * current_density(gsr, pt_gsr);
-            rtol = 1.0e-10,
-            atol = 1.0e-15
+            rtol = 1.0e-9,
+            atol = 1.0e-11
         )
     end
 end

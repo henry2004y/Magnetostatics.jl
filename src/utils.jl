@@ -277,7 +277,7 @@ end
 @inline _ellipke(m::Real) = _ellipke_impl(float(m))
 
 @inline function _ellipke_impl(m::T) where {T <: Real}
-    m <= zero(T) && return (T(π) / 2, T(π) / 2)
+    m < zero(T) && return (T(π) / 2, T(π) / 2)
     m >= one(T) && return (T(Inf), one(T))
     b = sqrt(one(T) - m)
     c = m / (2 * (one(T) + b))

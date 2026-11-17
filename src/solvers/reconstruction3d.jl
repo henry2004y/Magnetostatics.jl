@@ -910,7 +910,8 @@ function _solve_3d(
     end
     reduced = basis === nothing ? A : A * basis
     solution = LinearSolve.solve(
-        LinearProblem(reduced, b - A * particular), algorithm; abstol, reltol, maxiters
+        LinearProblem(reduced, b - A * particular), algorithm;
+        abstol, reltol, maxiters, verbose = false
     )
     LinearSolve.SciMLBase.successful_retcode(solution) ||
         error("3D reconstruction did not converge: $(solution.retcode)")
