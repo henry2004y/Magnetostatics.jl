@@ -22,9 +22,7 @@ CompositeField(fields::AbstractMagneticField...) = CompositeField(fields)
     return fields[1](r) + _eval_composite_field(Base.tail(fields), r)
 end
 
-@inline function (field::CompositeField)(r)
-    return _eval_composite_field(field.fields, r)
-end
+@inline (field::CompositeField)(r) = _eval_composite_field(field.fields, r)
 
 @inline _eval_composite_j(fields::Tuple{F}, r) where {F} = current_density(fields[1], r)
 @inline function _eval_composite_j(fields::Tuple, r)
@@ -35,13 +33,26 @@ end
     return _eval_composite_j(field.fields, r)
 end
 
-@inline _eval_composite_a(vp, fields::Tuple{F}, r) where {F} = solve(vp, fields[1], r)
-@inline function _eval_composite_a(vp, fields::Tuple, r)
-    return solve(vp, fields[1], r) + _eval_composite_a(vp, Base.tail(fields), r)
+@inline _eval_composite_a(fields::Tuple{F}, r) where {F} = vector_potential(fields[1], r)
+@inline function _eval_composite_a(fields::Tuple, r)
+    return vector_potential(fields[1], r) + _eval_composite_a(Base.tail(fields), r)
 end
 
-@inline function solve(solver::VectorPotential, field::CompositeField, r)
-    return _eval_composite_a(solver, field.fields, r)
+@inline function vector_potential(field::CompositeField, r)
+    return _eval_composite_a(field.fields, r)
+end
+
+@inline function _eval_composite_ba(fields::Tuple{F}, r) where {F}
+    return field_and_potential(fields[1], r)
+end
+@inline function _eval_composite_ba(fields::Tuple, r)
+    B1, A1 = field_and_potential(fields[1], r)
+    B2, A2 = _eval_composite_ba(Base.tail(fields), r)
+    return (B1 + B2, A1 + A2)
+end
+
+@inline function field_and_potential(field::CompositeField, r)
+    return _eval_composite_ba(field.fields, r)
 end
 
 @inline _eval_composite_psi(fields::Tuple{F}, r) where {F} = poloidal_flux(fields[1], r)
@@ -58,9 +69,7 @@ Base.:+(::NullField, f::AbstractMagneticField) = f
 Base.:+(f::AbstractMagneticField, ::NullField) = f
 Base.:+(::NullField, f::CompositeField) = f
 Base.:+(f::CompositeField, ::NullField) = f
-function Base.:+(f1::AbstractMagneticField, f2::AbstractMagneticField)
-    return CompositeField((f1, f2))
-end
+Base.:+(f1::AbstractMagneticField, f2::AbstractMagneticField) = CompositeField((f1, f2))
 function Base.:+(f1::CompositeField, f2::AbstractMagneticField)
     return CompositeField((f1.fields..., f2))
 end
@@ -83,21 +92,14 @@ struct ScaledField{T <: Real, F <: AbstractMagneticField} <: AbstractMagneticFie
     field::F
 end
 
-@inline function (f::ScaledField)(r)
-    return f.scale * f.field(r)
+@inline (f::ScaledField)(r) = f.scale * f.field(r)
+@inline current_density(f::ScaledField, r) = f.scale * current_density(f.field, r)
+@inline vector_potential(f::ScaledField, r) = f.scale * vector_potential(f.field, r)
+@inline function field_and_potential(f::ScaledField, r)
+    B, A = field_and_potential(f.field, r)
+    return (f.scale * B, f.scale * A)
 end
-
-@inline function current_density(f::ScaledField, r)
-    return f.scale * current_density(f.field, r)
-end
-
-@inline function solve(solver::VectorPotential, f::ScaledField, r)
-    return f.scale * solve(solver, f.field, r)
-end
-
-@inline function poloidal_flux(f::ScaledField, r)
-    return f.scale * poloidal_flux(f.field, r)
-end
+@inline poloidal_flux(f::ScaledField, r) = f.scale * poloidal_flux(f.field, r)
 
 Base.:*(::Real, ::NullField) = NullField()
 Base.:*(::NullField, ::Real) = NullField()
@@ -146,16 +148,16 @@ end
     return f.rotation' * dr
 end
 
-@inline function (f::TransformedField)(r)
-    return f.rotation * f.field(_local_point(f, r))
-end
-
+@inline (f::TransformedField)(r) = f.rotation * f.field(_local_point(f, r))
 @inline function current_density(f::TransformedField, r)
     return f.rotation * current_density(f.field, _local_point(f, r))
 end
-
-@inline function solve(solver::VectorPotential, f::TransformedField, r)
-    return f.rotation * solve(solver, f.field, _local_point(f, r))
+@inline function vector_potential(f::TransformedField, r)
+    return f.rotation * vector_potential(f.field, _local_point(f, r))
+end
+@inline function field_and_potential(f::TransformedField, r)
+    B, A = field_and_potential(f.field, _local_point(f, r))
+    return (f.rotation * B, f.rotation * A)
 end
 
 """

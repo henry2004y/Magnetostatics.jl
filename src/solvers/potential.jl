@@ -53,20 +53,8 @@ end
 Compute vector potential A for a magnetic dipole.
 A = (mu0 / 4pi) * (m x r) / r^3
 """
-function solve(::VectorPotential, source::Dipole{T}, r) where {T}
-    @boundscheck length(r) >= 3 ||
-        throw(ArgumentError("Input must have at least 3 elements."))
-    FT = _promote_float(T, r)
-    @inbounds r_vec = SVector{3, FT}(
-        r[1] - source.center[1], r[2] - source.center[2], r[3] - source.center[3]
-    )
-    r_sq = dot(r_vec, r_vec)
-    if r_sq < 1.0e-20
-        return zero(SVector{3, FT})
-    end
-    r_mag = sqrt(r_sq)
-    return (FT(μ0_4π) / (r_sq * r_mag)) * cross(source.M, r_vec)
-end
+@inline solve(::VectorPotential, source::Dipole, r) = vector_potential(source, r)
+@inline solve(::VectorPotential, field::LineDipole2D, r) = vector_potential(field, r)
 
 @inline function _logcosh(x::T) where {T}
     ax = abs(x)
@@ -134,27 +122,10 @@ function solve(::VectorPotential, field::GuideFieldHarrisSheet{T}, r) where {T}
     return SVector{3, FT}(ax, ay, zero(FT))
 end
 
-function solve(::VectorPotential, field::InfiniteWire{T}, r) where {T}
-    @boundscheck length(r) >= 3 ||
-        throw(ArgumentError("Input must have at least 3 elements."))
-    FT = _promote_float(T, r)
-    (; I, center, direction) = field
-    a = field.r
-    @inbounds r_pos = SVector{3, FT}(r[1], r[2], r[3]) - center
-    z_local = dot(r_pos, direction)
-    rho_vec = r_pos - z_local * direction
-    rho_sq = dot(rho_vec, rho_vec)
-    mu0_4pi_I = FT(μ0_4π) * I
-    if a > zero(T) && rho_sq <= a^2
-        return (-mu0_4pi_I * (rho_sq / a^2)) * direction
-    end
-    rho_sq < 1.0e-30 && return zero(SVector{3, FT})
-    return (-mu0_4pi_I * (one(FT) + log(rho_sq / a^2))) * direction
-end
-
-function solve(solver::VectorPotential, field::CurrentLoopAnalytic, r)
-    return solve(solver, field.loop, r)
-end
+@inline solve(::VectorPotential, field::InfiniteWire, r) = vector_potential(field, r)
+@inline solve(::VectorPotential, field::WireSegment, r) = vector_potential(field, r)
+@inline solve(::VectorPotential, field::CurrentLoopAnalytic, r) = vector_potential(field, r)
+@inline solve(::VectorPotential, field::ToroidalField, r) = vector_potential(field, r)
 
 function solve(solver::VectorPotential, field::MagneticMirror{T}, r) where {T}
     (; distance, radius, current, center, normal) = field
@@ -335,13 +306,7 @@ end
 Compute vector potential A for a uniform magnetic field.
 A = 0.5 * (B x r)
 """
-function solve(::VectorPotential, source::UniformField{T}, r) where {T}
-    @boundscheck length(r) >= 3 ||
-        throw(ArgumentError("Input must have at least 3 elements."))
-    FT = _promote_float(T, r)
-    @inbounds r_vec = SVector{3, FT}(r[1], r[2], r[3])
-    return FT(0.5) * cross(source.B0, r_vec)
-end
+@inline solve(::VectorPotential, source::UniformField, r) = vector_potential(source, r)
 
 """
     solve(solver::VectorPotential, field::AnalyticalMagnetosphere, r)
@@ -365,49 +330,32 @@ end
 
 Compute vector potential A for a null field.
 """
-function solve(::VectorPotential, ::NullField, r)
-    return zero(SVector{3, _promote_float(r)})
-end
+@inline solve(::VectorPotential, field::NullField, r) = vector_potential(field, r)
 
 """
     solve(solver::VectorPotential, source::CurrentLoop, r::AbstractVector)
 
 Compute vector potential A for a circular current loop.
 """
-function solve(::VectorPotential, loop::CurrentLoop{T}, r) where {T}
-    @boundscheck length(r) >= 3 ||
-        throw(ArgumentError("Input must have at least 3 elements."))
-    FT = _promote_float(T, r)
-    @inbounds r_vec = SVector{3, FT}(r[1], r[2], r[3])
-    (; radius, current, center, normal) = loop
-    n_hat = normal
+@inline function solve(::VectorPotential, loop::CurrentLoop, r)
+    return vector_potential(CurrentLoopAnalytic(loop), r)
+end
 
-    r_rel = r_vec - center
-    z_local = dot(r_rel, n_hat)
-    rho_vec = r_rel - z_local * n_hat
-    rho_sq = dot(rho_vec, rho_vec)
+@inline _eval_composite_a(vp, fields::Tuple{F}, r) where {F} = solve(vp, fields[1], r)
+@inline function _eval_composite_a(vp, fields::Tuple, r)
+    return solve(vp, fields[1], r) + _eval_composite_a(vp, Base.tail(fields), r)
+end
 
-    if rho_sq < (FT(1.0e-8) * radius)^2
-        d2 = radius^2 + z_local^2
-        d2 < FT(1.0e-30) && return zero(SVector{3, FT})
-        b_z_axis = FT(μ₀) * current * radius^2 / (2 * d2 * sqrt(d2))
-        return FT(0.5) * b_z_axis * cross(n_hat, rho_vec)
-    end
+@inline function solve(solver::VectorPotential, field::CompositeField, r)
+    return _eval_composite_a(solver, field.fields, r)
+end
 
-    rho = sqrt(rho_sq)
-    R = radius
-    denom_sq = (R + rho)^2 + z_local^2
-    k_sq = 4 * R * rho / denom_sq
-    k = sqrt(k_sq)
+@inline function solve(solver::VectorPotential, f::ScaledField, r)
+    return f.scale * solve(solver, f.field, r)
+end
 
-    K_val, E_val = _ellipke(k_sq)
-
-    prefactor = (FT(μ₀) * current) / (FT(π) * k) * sqrt(R / rho)
-    A_phi = prefactor * ((1 - k_sq / 2) * K_val - E_val)
-
-    rho_hat = rho_vec / rho
-    phi_hat = cross(n_hat, rho_hat)
-    return A_phi * phi_hat
+@inline function solve(solver::VectorPotential, f::TransformedField, r)
+    return f.rotation * solve(solver, f.field, MagnetostaticsCore._local_point(f, r))
 end
 
 # ConductingWall: sum direct + image potential
@@ -457,8 +405,17 @@ function (solver::VectorPotential)(source, r)
     return solve(solver, source, r)
 end
 
-# Convenience function
-function vector_potential(field::AbstractMagneticField, r)
+# Convenience dispatch for field models defined in Magnetostatics (avoids piracy on
+# MagnetostaticsCore.AbstractMagneticField)
+const _MagnetostaticsPotentialTarget = Union{
+    HarrisSheet, AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarrisSheet,
+    FadeevIsland, GuideFieldHarrisSheet, MagneticMirror, MagneticBottle,
+    ZPinch, TaylorState, ScrewPinch, SolovevEquilibrium, GoldHoyleFluxTube,
+    ParkerSpiral, FLARECoils, Solenoid, AntiHelmholtzCoil, SphereMagnet,
+    CylinderMagnet, AnalyticalMagnetosphere,
+}
+
+@inline function vector_potential(field::_MagnetostaticsPotentialTarget, r)
     return solve(VectorPotential(), field, r)
 end
 

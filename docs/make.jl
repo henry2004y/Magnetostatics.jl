@@ -3,7 +3,7 @@ using Magnetostatics
 
 makedocs(;
     sitename = "Magnetostatics.jl",
-    modules = [Magnetostatics],
+    modules = [Magnetostatics, Magnetostatics.MagnetostaticsCore],
     authors = "Hongyang Zhou <hyzhou@umich.edu> and contributors",
     repo = "https://github.com/henry2004y/Magnetostatics.jl",
     format = DocumenterVitepress.MarkdownVitepress(

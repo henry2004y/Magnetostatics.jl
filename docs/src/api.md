@@ -32,6 +32,7 @@ CurrentLoop
 TorusKnot
 TrefoilKnot
 InfiniteWire
+WireSegment
 SurfaceCurrentMesh
 MultiSource
 ```
@@ -42,7 +43,11 @@ MultiSource
 UniformField
 NullField
 Dipole
+LineDipole2D
 CurrentLoopAnalytic
+ToroidalField
+SphericalHarmonicField
+SphericalHarmonicWorkspace
 Solenoid
 HelmholtzCoil
 AntiHelmholtzCoil
@@ -86,6 +91,7 @@ PoissonSolver
 GridMagneticField
 DSTFactorization
 vector_potential
+field_and_potential
 ```
 
 ### Boundary conditions and surface currents
@@ -147,6 +153,7 @@ These operations apply to the field types documented by each method; not every
 field supports every diagnostic.
 
 ```@docs
+evaluate!
 current_density
 poloidal_flux
 flux_function

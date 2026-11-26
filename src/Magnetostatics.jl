@@ -8,10 +8,12 @@ using FFTW
 using LinearSolve
 using PrecompileTools
 
-const μ₀ = 4π * 1.0e-7
-const μ0_4π = 1.0e-7 # T*m/A (approximation for μ0/4π)
+using MagnetostaticsCore
+import MagnetostaticsCore:
+    μ₀, μ0_4π, _pos_eltype, _promote_float, _ellipke, _cel,
+    _current_loop_unchecked, current_density, vector_potential,
+    field_and_potential, evaluate!, poloidal_flux
 
-include("types.jl")
 include("boundaries.jl")
 include("sources.jl")
 include("solvers/biot_savart.jl")
@@ -23,7 +25,6 @@ include("solvers/reconstruction3d.jl")
 include("solvers/grad_shafranov.jl")
 include("geometry.jl")
 include("utils.jl")
-include("composition.jl")
 include("grid_field.jl")
 include("topology.jl")
 
@@ -41,16 +42,18 @@ export FieldReconstruction3D, reconstruct_field_3d
 export GradShafranovReconstruction, reconstruct_grad_shafranov
 export flux_function, thermal_pressure
 # Core methods
-export vector_potential, current_density, compute_curl!, compute_curl
+export vector_potential, field_and_potential, evaluate!, current_density,
+    compute_curl!, compute_curl
 # Magnetic geometry and plasma drifts
 export b_unit, field_magnitude, grad_b, magnetic_curvature, drift_velocities,
     mirror_ratio, loss_cone_angle, magnetic_helicity
 # Source geometries
-export Wire, CurrentLoop, TorusKnot, TrefoilKnot, InfiniteWire, SurfaceCurrentMesh,
-    MultiSource
+export Wire, CurrentLoop, TorusKnot, TrefoilKnot, InfiniteWire, WireSegment,
+    SurfaceCurrentMesh, MultiSource
 # Analytical fields
 export HarrisSheet, AsymmetricHarrisSheet, ForceFreeHarrisSheet, BifurcatedHarrisSheet,
-    FadeevIsland, Dipole, CurrentLoopAnalytic, UniformField, NullField
+    FadeevIsland, Dipole, LineDipole2D, CurrentLoopAnalytic, ToroidalField,
+    SphericalHarmonicField, SphericalHarmonicWorkspace, UniformField, NullField
 # Boundary conditions
 export OpenBoundary, PeriodicBoundary, ConductingWall, ConductingSphere, PrescribedBoundary
 # Specialized models and configurations
