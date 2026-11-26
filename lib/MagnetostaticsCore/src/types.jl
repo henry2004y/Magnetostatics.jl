@@ -15,7 +15,6 @@ abstract type AbstractMagneticField end
     return dr
 end
 
-
 """
     AbstractCurrentSource
 
@@ -37,9 +36,39 @@ Return the current density vector [A/m²] at position `r` for the given magnetic
 """
 function current_density end
 
-# issue #79: float(...) preserves ForwardDiff.Dual<:Real while mapping Integer to Float64
+"""
+    vector_potential(field::AbstractMagneticField, r)
+
+Return the magnetic vector potential **A** at position `r` for the given field model.
+"""
+function vector_potential end
+
+"""
+    field_and_potential(field::AbstractMagneticField, r) -> (B, A)
+
+Return `(B, A)` at position `r`, where `B = field(r)` and `A = vector_potential(field, r)`.
+"""
+@inline function field_and_potential(field::AbstractMagneticField, r)
+    return (field(r), vector_potential(field, r))
+end
+
+@inline function field_and_potential(field::AbstractMagneticField, x, y, z)
+    return field_and_potential(field, SVector(x, y, z))
+end
+
+"""
+    evaluate!(ws, field::AbstractMagneticField, r)
+
+Evaluate `field` at `r` using preallocated scratch workspace `ws`.
+"""
+function evaluate! end
+
+function poloidal_flux end
+
 @inline _pos_eltype(::AbstractVector{T}) where {T} = T
 @inline function _pos_eltype(r::Tuple)
+    n = length(r)
+    n == 2 && return promote_type(typeof(r[1]), typeof(r[2]))
     return promote_type(typeof(r[1]), typeof(r[2]), typeof(r[3]))
 end
 @inline _pos_eltype(r) = eltype(r)
@@ -59,10 +88,8 @@ struct NullField <: AbstractMagneticField end
     return zero(SVector{3, float(promote_type(typeof(x), typeof(y), typeof(z)))})
 end
 @inline current_density(::NullField, r) = zero(SVector{3, _promote_float(r)})
-
-"""
-    vector_potential(field::AbstractMagneticField, r)
-
-Return the magnetic vector potential vector **A** at position `r` for the given field model.
-"""
-function vector_potential end
+@inline vector_potential(::NullField, r) = zero(SVector{3, _promote_float(r)})
+@inline function field_and_potential(::NullField, r)
+    z = zero(SVector{3, _promote_float(r)})
+    return (z, z)
+end

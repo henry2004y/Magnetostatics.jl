@@ -7,11 +7,13 @@ on:
     tags: '*'
     paths:
       - "src/**"
+      - "lib/**"
       - "test/**"
       - ".github/workflows/Format.yml"
   pull_request:
     paths:
       - "src/**"
+      - "lib/**"
       - "test/**"
       - ".github/workflows/Format.yml"
 
