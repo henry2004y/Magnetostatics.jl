@@ -55,6 +55,12 @@ end
     tf = rotate_field(translate_field(uf, SVector(1.0, 0.0, 0.0)), rot_mat)
     @test tf(r) ≈ SVector(2.0, 1.0, 3.0)
     @test finite_diff_curl(x -> vector_potential(tf, x), r) ≈ tf(r) atol = 1.0e-9
+
+    uf32 = UniformField(SVector(1.0f0, -2.0f0, 3.0f0))
+    r32 = SVector(0.3f0, -0.4f0, 0.5f0)
+    rot32 = Float32.(rot_mat)
+    @test eltype(TransformedField(uf32, SVector(1.0f0, 0.0f0, 0.0f0))(r32)) === Float32
+    @test eltype(rotate_field(uf32, rot32)(r32)) === Float32
 end
 
 @testset "Dipole and LineDipole2D" begin
@@ -79,6 +85,9 @@ end
     @test B2[3] == 0.0
     @test finite_diff_curl(x -> vector_potential(ld, x), r2d) ≈ B2 atol = 1.0e-9
     @test current_density(ld, r2d) == SVector(0.0, 0.0, 0.0)
+    dr = zeros(3)
+    @test ld(dr, r2d) === dr
+    @test dr ≈ Vector(B2)
 end
 
 @testset "InfiniteWire, WireSegment, CurrentLoopAnalytic, ToroidalField" begin

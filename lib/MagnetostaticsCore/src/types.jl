@@ -63,6 +63,11 @@ Evaluate `field` at `r` using preallocated scratch workspace `ws`.
 """
 function evaluate! end
 
+"""
+    poloidal_flux(field::AbstractMagneticField, r)
+
+Return the poloidal magnetic flux `ψ` at position `r` for axisymmetric field models.
+"""
 function poloidal_flux end
 
 @inline _pos_eltype(::AbstractVector{T}) where {T} = T

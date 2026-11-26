@@ -200,7 +200,7 @@ function LineDipole2D(;
     return LineDipole2D(M, center; r_min = r_min, k = k)
 end
 
-@inline function (field::LineDipole2D{T})(x, y, z = zero(T)) where {T}
+@inline function (field::LineDipole2D{T})(x::Real, y::Real, z::Real = zero(T)) where {T}
     FT = float(promote_type(T, typeof(x), typeof(y), typeof(z)))
     rx = x - field.center[1]
     ry = y - field.center[2]

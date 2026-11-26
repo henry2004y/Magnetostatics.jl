@@ -170,12 +170,11 @@ end
 
 function (field::SphericalHarmonicField{T})(r) where {T}
     FT = _promote_float(T, r)
-    # Allocate real scratch only for concrete floats; ForwardDiff Dual falls back smoothly.
-    WT = FT <: AbstractFloat ? FT : Float64
-    ws = SphericalHarmonicWorkspace{WT}(field.nmax)
     if FT <: AbstractFloat
+        ws = SphericalHarmonicWorkspace{FT}(field.nmax)
         return evaluate!(ws, field, r)
     end
+    # ForwardDiff Dual inputs fall back without allocating a float workspace.
     return _eval_sh_generic(field, r, FT)
 end
 
