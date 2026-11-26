@@ -125,7 +125,7 @@ struct TransformedField{T <: Real, F <: AbstractMagneticField} <: AbstractMagnet
 
     function TransformedField(
             field::F, origin::AbstractVector,
-            rotation::AbstractMatrix = SMatrix{3, 3, Float64, 9}(I)
+            rotation::AbstractMatrix = SMatrix{3, 3, Bool, 9}(I)
         ) where {F <: AbstractMagneticField}
         T = float(promote_type(eltype(origin), eltype(rotation)))
         R = SMatrix{3, 3, T, 9}(rotation)
@@ -180,13 +180,13 @@ function translate_field(f::TransformedField{T}, offset::AbstractVector) where {
 end
 
 """
-    rotate_field(field, rotation; center = SA[0.0, 0.0, 0.0]) -> AbstractMagneticField
+    rotate_field(field, rotation; center = SA[0, 0, 0]) -> AbstractMagneticField
 
 Rotate `field` by proper orthogonal matrix `rotation` about `center`.
 """
 function rotate_field(
         field::AbstractMagneticField, rotation::AbstractMatrix;
-        center::AbstractVector = SVector(0.0, 0.0, 0.0)
+        center::AbstractVector = SVector(0, 0, 0)
     )
     T = float(promote_type(eltype(rotation), eltype(center)))
     Q = SMatrix{3, 3, T, 9}(rotation)
@@ -195,11 +195,11 @@ function rotate_field(
     return TransformedField(field, origin, Q)
 end
 
-rotate_field(f::NullField, ::AbstractMatrix; center = SVector(0.0, 0.0, 0.0)) = f
+rotate_field(f::NullField, ::AbstractMatrix; center = SVector(0, 0, 0)) = f
 
 function rotate_field(
         f::TransformedField{T}, rotation::AbstractMatrix;
-        center::AbstractVector = SVector(0.0, 0.0, 0.0)
+        center::AbstractVector = SVector(0, 0, 0)
     ) where {T}
     FT = float(promote_type(T, eltype(rotation), eltype(center)))
     Q = SMatrix{3, 3, FT, 9}(rotation)
